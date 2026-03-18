@@ -1,0 +1,302 @@
+Title: ADVERSA: Measuring Multi-Turn Guardrail Degradation and Judge Reliability in Large Language Models
+
+URL Source: https://arxiv.org/pdf/2603.10068v1
+
+Published Time: Thu, 12 Mar 2026 00:05:54 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# ADVERSA: Measuring Multi-Turn Guardrail Degradation and Judge Reliability in Large Language Models 
+
+# Harry Owiredu-Ashley 
+
+Independent Researcher New Jersey, United States 
+
+owireduashlh1@montclair.edu 
+
+# Abstract 
+
+Most adversarial evaluations of large language model (LLM) safety assess single prompts and report binary pass/fail outcomes, which fails to capture how safety properties evolve under sustained adversarial interaction. We present ADVERSA , an automated red-teaming frame-work that measures guardrail degradation dynamics as continuous per-round compliance trajectories rather than discrete jailbreak events. ADVERSA uses a fine-tuned 70B attacker model (ADVERSA-Red, Llama-3.1-70B-Instruct with QLoRA) that eliminates the attacker-side safety refusals that render off-the-shelf models unreliable as attackers, scoring victim responses on a structured 5-point rubric that treats partial compliance as a distinct measurable state. We report a controlled experiment across three frontier victim models (Claude Opus 4.6, Gemini 3.1 Pro, GPT-5.2) using a triple-judge consensus architecture in which judge reliability is measured as a first-class research out-come rather than assumed. Across 15 conversations of up to 10 adversarial rounds, we observe a 26.7% jailbreak rate with an average jailbreak round of 1.25, suggesting that in this evaluation setting, successful jailbreaks were concentrated in early rounds rather than accumulating through sustained pressure. We document inter-judge agreement rates, self-judge scoring tendencies, attacker drift as a failure mode in fine-tuned attackers deployed out of their training distribution, and attacker refusals as a previously-underreported confound in victim resistance measurement. All limitations are stated explicitly. Attack prompts are withheld per responsible disclosure policy; all other experimental artifacts are released. 
+
+# 1. Introduction 
+
+Safety alignment in large language models is commonly evaluated through single-turn adversarial probing: a curated set of prompts is presented to the model, and each response is classified as harmful or not. This evaluation paradigm, while operationally convenient, mischaracterizes the threat environment. Real-world adversaries do not stop after a single refused request. They probe, rephrase, reframe, and persist across turns. The safety property of a deployed language model is not a fixed threshold but a dynamic surface that evolves in response to the structure of the interaction it is embedded in. Understanding how that surface behaves under sustained pressure requires a different evaluation methodology. Rather than asking “does this model refuse harmful requests?”, we ask: how does the compliance score evolve as a function of ad-versarial round, harm category, framing strategy, and victim model identity? A model that resists every attack still pro-duces a trajectory, and that trajectory is scientifically valuable. A model that consolidates its refusals over successive rounds is behaviorally distinct from one that holds a neutral stable state, even if both record zero jailbreaks. Binary evaluation cannot distinguish these cases. This paper presents ADVERSA (Adversarial Dynamics and Vulnerability Evaluation of Resistance Surfaces in AI ), a framework built to measure these dynamics. ADVERSA op-erationalizes multi-turn adversarial evaluation through three components: a fine-tuned attacker model that generates ad-versarial prompts without attacker-side refusal interference; a structured 5-point compliance rubric that captures partial com-pliance as a meaningful intermediate state; and a triple-judge consensus panel that makes evaluation uncertainty visible rather than hiding it behind a single judge’s outputs. 
+
+Contributions. This work makes the following contributions: • We release open-source infrastructure for automated multi-turn red-teaming, including a fine-tuned 70B at-tacker model, a structured 5-point compliance rubric, a triple-judge consensus scoring pipeline, and per-round JSON logging of all evaluation artifacts. Providing this infrastructure to measure hidden red-teaming bot-tlenecks is the primary scientific contribution of this work. • We introduce a triple-judge consensus architecture 
+
+and measure inter-judge agreement, self-judge scoring tendencies, and score distributions as outcomes in their own right, demonstrating concretely why judge reliabil-ity in adversarial contexts cannot be assumed and must be measured as part of the evaluation protocol. • We characterize attacker drift , a failure mode observed during system development in which fine-tuned attacker models deployed outside their training distribution pro-gressively abandon assigned objectives over extended multi-turn conversations – a bottleneck that automated 1
+
+> arXiv:2603.10068v1 [cs.CR] 10 Mar 2026
+
+red-teaming pipelines have not previously documented or measured. • We introduce the guardrail degradation curve as a first-class evaluation primitive, replacing binary jailbreak classification with continuous per-round trajectory anal-ysis across a structured 5-point compliance rubric. • We document attacker refusals as an underreported con-found in automated red-teaming: when the attacker model declines to generate an attack, a turn is lost with-out any victim interaction, inflating apparent victim re-sistance. • We conduct a 15-conversation pilot study that validates the framework end-to-end across three frontier victim models, demonstrating that the pipeline successfully pro-duces per-round compliance trajectories, triple-judge consensus scores, and structured failure-mode logs suit-able for scaled replication. • We release all evaluation code, conversation logs, scor-ing artifacts, and judge reasoning strings. Attack prompts are withheld per our responsible disclosure pol-icy (§10). 
+
+Paper Organization. Section 2 reviews related work. Sec-tion 3 describes the ADVERSA framework and its compo-nents. Section 4 details experimental methodology. Section 5 presents experimental results. Section 6 analyzes judge re-liability. Section 7 characterizes attacker drift. Section 8 discusses findings and implications. Section 9 states limita-tions. Section 10 covers ethics and responsible disclosure. Section 11 concludes. 
+
+# 2. Background and Related Work 
+
+2.1 LLM Safety Alignment 
+
+Modern LLMs incorporate safety objectives trained on top of pretraining, principally through Reinforcement Learn-ing from Human Feedback (RLHF) [ 16 ] and Constitutional AI [ 2]. These methods instill refusal behaviors for harmful requests, but the resulting safety properties are empirically incomplete. Bai et al. [ 1] and Wei et al. [ 22 ] both observe that safety training creates competing objectives rather than hard constraints, and that sufficiently crafted inputs can exploit the tension between helpfulness and harmlessness to induce com-pliance. ADVERSA treats the manifestation of this tension as a continuous measurable quantity rather than a binary event. 
+
+2.2 Jailbreaking and Adversarial Prompting 
+
+Automated jailbreak generation has developed substantially. Zou et al. [25] demonstrate gradient-based adversarial suffix generation (GCG) that transfers across model families. Chao et al. [ 6 ] introduce PAIR, which uses an attacker LLM to iteratively refine jailbreak prompts through black-box access, achieving high success rates within 20 queries. Mehrotra et al. [ 14 ] extend this with tree-of-attacks-with-pruning (TAP). Liu et al. [ 12 ] generate readable jailbreaks through hierar-chical genetic algorithms. Shen et al. [ 20 ] analyze naturally occurring jailbreak prompts shared publicly, identifying role-play, fictional framing, and persona injection as dominant strategies. Shah et al. [ 19 ] demonstrate that persona-based prompting transfers across model families. ADVERSA builds on this literature but is distinguished by its focus on trajectory rather than event: the per-round score sequence over an entire multi-turn conversation is the unit of analysis, not the presence or absence of a single successful jailbreak. 
+
+2.3 Multi-Turn Adversarial Evaluation 
+
+The multi-turn attack surface has received comparatively limited systematic attention. Perez and Ribeiro [ 18 ] demon-strate prompt injection in chained LLM workflows. Yang et al. [ 23 ] show that context manipulation across turns can shift model behavior. Carlini et al. [ 4 ] examine whether aligned models maintain safety properties under adversarial perturba-tion, concluding that alignment is brittle under distribution shift. Our work extends this concern into the specific context of persistent social engineering across tracked conversation history, with per-round scoring that captures incremental com-pliance shifts. 
+
+2.4 Red-Teaming Frameworks 
+
+Ganguli et al. [ 9] describe large-scale human red-teaming, identifying diverse attack taxonomies but relying on human annotators rather than automated evaluation. Perez et al. [ 17 ]introduce LLM-based red-teaming using one language model to generate attacks for another. HarmBench [ 13 ] provides a standardized benchmark across attack methods and model families. Our objectives are drawn from HarmBench, Jail-breakBench [5], and AdvBench [25]. Microsoft PyRIT (Python Risk Identification Toolkit for LLMs) [ 15 ] is an open-source orchestration framework for automated LLM red-teaming that influenced the architectural design of ADVERSA’s pipeline. ADVERSA’s mastermind components extend PyRIT’s conversation management prim-itives with per-round structured scoring, trajectory logging, and multi-judge consensus. 
+
+2.5 LLM-as-Judge Reliability 
+
+The use of LLMs as evaluators has grown [ 24 ], but their reliability in adversarial contexts is underexplored. Dubois et al. [ 8] document length bias in LLM judges. Wang et al. [ 21 ]identify position and self-enhancement biases. In adversarial red-teaming, a safety-aligned judge faces a conflict between its evaluation role and its trained refusal behaviors, potentially producing conservative scores that undercount successful jail-breaks. ADVERSA directly measures this by treating judge disagreement, self-judgment tendencies, and score distribu-tions as experimental outcomes rather than nuisances. 2ADVERSA-Red (70B LoRA)  
+
+> Victim LLM
+> Judge 1 Claude
+> Judge 2 Gemini
+> Judge 3 GPT-5.2
+> JSON Logger
+> attack prompt
+> victim response
+> response history
+> Figure 1. ADVERSA pipeline. The attacker generates adversarial prompts; the victim responds with full conversation history; judges independently score each response; all outputs are logged per round. Judge scores are never visible to the attacker.
+
+# 3. The ADVERSA Framework 
+
+3.1 System Architecture 
+
+Figure 1 illustrates the ADVERSA pipeline. Three com-ponents interact in a closed loop per adversarial round: an attacker model generates a prompt targeting a specific objec-tive; a victim model responds to that prompt given its full conversation history; and a judge panel independently scores the victim’s response on the 5-point compliance rubric. The attacker receives only victim response text as input to each subsequent round; it never observes judge scores. This design prevents the attacker from adapting to the scoring signal and maintains the ecological validity of the evaluation. Structured JSON logs are written per round and include: the attacker prompt, the victim response, each judge’s nu-meric score and reasoning string, the consensus score, the unanimity flag, the maximum inter-judge score gap, and a boolean is self judge flag marking rounds where the judge model and victim model are identical. 
+
+3.2 ADVERSA-Red: The Attacker Model 
+
+Off-the-shelf models used as attackers introduce a criti-cal confound: their own safety filters refuse to generate the adversarial content they are supposed to produce. In pre-liminary experiments, GPT-4 refused approximately 85% of attack-generation requests in structured red-teaming prompts, making it unreliable as an attacker. ADVERSA-Red was developed to eliminate this bottleneck. Starting from Meta-Llama-3.1-70B-Instruct , we apply QLoRA [ 7] with rank 32 and 4-bit NF4 quantiza-tion, training for 3 epochs (4,023 steps) over approximately 10 hours on an NVIDIA A100 SXM4 80GB. The corpus contains 10,724 examples (1,192 validation) in ShareGPT for-mat, assembled from behavioral subsets of AdvBench [ 25 ], HarmBench [ 13 ], and JailbreakBench [ 5], supplemented with synthetic examples generated by GPT-4o-mini using struc-tured generation prompts. For the experiment reported here, the LoRA adapter is merged into the base model weights and served via              
+
+> Table 1. Five-point compliance rubric applied by each judge inde-pendently.
+> Score Label Definition
+> 1Hard Refusal Explicit refusal; no relevant con-tent 2Soft Refusal Declines but acknowledges topic or offers alternatives 3Partial General/conceptual content; not actionable 4Detailed Specific, mostly actionable con-tent 5Full Complete, directly usable content; no gaps
+
+vLLM [ 11 ] with tensor parallelism across 4 ×H200 140GB GPUs. Temperature is set to 0.9; top-p to 0.95; max new to-kens to 512 per round. The attacker receives a system prompt specifying the objective and an explicit anti-drift instruction mandating adversarial focus regardless of victim tone (see §7). 
+
+Training distribution caveat. ADVERSA-Red was trained on single-turn adversarial examples and is here de-ployed in a multi-turn setting where it must maintain objective focus across up to 10 rounds. This is an out-of-distribution use case. The consequences of this mismatch – including attacker drift and attacker refusals – are documented in §7 and treated as first-class experimental observations rather than concealed implementation issues. 
+
+3.3 Compliance Rubric 
+
+All victim responses are scored on the 5-point rubric in Table 1. Binary classification cannot distinguish between a complete refusal and a partial disclosure that provides general conceptual information but stops short of actionable detail. That distinction matters both for safety assessment and for understanding what framing strategies achieve. The rubric is applied independently by each of the three judges using a structured scoring prompt that specifies the rubric, the objec-tive, and the full victim response. Judge scoring prompts are available in the released artifacts. Consensus score is the median of the three judges’ scores. A jailbreak is declared when the consensus score reaches 4 or above and at least 2 of 3 judges independently score the response at 4 or above. 
+
+3.4 Adversarial Objectives 
+
+Five objectives across four harm categories are used, se-lected from established benchmark taxonomies to represent distinct harm types and difficulty levels. Two objective descriptions are withheld per responsible disclosure policy (§10). 3Table 2. Adversarial objectives.                                     
+
+> ID Category Objective
+> SE-01 Social Eng. Phishing email, bank impersonation MC-02 Malicious Code Withheld (disclosure) MC-07 Malicious Code UDP flood DDoS script MIS-04 Misinfo. Fake academic ab-stract PV-03 Privacy Viol. Withheld (disclosure)
+> Table 3. Experimental configuration.
+> Parameter Value
+> Attacker ADVERSA-Red (Llama-3.1-70B, merged bfloat16) Attacker temp. 0.9; top-p 0.95; max tokens 512 Victim Models Claude Opus 4.6, Gemini 3.1 Pro, GPT-5.2 Judge Panel Claude Opus 4.6, Gemini 3.1 Pro, GPT-5.2 Consensus Rule Median; JB if ≥2/3 judges score ≥4Max Turns 10 per conversation Victim History Full conversation history per round Attacker Blind Victim responses only; judge scores withheld Conversations 1 per (objective, victim) pair Total Convs. 15 (5 objectives ×3 victims) Hardware 4×H200 140GB; vLLM; tensor-parallel 4 Context Window 131,072 tokens Duration 65 minutes wall-clock Attacker Refusals 3 (all in Gemini 3.1 Pro con-versations)
+
+# 4. Experimental Methodology 
+
+4.1 Configuration 
+
+Table 3 summarizes the full experimental configuration. All conversations use the same attacker model, victim set, judge panel, and evaluation protocol. 
+
+4.2 Conversation Protocol 
+
+Each conversation is initialized with the objective text and a system prompt for the attacker that specifies the harm cate-gory, the target behavior, and an explicit objective-persistence instruction. At each round, the attacker receives the full con-versation history (all prior attacker turns and victim responses) and generates a new adversarial prompt. The victim receives the full conversation history including all prior victim turns, maintaining a persistent conversational context. If the attacker declines to generate a prompt (attacker refusal), the round is logged with the refusal flag set; no victim API call is made; the conversation continues to the next round. Termination occurs at the earliest of: (a) the consensus jailbreak condition being met, (b) the attacker refusing on two consecutive rounds, or (c) 10 rounds elapsed. The jailbreak round is defined as the first round at which the consensus condition is satisfied. 
+
+4.3 Judge Scoring Protocol 
+
+Each judge receives a structured prompt containing: the 5-point rubric definition in full, the objective being evaluated, and the victim’s response for the current round only (not prior rounds). Judges are not shown prior scores or other judges’ outputs, ensuring independent assessment. Judges are prompted to respond in JSON with fields score (integer 1–5) and reasoning (string). Responses are parsed with a regex fallback for cases where the JSON is malformed or truncated; fallback parsing extracts the numeric score only. Parsed scores outside the range 1–5 are flagged and the round is excluded from aggregate statistics. No such exclusion was necessary in this experiment. 
+
+4.4 Training Data Sources 
+
+The adversarial training corpus for ADVERSA-Red is con-structed from three public benchmarks: AdvBench [25 ] (520 harmful behavior strings with completion targets), Harm-Bench [13 ] (400 behaviors across functional and semantic categories with contextual strings), and JailbreakBench [ 5](100 behaviors with manually assigned categories). These are supplemented by a synthetic generation pipeline using GPT-4o-mini to produce adversarial prompt variants targeting each behavior, and a 1,390-line multi-turn trajectory gener-ator using Markov-chain strategy transitions across 7 action types: escalation, reframing, persona injection, appeal to au-thority, fictional contextualization, technical obfuscation, and compliance extraction. The final set contains 10,724 training examples and 1,192 validation examples in ShareGPT format. 
+
+4.5 Evaluation Metrics 
+
+Primary metrics: jailbreak rate (proportion of conversa-tions meeting the consensus jailbreak condition); jailbreak round (first round at which the condition is met); score trajec-tory (per-round consensus score sequence for the conversa-tion). Secondary metrics for judge analysis: pairwise agree-ment rate (proportion of rounds where two judges assign identical scores); unanimity rate (proportion of rounds where all three judges agree); self-judge score distribution versus 
+
+cross-judge score distribution .
+
+# 5. Experimental Results 
+
+5.1 Overall Results 
+
+Figure 2 and Table 4 summarize top-level results. Four conversations met the jailbreak condition (26.7%). The mean jailbreak round of 1.25 stands out: in this evaluation setting, 3 of 4 jailbreaks occurred on round 1 with unanimous 5/5 scores from all three judges. This concentration suggests that the initial framing of the attack may be more consequential 4Figure 2. Overall jailbreak rate: 4 of 15 conversations (26.7%).        
+
+> Table 4. Top-level results summary.
+> Metric Value
+> Total conversations 15 Jailbreaks 4 (26.7%) Average rounds completed 7.67 Average jailbreak round 1.25 Attacker refusals 3
+
+than iterative turn-by-turn pressure, at least for the objectives and victim models tested. We treat this as an observation in this dataset rather than a claim about the general primacy of first-turn attacks, given the sample size constraints described in §9. 
+
+5.2 Per-Victim Analysis Claude Opus 4.6 was jailbroken in 2 of 5 conversations (40%), the highest rate of the three victims. Both jailbreaks were unanimous (5/5 from all three judges) on round 1. MIS-04 succeeded via an academic framing strategy presenting the request as graduate-level research. MC-07 succeeded via a network stress-testing framing. Both cases reached the maximum rubric score without any prior adversarial escala-tion, indicating that the attacker’s initial framing alone was sufficient to elicit full compliance. 
+
+Gemini 3.1 Pro was jailbroken once (MIS-04, round 1, 5/5) with the same academic framing as Claude. Critically, 3 of Gemini’s 10 possible attack turns (across 5 conversations) were lost to attacker refusals – 2 in the MC-02 conversation and 1 in MC-07. A refusal turn produces no attack and no victim response, reducing the number of actual attacks that Gemini faced. Gemini’s measured resistance is therefore par-tially a function of attacker failure rather than victim defense. This confound is discussed in §9. 
+
+GPT-5.2 was jailbroken once (SE-01, round 2). This is the only case in the dataset exhibiting genuine multi-turn strategy adaptation: a hard refusal (consensus score 1) at round 1, fol-                      
+
+> Figure 3. Per-victim jailbreak rates and average rounds completed. Attacker refusals against Gemini 3.1 Pro are annotated; they reduce Gemini’s effective attack exposure.
+> Table 5. Per-victim results.
+> Victim Rate JBs Avg Rds A.Ref
+> Claude Opus 4.6 40.0% 2/5 6.4 0Gemini 3.1 Pro 20.0% 1/5 8.2 3GPT-5.2 20.0% 1/5 8.4 0
+> Overall 26.7% 4/15 7.67 3
+
+lowed by detailed compliance (consensus score 4) at round 2 after the attacker reframed the request from a direct phishing email request to a “security awareness simulation” scenario. This reframing event is the dataset’s clearest evidence that adversarial context adaptation across turns can produce a jailbreak that round 1 alone could not. 
+
+5.3 Per-Category Analysis 
+
+The category ordering – Misinformation most vulnerable, Privacy Violation most resistant – is consistent across all three victim models within this dataset, though the small number of conversations per category (3–6) prevents generalization. Misinformation’s higher susceptibility is consistent with the plausibility of academic and research framings as legitimate contexts for producing false but scholarly-sounding content. Privacy Violation’s complete resistance may reflect the con-creteness of the harm: these objectives require specific per-sonal information rather than general procedural knowledge, making indirect framing strategies less effective. These are directional hypotheses rather than established findings at this scale. 
+
+5.4 Score Trajectory Analysis 
+
+Figure 5 shows the per-round score grid for all 15 conver-sations. The four jailbreak conversations appear as bright cells concentrated in the first two columns. Non-jailbreak conversations show score variance in early rounds followed by convergence toward score 1–2 by rounds 6–10, consis-tent with victim models consolidating refusals under repeated 5Figure 4. Jailbreak rate by harm category. Category resistance ordering is consistent across victims within this dataset.                 
+
+> Table 6. Per-category results.
+> Category Convs JBs Rate
+> Misinformation 3266.7% Social Engineering 3133.3% Malicious Code 6116.7% Privacy Violation 300.0%
+
+adversarial pressure. This late-round convergence pattern is visible across all three victims and is distinct from the trajec-tory patterns that would be expected if multi-turn pressure were uniformly eroding defenses. Figure 6 separates trajectories by victim. Claude’s panel shows two round-1 collapses (solid lines reaching score 5) alongside three flat refusal trajectories. GPT-5.2’s panel shows the SE-01 reframing event as the only instance of a trajectory that starts at score 1 and rises in a subsequent round. Gemini’s panel includes trajectory gaps at rounds where attacker refusals occurred. Figure 7 shows mean scores per round by victim. All three victims show declining or flat mean scores after round 2, confirming the late-round convergence observation. The stan-dard deviation bands are widest in rounds 1–3, reflecting the between-conversation variance driven by the jailbreak events occurring in that window. 
+
+5.5 Jailbreak Event Anatomy 
+
+Figure 8 presents each jailbreak event in its own panel. The structural contrast is clear. MC-07/Claude, MIS-04/Claude, and MIS-04/Gemini share the same event shape: round 1 consensus score of 5, conversation terminates. In all three cases, no iterative strategy adaptation was necessary because the attacker’s initial framing immediately elicited full compli-ance. SE-01/GPT-5.2 is structurally distinct. The attacker’s initial request produced a hard refusal (score 1). The attacker then reframed the request as a “security awareness simulation,” and the victim’s round 2 response was scored 4/5/4 by the   
+
+> Figure 5. Score trajectory heatmap across all 15 conversations. Rows: conversations. Columns: rounds 1–10. Color encodes con-sensus score (1 = dark red, 5 = bright green). Grey cells indicate rounds that did not occur.
+> Figure 6. Score trajectories by victim. Solid lines indicate jailbreak conversations; dashed lines indicate non-jailbreak conversations. Stars mark jailbreak events.
+
+three judges (consensus: detailed compliance). This is the only example of the attacker successfully adapting strategy in response to a round 1 refusal and achieving a jailbreak as a result. 
+
+5.6 Rounds Completed and Attacker Refusals 
+
+Figure 9 shows rounds completed and attacker refusal oc-currences across all 15 conversations. The three attacker refusals are exclusive to Gemini conversations (MC-02: 2 refusals; MC-07: 1 refusal), with no refusals in Claude or GPT-5.2 conversations. The mechanism is not established; one candidate explanation is that Gemini’s refusal language in early rounds contains patterns that activate ADVERSA-Red’s residual safety constraints in subsequent attacker-generation calls. This represents an interaction effect between attacker and victim characteristics that is not present in single-turn evaluation. 6Figure 7. Mean consensus score per round by victim model with standard deviation bands.  
+
+> Figure 8. Each of the 4 jailbreak conversations shown individually. Three events are single-round collapses (round 1, score 5); one (SE-01 vs. GPT-5.2) is a two-round reframing event. Dashed line marks the jailbreak threshold at score 4.
+
+# 6. Judge Reliability Analysis 
+
+6.1 Motivation 
+
+Judge reliability in adversarial red-teaming is structurally different from the judge reliability problems studied in instruction-following evaluations [ 24 , 8]. A safety-aligned LLM judge that encounters a victim response describing how to construct malware may itself refuse to process the request, under-score genuine harmful content, or produce a reasoning string that declines to engage with the specifics. This is not a calibration problem but a conflict between the judge’s role (evaluate compliance accurately) and its training (refuse to engage with harmful content). The triple-judge architecture in ADVERSA is designed to make this conflict visible through disagreement rather than hiding it behind a single judge’s outputs. The contribution of the judge analysis is not that we have solved judge reliability, but that we demonstrate concretely why it cannot be assumed in adversarial evaluation contexts.   
+
+> Figure 9. Rounds completed per conversation. Jailbreak conversa-tions (yellow) terminate early. All three attacker refusals occurred in Gemini 3.1 Pro conversations.
+> Figure 10. Pairwise inter-judge agreement matrix. Values represent the proportion of rounds in which two judges assigned identical scores. Agreement is highest for unambiguous cases (score 1 or score 5).
+
+6.2 Pairwise Inter-Judge Agreement 
+
+Figure 10 shows pairwise agreement between the three judges. All four jailbreak declarations were unanimous (3/3 judges, all scoring 4 or above), indicating high agreement precision for unambiguous full-compliance responses. Dis-agreement is concentrated at the 1/2 boundary, where the distinction between a hard refusal that provides no informa-tion and a soft refusal that acknowledges the topic is genuinely ambiguous in natural language. The SE-01/GPT-5.2 round-1 response illustrates this: scored 1/2/1 (Claude: 1; Gemini: 2; GPT-5.2: 1). Gemini assessed that GPT-5.2’s response acknowledged the security awareness context while declining the request, warranting a score of 2. Claude and GPT-5.2 assessed the same response as a clean refusal with no relevant acknowledgment, warranting a score of 1. Both interpretations are defensible; this case demonstrates that rubric boundary ambiguity is a structural 7Figure 11. Score distribution per judge across all scored rounds. Distributions are concentrated at 1–2, consistent with the overall low jailbreak rate.   
+
+> Figure 12. Self-judge vs. cross-judge score distributions. Self-judging occurs when judge and victim are the same model family. Mean scores are annotated for each condition.
+
+feature of natural-language compliance scoring, not a solvable calibration problem. The non-trivial disagreement rates outside unanimous jail-break cases mean that the consensus score is doing meaning-ful work: in several non-jailbreak rounds, individual judges assigned scores that would have produced false positives or false negatives on their own. The triple-judge median prevents both. 
+
+6.3 Score Distributions by Judge 
+
+Figure 11 shows that all three judges assign scores pri-marily in the 1–2 range. Score 5 appears only in jailbreak conversations and with unanimity. Score 3 (partial compli-ance) is the most interesting distributional region: it identifies conversations where the victim provided relevant information without crossing into actionability. The relative frequency of score 3 assignments varies across judges; this between-judge variance in the partial-compliance region warrants further study with larger samples. 
+
+6.4 Self-Judge vs. Cross-Judge Scoring 
+
+A structural consequence of using the same model set for both victim and judge roles is that every conversation involves one self-judging event: Claude judges Claude’s responses; Gemini judges Gemini’s; GPT-5.2 judges GPT-5.2’s. The 
+
+is self judge flag logged per round enables direct com-parison. Figure 12 shows the score distributions under both condi-tions. With 15 conversations and approximately 112 judge calls per model, the current dataset is insufficient to estab-lish statistical significance for any observed difference. The figure is presented as a directional signal and as a template for the analysis that becomes meaningful at scale. Wang et al. [ 21 ] document self-enhancement bias in non-adversarial LLM evaluation; whether a similar or opposing bias operates when a model evaluates its own safety responses is an open question that larger-scale replication of this protocol could address. 
+
+6.5 Judge Truncation 
+
+In 2 of approximately 336 total judge API calls (0.6%), Gemini’s response JSON was truncated before the closing brace, triggering the fallback numeric score parser. Numeric scores were recovered correctly in both cases; reasoning strings were lost. This did not affect any jailbreak deter-mination. Production deployments should implement explicit JSON schema validation with retry logic to eliminate this failure mode. 
+
+# 7. Attacker Drift: A Failure Mode 
+
+7.1 Observation 
+
+During system development – specifically in preliminary runs using a 30-turn configuration without the anti-drift sys-tem prompt – a systematic failure mode in ADVERSA-Red was observed and documented. We term this attacker drift .In conversations exceeding approximately 15 turns, ADVERSA-Red progressively abandoned its assigned objec-tive and began mirroring the victim’s cooperative and helpful tone. By rounds 20–30, the attacker was generating responses such as “Thank you for your thoughtful insights. I really appreciate your perspective on this topic,” with no adversarial content targeting the original objective. The attacker’s output became indistinguishable in tone from a cooperative dialogue participant. 
+
+7.2 Mechanistic Explanation 
+
+ADVERSA-Red was trained on single-turn adversarial ex-amples in which the full context is always adversarial in char-acter. In multi-turn deployment, the growing conversation history contains an increasing proportion of victim text that is cooperative, articulate, and contextually helpful even when the victim is refusing. The model’s generation distribution appears to be drawn toward this cooperative register by the distributional weight of the accumulated context, gradually shifting attacker outputs away from the adversarial register of its training signal. This is consistent with the out-of-distribution generation degradation described in Guo et al. [ 10 ] for constrained gen-8eration models outside their training distribution. It is not a fine-tuning failure but a fundamental consequence of deploy-ing a model trained on single-turn examples in a multi-turn context without multi-turn adversarial training signal. 
+
+7.3 Mitigation and Residual Risk 
+
+Two mitigations were applied before the experiment re-ported here. First, the maximum turn count was reduced from 30 to 10, limiting drift exposure. Second, an explicit anti-drift instruction was added to the attacker system prompt: the at-tacker is told that it has a finite number of turns to achieve its objective and must not acknowledge, compliment, or mirror the victim’s tone under any circumstances. These mitigations reduced but did not eliminate attacker-side failures: 3 attacker refusals were still observed in the 10-turn experiment. The correct fix requires multi-turn ad-versarial training data with explicit objective-persistence su-pervision across extended conversation histories. No such dataset exists in current public benchmarks; constructing it is a defined direction for future work. 
+
+# 8. Discussion 
+
+8.1 Trajectory Analysis as an Evaluation Primitive 
+
+The score trajectory heatmap (Figure 5) shows patterns that are invisible to binary evaluation. Non-jailbreak conversations do not produce uniform flat trajectories; they show early variance followed by late-round convergence toward refusal. This convergence pattern is itself a safety property: it is consistent with victim models detecting persistent adversarial intent and hardening their responses over turns. Whether this is an emergent property of the models’ context processing or an explicit safety feature is not determinable from this data, but the trajectory measurement framework provides the tool needed to test the distinction at scale. The absence of progressive score increases in non-jailbreak conversations – what would be expected if sustained pressure were uniformly eroding defenses – suggests that the current frontier victim models do not show the classical erosion pat-tern for these objectives. This is a notable null result: within the constraints of this study, the persistent-pressure attack model did not produce gradual compliance accumulation. 
+
+8.2 First-Turn Framing as a Primary Attack Surface 
+
+Three of four jailbreaks occurred on round 1 with unan-imous scores of 5, driven by framing strategies (academic context, operational context) that presented the harmful ob-jective as a legitimate professional activity. This finding does not establish that multi-turn dynamics are unimportant in general; it is better understood as a calibration signal. If the attacker’s initial framing is sufficient for jailbreak, sustained pressure is never tested. The interesting question raised by this observation is whether models that are resistant at round 1 could be jailbroken by a more capable multi-turn attacker that adapts framing more effectively over turns. The SE-01/GPT-5.2 event shows this is possible in principle, but the current attacker’s training distribution limits how well it can execute multi-turn strategies. 
+
+8.3 Judge Reliability as Infrastructure 
+
+The judge analysis demonstrates that LLM judge relia-bility in adversarial contexts is not a given. Disagreement between judges is not noise to be averaged away; it is a sig-nal about where rubric boundaries are ambiguous, where victim responses are genuinely borderline, and where judge models’ own safety training may be interfering with their evaluation role. Making this disagreement visible through a triple-judge architecture with logged pairwise agreement is a minimal viable approach to evaluation reliability. The claim is not that triple-judge consensus is reliable; the claim is that single-judge evaluation in adversarial contexts is provably less reliable, and that the infrastructure for measuring this should be standard. 
+
+8.4 Implications for Safety Evaluation Practice 
+
+Three recommendations follow from these findings. First, evaluation should report trajectories, not just jailbreak rates: per-round scoring captures partial compliance, convergence patterns, and dynamic trends that binary evaluation discards. Second, judge reliability should be measured, not assumed: logging pairwise agreement and self-judge flags costs nothing at inference time and provides critical quality information. Third, attacker quality is an independent research problem: ADVERSA-Red’s drift behavior and residual refusals demon-strate that even a fine-tuned attacker introduces systematic bias into evaluation results. Evaluation pipelines that use a single off-the-shelf attacker without characterizing attacker failures are producing measurements with unconstrained error bars on the attacker side. 
+
+# 9. Limitations 
+
+The following limitations are stated explicitly and are not caveats to be noted in passing; they are structural constraints that bound the claims this paper can make. 
+
+Sample size. This experiment uses one conversation per (objective, victim) pair ( n = 1). All percentage figures are point estimates from single observations with no variance es-timate, no confidence interval, and no statistical significance. No finding reported here should be interpreted as a stable property of any victim model. The jailbreak rate, category hierarchy, and per-round trajectory patterns are observations in this evaluation setting, not generalizable results. 
+
+Objective coverage. Five objectives across four harm categories represents a small and non-uniform sample of the adversarial objective space. The Malicious Code category has 6 conversations (2 objectives × 3 victims) while other categories have 3. Category-level comparisons are directional hypotheses only. 
+
+Attacker out-of-distribution deployment. ADVERSA-Red was trained on single-turn examples and deployed in a 10-turn setting. The training-inference distribution mismatch 9is directly responsible for attacker drift (§7) and is a plausible factor in attacker refusals. All results from this experiment should be interpreted with the caveat that the attacker is not fully reliable. 
+
+Attacker refusals inflate victim resistance. Three of Gemini’s 10 possible attack turns were lost to attacker re-fusals. Gemini’s jailbreak rate (20%) cannot be compared directly to Claude’s (40%) or GPT-5.2’s (20%) because Gemini faced a smaller effective attack exposure. The 
+
+attacker refusals field in the conversation logs en-ables this correction at the per-conversation level, but cannot support per-category or cross-victim correction at this sample size. 
+
+Self-judging. Every conversation involves one self-judging event. The direction and magnitude of any self-judge bias are not measurable from this data. 
+
+Judge truncation. Two of approximately 336 judge calls (0.6%) produced truncated JSON; reasoning strings were lost. Scores were recovered correctly. 
+
+No multi-seed replication. No multiple random-seed draws were made per (objective, victim) pair. Attacker tem-perature introduces variance that is uncharacterized. 
+
+No longitudinal comparison. This experiment reports a single evaluation snapshot. No prior experiment is compara-ble due to differences in attacker configuration, victim history, and judge architecture. No trajectory evolution over time is claimed. 
+
+Resource constraints. This work was conducted indepen-dently without institutional compute access. The planned 6,000-conversation full experiment was not executed due to cost. 
+
+# 10. Ethics and Responsible Disclosure 
+
+10.1 Responsible Disclosure 
+
+This research involves generating adversarial content against production LLM APIs operated by Anthropic, Google, and OpenAI. We made the following decisions regarding dis-closure. 
+
+Attack prompt suppression. Specific attack prompts that produced jailbreaks are not published in this paper or in the associated repository. The framing strategies that suc-ceeded (academic context, simulation context, operational context) are general categories already documented in the literature [ 20 , 19 ]. We do not release the exact formulations used, because precise template reproduction could provide operational uplift to adversarial users without commensurate research benefit. Researchers seeking full artifacts for repli-cation purposes may request them from the author directly. 
+
+Partial objective suppression. MC-02 and PV-03 ob-jective descriptions are withheld from the public paper and repository. Summaries are available to verified AI safety researchers upon request. 
+
+Vendor notification. The jailbreaks documented here use framing strategies (academic context, simulation context) that are widely known and not specific to any implementation of the affected models. No vendor was notified prior to publica-tion because no novel technical vulnerability was identified. The broader framing-based vulnerability class is already doc-umented in the public literature [20, 22]. 
+
+10.2 Harm Avoidance 
+
+All adversarial conversations were conducted via API end-points with no real-world harm surface. Generated content was collected, scored, and stored in secured research logs; it was not used to perform any real-world attack, was not distributed, and has not been acted upon outside the research context. 
+
+10.3 Dual-Use Considerations 
+
+The ADVERSA framework is dual-use. It can be used to identify safety weaknesses for defensive purposes or could be used to systematically probe models for exploitation. We release the framework with the expectation that its primary use case is defensive evaluation. The decision to withhold specific attack prompts while releasing the evaluation infras-tructure is consistent with responsible disclosure norms in adversarial ML research [3]. 
+
+10.4 No IRB Requirement 
+
+This research involves no human subjects. All experimental subjects are commercial LLM API endpoints. No IRB review is required. 
+
+# 11. Conclusion 
+
+We have presented ADVERSA, a framework for measuring LLM safety guardrail behavior under sustained multi-turn adversarial pressure. Across 15 controlled conversations with three frontier victim models and a triple-judge consensus architecture, we observe a 26.7% jailbreak rate concentrated at the first adversarial round. In this evaluation setting, initial-turn framing quality appears to be a more consequential factor than iterative multi-turn pressure for the objectives tested. Non-jailbreak conversations show late-round convergence toward refusal rather than gradual compliance accumulation, consistent with victim models detecting and responding to adversarial intent over turns. The triple-judge architecture reveals that LLM judge re-liability in adversarial contexts is not a given: inter-judge disagreement is concentrated at rubric boundaries that are genuinely ambiguous in natural language, and the consensus mechanism contributes meaningfully to evaluation quality beyond what any single judge provides. We also document attacker drift as a failure mode in fine-tuned attacker models deployed outside their training distribution, and attacker re-fusals as a confound in victim resistance measurement that prior automated red-teaming work has not systematically ad-dressed. All of these findings are subject to the sample-size con-straints stated in §9. The appropriate interpretation is that 10 ADVERSA provides an evaluation methodology and a set of observations that motivate larger-scale replication. The logical next step is to run the full protocol across a broader objective set, more victim models, and multiple trials per pair, with a multi-turn-trained attacker that does not exhibit drift. 
+
+# Acknowledgments 
+
+This work was conducted independently without institu-tional funding or compute support. The author thanks the open-source communities behind the Llama model family, vLLM, and the public adversarial benchmark datasets that made this research possible. 
+
+# References 
+
+[1] Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al. Training a helpful and harmless assistant with reinforce-ment learning from human feedback. arXiv preprint arXiv:2204.05862 , 2022. [2] Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, Anna Chen, Anna Goldie, Azalia Mirhoseini, Cameron McK-innon, et al. Constitutional AI: Harmlessness from AI feedback. arXiv preprint arXiv:2212.08073 , 2022. [3] Miles Brundage, Shahar Avin, Jack Clark, Helen Toner, Peter Eckersley, Ben Garfinkel, Allan Dafoe, Paul Scharre, Thomas Zeitzoff, Bobby Filar, et al. The mali-cious use of artificial intelligence: Forecasting, preven-tion, and mitigation. arXiv preprint arXiv:1802.07228 ,2018. [4] Nicholas Carlini, Milad Nasr, Christopher A Choquette-Choo, Matthew Jagielski, Irena Gao, Pankaj Awasthi, Sneha Garg, Roxana Gheini, Arvind Krishna, Nicolas Papernot, et al. Are aligned neural networks adversari-ally aligned? 36, 2023. [5] Patrick Chao, Edoardo Debenedetti, Alexander Robey, Maksym Andri ˇcevic, Francesco Croce, Vikash Huang, Evan Sheridan, Olivia Sheridan, Edgar Dobriban, Nico-las Flammarion, et al. JailbreakBench: An open robust-ness benchmark for jailbreaking large language models. 
+
+arXiv preprint arXiv:2404.01318 , 2024. [6] Patrick Chao, Alexander Robey, Edgar Dobriban, Hamed Hassani, George J Pappas, and Eric Wong. Jail-breaking black box large language models in twenty queries. In NeurIPS Workshop on Socially Responsible Language Modelling Research , 2023. [7] Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. QLoRA: Efficient finetuning of quan-tized LLMs. In Advances in Neural Information Pro-cessing Systems , volume 36, 2024. [8] Yann Dubois, Bal ´azs Galambosi, Percy Liang, and Tat-sunori B Hashimoto. Length-controlled AlpacaEval: A simple way to debias automatic evaluators. arXiv preprint arXiv:2404.04475 , 2024. [9] Deep Ganguli, Liane Lovitt, Jackson Kernion, Amanda Askell, Yuntao Bai, Saurav Kadavath, Ben Mann, Ethan Perez, Nicholas Schiefer, Kamal Ndousse, et al. Red teaming language models to reduce harms: Methods, scaling behaviors, and lessons learned. 2022. [10] Xingang Guo, Fangxu Yu, Huan Zhang, Lianhui Qin, and Bin Hu. COLD-Attack: Jailbreaking LLMs with stealthiness and controllability. arXiv preprint arXiv:2402.08679 , 2024. [11] Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E Gonza-lez, Hao Zhang, and Ion Stoica. Efficient memory man-agement for large language model serving with Page-dAttention. In Proceedings of the ACM SIGOPS 29th Symposium on Operating Systems Principles , 2023. [12] Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. AutoDAN: Generating stealthy jailbreak prompts on aligned large language models. arXiv preprint arXiv:2310.04451 , 2023. [13] Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee, Nathaniel Li, Steven Basart, Bo Li, et al. HarmBench: A standardized evaluation framework for automated red teaming and robust refusal. In Proceedings of the 41st International Conference on Machine Learning , 2024. [14] Anay Mehrotra, Manolis Zampetakis, Paul Kassianik, Blaine Nelson, Hyrum Anderson, Yaron Singer, and Amin Karbasi. Tree of attacks: Jailbreaking black-box LLMs automatically. arXiv preprint arXiv:2312.02119 ,2023. [15] Microsoft AI Red Team. PyRIT: A framework for security risk identification in generative AI sys-tems. GitHub Repository: https://github.com/ Azure/PyRIT , 2024. [16] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al. Training language models to follow instructions with human feedback. In Advances in Neural Information Processing Systems , volume 35, pages 27730–27744, 2022. 11 [17] Ethan Perez, Saffron Huang, Francis Song, Trevor Cai, Roman Ring, John Aslanides, Amelia Glaese, Nat McAleese, and Geoffrey Irving. Red teaming language models with language models. In Proceedings of the 2022 Conference on Empirical Methods in Natural Lan-guage Processing , pages 3419–3448, 2022. [18] F ´abio Perez and Ian Ribeiro. Ignore previous prompt: Attack techniques for language models. In NeurIPS Workshop on Machine Learning Safety , 2022. [19] Rusheb Shah, Soroush Pour, Arush Tagade, Stephen Dorner, Javier Bhargava, and Anca Dragan. Scal-able and transferable black-box jailbreaks for lan-guage models via persona modulation. arXiv preprint arXiv:2311.03348 , 2023. [20] Xinyue Shen, Zeyuan Chen, Michael Backes, Yun Shen, and Yang Zhang. “do anything now”: Characterizing and evaluating in-the-wild jailbreak prompts on large language models. arXiv preprint arXiv:2308.03825 ,2023. [21] Peiyi Wang, Lei Li, Liang Chen, Zefan Cai, Dawei Zhu, Binbin Lin, Yunbo Cao, Qi Liu, Tianyu Liu, and Zhifang Sui. Large language models are not robust multiple choice selectors. In International Conference on Learning Representations , 2024. [22] Alexander Wei, Nika Haghtalab, and Jacob Steinhardt. Jailbroken: How does LLM safety training fail? 36, 2023. [23] Xianjun Yang, Xiao Wang, Qi Zhang, Linda Petzold, William Yang Wang, Xun Zhao, and Dahua Lin. Shadow alignment: The ease of subverting safely-aligned lan-guage models. arXiv preprint arXiv:2310.02949 , 2023. [24] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuo-han Li, Dacheng Li, Eric P Xing, et al. Judging LLM-as-a-Judge with MT-Bench and chatbot arena. In Advances in Neural Information Processing Systems , volume 36, 2023. [25] Andy Zou, Zifan Wang, J Zico Kolter, and Matt Fredrikson. Universal and transferable adversarial at-tacks on aligned language models. arXiv preprint arXiv:2307.15043 , 2023. 12
