@@ -6,31 +6,34 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-18
-- 运行时间：2026-03-18 20:29:32 UTC
+- 最新运行日期：2026-03-19
+- 运行时间：2026-03-19 20:20:59 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：2
+- 本次总论文数：4
+- 精读区：3
 - 速读区：1
 
 ### 今日简报（AI）
-今日聚焦大模型指令层级优化与系统安全防御，深度解析 IH-Challenge 等 3 篇高分论文。
-重点关注通过专用数据集提升模型指令遵循能力，以及针对 OpenClaw 框架的系统性安全攻防框架。
-建议开发者优先学习如何通过指令层级训练防范提示词注入，并关注开源 MCP 服务器的风险评估。
-- 详情：[/202603/18/README](/202603/18/README)
+今日聚焦 4 篇前沿论文，深度解析如何通过隐藏表征优化模型推理能力并筑牢多模态安全防线。
+重点推荐利用对比推理对齐提升强化学习效果，以及通过表征偏移识别并防御视觉语言模型（VLM）的越狱攻击。
+建议关注“隐藏状态”在模型对齐与安全防御中的核心作用，这是当前提升大模型智能与鲁棒性的关键技术趋势。
+- 详情：[/202603/19/README](/202603/19/README)
 
 ### 精读区论文标签
-1. [IH-Challenge: A Training Dataset to Improve Instruction Hierarchy on Frontier LLMs](/202603/18/2603.10521v1-ih-challenge-a-training-dataset-to-improve-instruction-hierarchy-on-frontier-llms)  
+1. [Contrastive Reasoning Alignment: Reinforcement Learning from Hidden Representations](/202603/19/2603.17305v1-contrastive-reasoning-alignment-reinforcement-learning-from-hidden-representations)  
+   标签：评分：10.0/10、query:llm
+   evidence：提高对抗越狱攻击鲁棒性的红队对齐框架。
+2. [Understanding and Defending VLM Jailbreaks via Jailbreak-Related Representation Shift](/202603/19/2603.17372v1-understanding-and-defending-vlm-jailbreaks-via-jailbreak-related-representation-shift)  
+   标签：评分：10.0/10、query:llm
+   evidence：通过表示偏移理解并防御多模态大模型越狱
+3. [Security Assessment and Mitigation Strategies for Large Language Models: A Comprehensive Defensive Framework](/202603/19/2603.17123v1-security-assessment-and-mitigation-strategies-for-large-language-models-a-comprehensive-defensive-framework)  
    标签：评分：9.0/10、query:llm
-   evidence：通过改进指令层级防御越狱
-2. [Don't Let the Claw Grip Your Hand: A Security Analysis and Defense Framework for OpenClaw](/202603/18/2603.10387v1-dont-let-the-claw-grip-your-hand-a-security-analysis-and-defense-framework-for-openclaw)  
-   标签：评分：8.0/10、query:llm
-   evidence：LLM代码代理的安全分析与防御
+   evidence：针对大语言模型的全面安全评估和多层防御系统。
 
 ### 速读区论文标签
-1. [MCP-in-SoS: Risk assessment framework for open-source MCP servers](/202603/18/2603.10194v1-mcp-in-sos-risk-assessment-framework-for-open-source-mcp-servers)  
-   标签：评分：7.0/10、query:llm
-   evidence：LLM代理服务器的安全风险与弱点
+1. [CLASP: Defending Hybrid Large Language Models Against Hidden State Poisoning Attacks](/202603/19/2603.12206v1-clasp-defending-hybrid-large-language-models-against-hidden-state-poisoning-attacks)  
+   标签：评分：6.0/10、query:llm
+   evidence：防御隐藏状态投毒攻击
 
 
 <div class="dpr-home-promo-card">
