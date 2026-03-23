@@ -6,31 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-22
-- 运行时间：2026-03-22 19:24:26 UTC
+- 最新运行日期：2026-03-23
+- 运行时间：2026-03-23 20:27:13 UTC
 - 运行状态：成功
 - 本次总论文数：3
-- 精读区：1
-- 速读区：2
+- 精读区：3
+- 速读区：0
 
 ### 今日简报（AI）
-今日聚焦 AI 安全攻防，深度剖析了视觉语言模型的对抗脆弱性及科学大模型的安全防御机制。
-重点关注 VLM 面临的对抗攻击挑战，以及如何利用 LLM 触发器生成器有效抵御模型后门威胁。
-建议开发者在构建多模态或科学应用时，优先引入鲁棒性评估与自动化后门防御工具。
-- 详情：[/202603/22/README](/202603/22/README)
+今日聚焦大模型安全攻防前沿，深度剖析自动化多目标越狱攻击与防御训练带来的性能代价。
+研究揭示了针对长尾漏洞的自动化越狱新手段，并警示防御训练可能削弱智能体的自主决策能力。
+建议在提升模型安全性的同时，重点关注防御机制对智能体任务执行效率的潜在负面影响。
+- 详情：[/202603/23/README](/202603/23/README)
 
 ### 精读区论文标签
-1. [Adversarial attacks against Modern Vision-Language Models](/202603/22/2603.16960v1-adversarial-attacks-against-modern-vision-language-models)  
+1. [Evolving Jailbreaks: Automated Multi-Objective Long-Tail Attacks on Large Language Models](/202603/23/2603.20122v1-evolving-jailbreaks-automated-multi-objective-long-tail-attacks-on-large-language-models)  
+   标签：评分：10.0/10、query:llm
+   evidence：自动发现长尾越狱攻击的框架
+2. [The Autonomy Tax: Defense Training Breaks LLM Agents](/202603/23/2603.19423v1-the-autonomy-tax-defense-training-breaks-llm-agents)  
    标签：评分：8.0/10、query:llm
-   evidence：视觉语言模型的对抗性攻击与鲁棒性
+   evidence：评估针对提示注入的防御训练及其对智能体能力的影响
+3. [A Framework for Formalizing LLM Agent Security](/202603/23/2603.19469v1-a-framework-for-formalizing-llm-agent-security)  
+   标签：评分：8.0/10、query:llm
+   evidence：系统化LLM智能体攻击与防御的框架
 
 ### 速读区论文标签
-1. [Toward Reliable, Safe, and Secure LLMs for Scientific Applications](/202603/22/2603.18235v1-toward-reliable-safe-and-secure-llms-for-scientific-applications)  
-   标签：评分：7.0/10、query:llm
-   evidence：科学应用大模型中的安全漏洞与评估
-2. [BadLLM-TG: A Backdoor Defender powered by LLM Trigger Generator](/202603/22/2603.15692v1-badllm-tg-a-backdoor-defender-powered-by-llm-trigger-generator)  
-   标签：评分：6.0/10、query:llm
-   evidence：大模型中与后门攻击相关的安全漏洞
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
