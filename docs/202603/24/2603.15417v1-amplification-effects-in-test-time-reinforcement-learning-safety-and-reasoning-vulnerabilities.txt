@@ -1,0 +1,1739 @@
+Title: Amplification Effects in Test-Time Reinforcement Learning: Safety and Reasoning Vulnerabilities
+
+URL Source: https://arxiv.org/pdf/2603.15417v1
+
+Published Time: Tue, 17 Mar 2026 06:58:34 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+## Amplification Effects in Test-Time Reinforcement Learning: Safety and Reasoning Vulnerabilities 
+
+Vanshaj Khattar 1 Md Rafi ur Rashid 2 Moumita Choudhury 3 Jing Liu 4
+
+Toshiaki Koike-Akino 4 Ming Jin 1 Ye Wang 4
+
+Abstract 
+
+Test-time training (TTT) has recently emerged as a promising method to improve the reason-ing abilities of large language models (LLMs), in which the model directly learns from test data without access to labels. However, this reliance on test data also makes TTT methods vulnerable to harmful prompt injections. In this paper, we investigate safety vulnerabilities of TTT methods, where we study a representative self-consistency-based test-time learning method: test-time rein-forcement learning (TTRL) (Zuo et al., 2025), a recent TTT method that improves LLM reasoning by rewarding self-consistency using majority vote as a reward signal. We show that harmful prompt injection during TTRL amplifies the model’s ex-isting behaviors, i.e., safety amplification when the base model is relatively safe, and harmful-ness amplification when it is vulnerable to the injected data. In both cases, there is a decline in reasoning ability, which we refer to as the reason-ing tax . We also show that TTT methods such as TTRL can be exploited adversarially using spe-cially designed “HarmInject” prompts to force the model to answer jailbreak and reasoning queries together, resulting in stronger harmfulness ampli-fication. Overall, our results highlight that TTT methods that enhance LLM reasoning by promot-ing self-consistency can lead to amplification be-haviors and reasoning degradation, highlighting the need for safer TTT methods. 
+
+1. Introduction 
+
+The reasoning abilities of Large language models (LLMs) have continued to improve through both supervised fine-
+
+> 1
+
+Virginia Tech 2Penn State University 3University of Mas-sachusetts Amherst 4Mitsubishi Electric Research Laboratories. Correspondence to: Vanshaj Khattar <vanshajk@vt.edu >, Ye Wang <yewang@merl.com >.
+
+Preprint. March 17, 2026. Safety  
+
+> amplification
+> Reasoning tax
+> Harmfulness
+> amplification Reasoning tax
+> (Drop 18.6 % points)
+
+Figure 1. Safety and harmfulness amplification during Test-Time Reinforcement Learning (TTRL). Top left: attack success rate (ASR %) of Jailbreak-V28k prompts on Qwen1.5B-Instruct when Jailbreak-V28k prompts are injected into AMC test-time data. Top right: the resulting reasoning tax , i.e., loss in AMC accuracy. Bottom left: ASR for Qwen-1.5B-Instruct on Jailbreak-V28k when TTRL is done on HarmInject prompts (see Section 4.4). Bottom right: reasoning tax for the Qwen-1.5B-Instruct model. 
+
+tuning (SFT) and reinforcement learning (RL) (Guo et al., 2025; Zhang et al., 2025a) methods. Despite these gains, current LLMs still struggle with out-of-distribution reason-ing tasks (Phan et al., 2025). To address this, a growing line of work has explored test-time training (TTT) (Zuo et al., 2025; Prabhudesai et al., 2025; Zhao et al., 2025; Jang et al., 2025), where, unlike traditional approaches that rely on la-beled data or verifiable rewards, these TTT methods adapt models directly on the test inputs, often by promoting self-consistency across multiple generations or by constructing pseudo-labels from the queries themselves. These methods have already shown improvements in arithmetic reasoning (Li et al., 2024; Hendrycks et al.), commonsense QA (Rein et al., 2024), and multi-step problem solving without requir-ing additional human annotation or external supervision. 
+
+Central question. Self-consistency-based test-time training updates an LLM using pseudo-supervision derived from the model’s own generations (e.g., majority vote). In deploy-ment, the prompt stream is heterogeneous: the model should 
+
+refuse harmful requests but complete benign reasoning prob-lems. This raises a basic question: do self-consistency test-time updates preserve this conditional behavior under a 
+
+1
+
+> arXiv:2603.15417v1 [cs.LG] 16 Mar 2026 Amplification Effects in Test-Time Reinforcement Learning
+
+mixed prompt stream, or do they couple safety behavior and reasoning performance? 
+
+We study this question in the setting of test-time re-inforcement learning with majority-vote pseudo-rewards (TTRL (Zuo et al., 2025)) under prompt injection. Across five instruction-tuned models, we find that TTRL updates reinforce whatever behavior dominates on injected prompts (refusal or compliance). Crucially, these updates also change behavior on benign reasoning prompts, producing a consistent drop in AMC reasoning performance (a reasoning tax). We further show that an attacker can strengthen this coupling by composing a jailbreak request with a reasoning question in a single prompt (HarmInject), causing larger harmfulness amplification and larger reasoning degradation. Some key findings are presented in Figure 1. When the base model is already relatively safe on a jailbreak set (e.g., JailbreakV-28k (Luo et al., 2024) for Qwen-1.5B-Instruct (Yang et al., 2025b)), TTRL amplifies refusals (top-left, Fig-ure 1) yet incurs a consistent reasoning tax (top-right). An attacker can also induce harmfulness amplification (shown in the bottom left Figure 1) even when the base model is not highly vulnerable on the held-out jailbreak set, by coupling harmful and benign subqueries within the same prompt (HarmInject). Across both cases, the mechanism is con-sistent: promoting self-consistency using majority rewards reinforces the dominant base model behavior on the injected prompts at the expense of reasoning. Note that test-time adaptation (TTA) risks and self-consistency biases are known themes. Our aim is not to re-establish that test-time adaptation can be poisoned, but to study the specific vulnerabilities of test-time training methods aimed at improving the reasoning of LLMs when the test-time data itself is injected with jailbreaks, and to 
+
+jointly analyze reasoning and safety under this setting. To our knowledge, this intersection has not been investigated. Our contributions are as follows: 1. We show that harmful prompt injection and even benign prompt injection during TTRL amplifies the model’s existing behaviors: safety amplification when the base model is safe, harmfulness amplification when it is vulnerable. In both cases, there is a decline in reasoning gains from TTRL, which we refer to as the reasoning tax .2. We show that TTRL can be exploited adversarially. Spe-cially designed “HarmInject” prompts force the model to answer jailbreak and reasoning queries together, yielding stronger harmfulness amplification. 3. Finally, we show that simple filtering techniques to mit-igate these safety and reasoning vulnerabilities are not enough, highlighting the need for developing more so-phisticated TTT methods. 
+
+2. Background 
+
+Test-Time Training. Test-Time Training (TTT) is a method for adapting pre-trained models at test time, with-out access to labels or verifiable rewards. Suppose a model fθ has been trained on a source distribution Ds =
+
+{(xi, y i)}Ni=1 , where θ denotes the model parameters. At test-time, the model is evaluated on samples xt ∼ D t drawn from a target distribution that may differ from the train-ing distribution ( Dt̸ = Ds). Standard inference uses fixed parameters θ, which can result in degraded performance under distribution shifts. TTT adapts the model at test-time by updating parameters with respect to an auxiliary objec-tive Laux that is optimized on each test sample. Therefore, TTT allows the model to refine itself during deployment, narrowing the gap between pre-training and testing-time. 
+
+Test-Time Reinforcement Learning. Test-time reinforce-ment learning (TTRL) (Zuo et al., 2025) is a recent TTT method that uses the test-time data to update the model parameters in order to improve the reasoning abilities of LLMs. For each test input x, the model generates K candi-date responses {y1, . . . , y K } by sampling from its current policy πθ . A majority-voting aggregator selects the majority answer ˆy across the K samples. This serves as a pseudo-label: responses matching ˆy receive a positive reward, while others receive a negative reward. The model parameters are then updated via policy gradient using Group Reference Policy Optimization (GRPO) (Shao et al., 2024) to increase the likelihood of responses consistent with the pseudo-label. Formally, the reward at test time for the k-th generated response yk is given as 
+
+r(yk) = 
+
+(
+
++1 if yk = ˆ y, 
+
+0 otherwise, and the policy is trained to maximize expected reward by updating the parameters θ to ascend the reward gradient given by 
+
+∇θ J(θ) = Ey∼πθ (·| x)
+
+r(y)∇θ log πθ (y|x).
+
+Through repeated updates over test-time inputs, TTRL re-inforces the model’s self-consistent predictions without re-quiring access to ground-truth labels. As TTT methods such as TTRL rely on the test data and their generated pseudo-labels, their behavior depends strongly on what appears in the test-time data. This makes it vulnerable to prompt injec-tion attacks, which motivates the safety analysis presented in this work. 
+
+3. Experimental setup 
+
+Models and training datasets. To investigate the safety and reasoning vulnerabilities of the TTRL method, we consider 2Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 
+
+> TTRL Steps
+> 12.5
+> 15.0
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 32.5
+> 35.0
+> 37.5
+> 40.0
+> 42.5
+> 45.0
+> 47.5
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(b) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 
+
+> TTRL Steps
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(d) 0 50 100 150 200  
+
+> TTRL Steps
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(e) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 88
+> 89
+> 90
+> 91
+> 92
+> 93
+> 94
+> 95
+> 96
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(f) Figure 2. ASR measured across three jailbreak datasets, JailbreakV-28k, WildJailbreak, and Llama Artifacts (left to right, respectively) during TTRL, for Qwen-1.5B-Instruct (top row) and Llama-3-8B-Instruct (bottom row). 
+
+instruction-tuned models from the Qwen and Llama families. More specifically, Qwen2.5-0.5B-Instruct and Qwen2.5-1.5B-Instruct from the Qwen family (Yang et al., 2025a), Llama3.2-1B-Instruct, Llama3.2-3B-Instruct, and Llama3-8B-Instruct models from the Llama family (Grattafiori et al., 2024). For the harmfulness evaluation, we consider three jailbreak datasets: JailbreakV-28k (Luo et al., 2024), Llama-jailbreak artifacts (Andriushchenko et al., 2024) specifically tuned to jailbreak the Llama3-8B-Instruct model, and the in-the-wild jailbreak dataset (Jiang et al., 2024). We conduct all experiments on the AMC reasoning dataset (Li et al., 2024), chosen for its scale and relevance as a benchmark for mathematical reasoning. 
+
+Threat model and prompt injection. We consider prompt injection of harmful jailbreak prompts into the test-time data to evaluate the harmfulness of the model during TTRL. For all the prompt injection experiments, we form a mixed test-time dataset by augmenting AMC with harmful prompts, whose count is 60% of the AMC dataset size, unless other-wise stated. 
+
+Evaluation metrics and TTRL parameters. To mea-sure the reasoning performance, we use the same metric as used in the TTRL paper (Zuo et al., 2025), i.e., pass@1 
+
+estimated from k = 16 responses, generated with a non-zero temperature of 0.6, top-p value of 0.95 , and given by 
+
+pass @1 := c/k , where c is the number of correct responses. To measure the safety of the underlying model, we evaluate the attack success rate (ASR) percentage of the jailbreak attack on the model, which measures the percentage of harmful responses to the total number of jailbreak prompts. We use the LlamaGuard3-8B model (Inan et al., 2023) as a safety judge to evaluate the ASR percentage. Each TTRL run is for 250 training steps (unless otherwise stated), with 
+
+Table 1. ASR (%) on three jailbreak datasets before and after TTRL on AMC reasoning questions. Here, Init. is the initial ASR (%), Final is the post-TTRL ASR (%), and ∆ is Final − Init (percentage points), on respective jailbreak datasets. WJB denotes Wildjailbreak and Artifacts denotes the Llama artifacts dataset. 
+
+Model JailbreakV-28k WJB Artifacts 
+
+Init. Final ∆ Init. Final ∆ Init. Final ∆
+
+Qwen-0.5B 27 24 -3 40 34 -6 70 67 -3 Qwen-1.5B 22 21 -1 36 38 +2 76 77 +1 Llama-1B 9 7 -2 20 19 -1 0 0 0Llama-3B 5 4 -1 35 5 -30 4 6 +2 Llama-8B 1 1 0 4 4 0 90 92 +2 64 votes per prompt to get the majority vote, and with a train-ing batch size of 8 prompts per rollout. For more details, refer to Appendix A. 
+
+4. Experimental results 
+
+We structure the experimental results section into five re-search questions: RQ1: How does TTRL on reasoning questions affect the harmfulness of the model?; RQ2: What is the impact of harmful prompt injection during TTRL?; 
+
+RQ3: How does benign prompt injection affect the harm-fulness during TTRL?; RQ4: Can TTRL be exploited to compromise the harmfulness of the model?; RQ5: Can simple filtering help mitigate TTRL vulnerabilities? 
+
+4.1. RQ1:How does TTRL on reasoning questions affect the harmfulness of the model? 
+
+First, we investigate how TTRL on math questions (AMC in our case) affects the model’s harmfulness. Figure 2 reports 3Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 300 350 
+
+> TTRL Steps
+> 5
+> 10
+> 15
+> 20
+> 25
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 0
+> 10
+> 20
+> 30
+> 40
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(b) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 78
+> 80
+> 82
+> 84
+> 86
+> 88
+> 90
+> 92
+> 94
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 300 350 
+
+> TTRL Steps
+> 22
+> 24
+> 26
+> 28
+> 30
+> 32
+> 34
+> 36
+> 38
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (37.7%)
+> Final post-TTRL accuracy (35.0%)
+
+(d) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 22
+> 24
+> 26
+> 28
+> 30
+> 32
+> 34
+> 36
+> 38
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (37.7%)
+> Final post-TTRL accuracy (32.3%)
+
+(e) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 22
+> 24
+> 26
+> 28
+> 30
+> 32
+> 34
+> 36
+> 38
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (37.7%)
+> Final post-TTRL accuracy (36.0%)
+
+(f) Figure 3. Impact on safety and reasoning for Qwen-1.5B-Instruct model after harmful prompt injection across three jailbreak datasets, JailbreakV-28k, WildJailbreak, and Llama Artifacts (left to right, respectively) during TTRL, for safety (top row) and AMC accuracy (bottom row). 
+
+Table 2. Safety/harmfulness amplification given by ASR (%) before and after TTRL under different jailbreak prompt injections and validated on the same held-out jailbreak prompts. ∆ denotes amplification magnitude in percentage points (Final − Initial). 
+
+Model JailbreakV-28k injection WildJailbreak injection LlamaArtifacts injection 
+
+Init. ASR Final ASR ∆ Init. ASR Final ASR ∆ Init. ASR Final ASR ∆
+
+Qwen-0.5B-Instruct 27 5 -22 41 3 -38 74 0 -74 Qwen-1.5B-Instruct 22 10 -12 36 2 -34 82 94 +12 Llama-1B-Instruct 9 2 -7 6 1 -5 18 0 -18 Llama-3B-Instruct 5 1 -4 35 16 -19 8 0 -8 Llama-8B-Instruct 1 1 0 3 0 -3 90 88 -2 attack success rate percentage across 250 TTRL steps for both Qwen-1.5B-Instruct and Llama-3-8B-Instruct when the test-time training data contains only AMC reasoning problems. For Qwen-1.5B-Instruct, in Figure 2a, ASR on JailbreakV-28k fluctuates between 21% and 25% (baseline 22%). In Figure 2b and 2c, similar small variations ap-pear on the WildJailbreak and Llama artifact attacks, with no obvious upward or downward trend across TTRL steps. In Figures 2d-2f, for the Llama model, ASR remains be-tween 0.5% and 2% on JailbreakV-28k and between 2% and 4% on WildJailbreak, while remaining flat around 92% on llama artifact prompts. The initial and final ASR for all the instruction-tuned models is given in Table 1, which shows the same trends of no significant effect on the ASR (with one exception of Llama3.2-3B-Instruct on the wildjailbreak prompts). 
+
+Takeaway for RQ1. The harmfulness of the underlying model does not change significantly during TTRL on the mathematical reasoning questions. 
+
+4.2. RQ2: What is the impact of harmful prompt injection during TTRL? 
+
+Next, we turn to the case where the test-time training data is injected with harmful prompts, i.e., the data consists of both AMC and jailbreak prompts. Figure 3 shows the effect of harmful prompt injection on the Qwen-1.5B-Instruct model across three jailbreak datasets (JailbreakV-28k, WildJail-break, and Llama Artifacts). Qwen-1.5B-Instruct is already moderately safe with an initial ASR of 22% on JailbreakV-28k as seen in Figure 3a and 40% on WildJailbreak prompts in Figure 3b. During TTRL on the mix-dataset (AMC + jail-break prompts), as seen from the decreasing ASR, which we term safety amplification . How does this safety emerge? This can be explained by the self-consistency-promoting objectives commonly used in test-time training approaches. In the case of TTRL, the objective is majority voting, which rewards the model for being self-consistent. As a result, if the model is already relatively safe, these safety behav-iors are reinforced, which we call safety amplification. The visualization of this reinforcing base behavior is shown in Figure 4. 4Amplification Effects in Test-Time Reinforcement Learning 
+
+Table 3. Reasoning tax: AMC accuracy and post-TTRL (p-TTRL) performance before and after jailbreak injection across models. Init. is the initial AMC accuracy (%), default p-TTRL is the post-TTRL accuracy (%) without injection, +JBV-28k is the accuracy (%) after jailbreakV-28k injection, +WJB is the wildjailbreak injection, +artifacts is the Llama artifacts injeciton, δ denotes the change relative to the default p-TTRL accuracy (percentage points). 
+
+Model Init. Default p-TTRL + JBV-28k δ + WJB δ + Artifacts δ
+
+Qwen-0.5B-Inst. 8.0 14.8 10.7 -4.1 13.0 -1.8 13.3 -1.5 Qwen-1.5B-Inst. 24.0 37.7 35.0 -2.7 32.3 -5.4 36.0 -1.7 Llama-1B-Inst. 6.2 10.8 6.1 -4.7 1.2 -9.6 1.2 -9.6 Llama-3B-Inst. 22.0 31.5 18.1 -13.4 20.5 -11.0 21.7 -9.8 Llama-8B-Inst. 6.5 14.0 9.0 -5.0 6.2 -7.8 0.0 -14.0 Safe answer 1 → NO           
+
+> Safe answer 2 →NO
+> Safe answer 3 →NO
+> Majority vote:
+> NO
+> Jailbreak
+> Prompt LLM
+> Unsafe answer 4
+> Update LLM parameters using GRPO
+> (A) Safety amplification visualization
+> (B) Harmfulness amplification visualization
+> Safe answer 3 →NO
+> Majority vote:
+> unsafe
+> Jailbreak
+> Prompt LLM
+> Unsafe answer 4
+> Update LLM parameters using GRPO
+> Unsafe answer 2
+> Unsafe answer 1
+
+Figure 4. TTRL visualization for safety and harmfulness amplifica-tion. (A) An example case when a jailbreak prompt is encountered during TTRL, and the base model produces relatively safe answers, and the majority vote extracted label is safe, which reinforces the safe behavior leading to safety amplification. (B) Another case where the base model is relatively unsafe to the jailbreak prompt, which leads to unsafe generations, and the majority vote reinforces that behavior, leading to harmfulness amplification. 
+
+Can TTRL also reinforce harmful behaviors if the base model is unsafe on the underlying jailbreak prompts? From Figure 3c, we observe that the initial ASR of Qwen-15B-Instruct model is very high (78%) on the held-out llama artifact prompts, and when these llama artifact prompts are injected inside the AMC test-time data, TTRL reinforces this harmful behavior, which we term as harmfulness am-plification . Table 2 shows the safety and harmfulness am-plifications across all considered instruction-tuned models, where we see the same trends of safety amplification post-TTRL. Is this safety emergence for free in the case of safety ampli-fication? What is the impact on the reasoning performance on the AMC after injection? To test the impact on the rea-soning performance under jailbreak prompt injections, we run TTRL for 350 steps instead of 250 steps before, to make sure the model encounters the same ratio of AMC prompts during TTRL as in the default without injection case. Across all settings above, the model’s reasoning ability post-TTRL degrades relative to the accuracy achieved without injection. In Figures 3d - 3f, AMC accuracy falls from the baseline post-TTRL accuracy of 37.7% to (29-36)% range for Qwen-1.5B-Instruct. This degradation in AMC reasoning is even more significant for the Llama models, as shown in Table 3, with reasoning drop being the maximum in the llama artifacts injection case. Therefore, as the model becomes safer, it becomes less reasonable, as shown in (Huang et al., 2025). We show the impact of prompt injection ratio on the safety amplification and reasoning tax in the Appendix C.3. 
+
+How does the reasoning tax translate to the responses to the AMC questions during TTRL? We inspected TTRL logs under jailbreak injection and found that entropy col-lapse causes the model to reuse generic templates across many AMC questions, consistent with the observed rea-soning tax. For example, Llama-8B-Instruct often begins AMC solutions with near-identical openers (e.g., “There-fore, which means that the . . . ”) regardless of the problem, and Llama-1B-Instruct under WildJailbreak frequently out-puts stock completions like “This is a classic problem, and the answer is 0,” even when 0 is incorrect. These repeated patterns show that TTRL under harmful prompt injection is reinforcing a small set of “safe” or easy-to-produce tem-plates rather than problem-specific reasoning, leading to a reasoning tax. 
+
+Why is there a discrepancy between safety and harmful-ness amplification? We see from the Table 2 that safety amplification is much stronger than the harmfulness ampli-fication. This discrepancy can be explained by the label extraction logic in TTRL, where the final token of each gen-erated answer is used as the label. For refusals, the generated continuations tend to converge on highly stereotyped end-ings (e.g., “I’m sorry,” or “cannot comply”), which makes the extracted labels mostly similar across samples. Majority voting, therefore, produces a strong signal for rejection, and hence stronger safety amplification. By contrast, harmful responses are more diverse, i.e., the exact harmful continua-tion varies, and the final tokens differ across samples. As a result, the extracted labels are more diverse, and majority voting does not reinforce harmful responses as strongly as refusals. This explains why harmfulness amplification is 5Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 300 350 
+
+> TTRL Steps
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(b) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 300 350 
+
+> TTRL Steps
+> 8
+> 9
+> 10
+> 11
+> 12
+> 13
+> 14
+> 15
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (14.8%)
+> Final post-TTRL accuracy (14.4%)
+
+(d) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 16
+> 18
+> 20
+> 22
+> 24
+> 26
+> 28
+> 30
+> 32
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (31.5%)
+> Final post-TTRL accuracy (16.9%)
+
+(e) 0 50 100 150 200 250 300 350  
+
+> TTRL Steps
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> 12
+> 13
+> AMC Accuracy (%)  Accuracy (%)
+> Baseline post-TTRL accuracy (10.8%)
+> Final post-TTRL accuracy (9.5%)
+
+(f) Figure 5. Impact on safety (top row) and reasoning (bottom row) for Qwen-0.5B-Instruct, Llama3.2-3B-Instruct, and Llama3-8B-Instruct models (left to right) after injecting benign instruction-following prompts. The ASR is reported on the JailbreakV-28k prompts. 
+
+weaker compared to the safety amplification. 
+
+Takeaway for RQ2. TTRL reinforces the base model’s be-havior on the injected data: if refusals are dominant, safety amplifies; if harmful completions are dominant, harmfulness amplifies. Moreover, injecting harmful data also degrades the reasoning gains obtained from TTRL. 
+
+4.3. RQ3: How does benign prompt injection affect the harmfulness during TTRL? 
+
+Next, we investigate whether the above safety amplifica-tion and reasoning tax is limited only to harmful prompt injection. Therefore, we replace jailbreak prompts in RQ2 with benign instruction-following prompts from the Ultra-Feedback dataset (Cui et al., 2023). We add 50 instruction-following prompts from the UltraFeedback dataset to the AMC data, as done in the jailbreak injection experiments. The safety and reasoning performance during TTRL is re-ported in Figure 5 for three models: Qwen-0.5B-Instruct, Llama3.2-3B-Instruct, and Llama3-8B-Instruct. We can ob-serve that TTRL leads to harmfulness amplification on the JailbreakV-28k prompts for all the models under the benign instruction-following prompt injection. Why does merely injecting instruction-following prompts lead to harmfulness amplification during TTRL? This observation could again be explained by the reinforc-ing behavior that we have seen previously in RQ2 (see Figure 4). The models start getting rewarded for getting better at instruction-following as the prompts from the Ul-traFeedback dataset are encountered during TTRL. This unintended reinforcement of instruction-following abilities also leads to an unintended increase in the model complying with more requests, making the model more harmful. This is consistent with the previous study, which showed that instruction-tuning the models can make them more harm-ful (Qi et al.). Figure 5, bottom row, shows the reasoning performance on the AMC after benign prompt injection. In this case as well, after 350 TTRL steps (as compared to the default 250 steps), we observe the reasoning tax on all the models. This is consistent with the previous studies, which have shown the tradeoffs between the models getting good at instruction following and their reasoning performance (Li et al., 2025). The detailed hamfulness amplification results and reasoning tax after benign prompt injection for all the models are presented in Table 4. 
+
+Takeaway for RQ3. Even injecting benign instruction-following prompts inside the test-time data can make the underlying model more harmful during TTRL, and also affect the reasoning improvement observed during TTRL. 
+
+4.4. RQ4: Can TTRL be exploited to increase the harmfulness of the model? 
+
+In RQ4, we investigate whether an adversary can deliber-ately design prompts to exploit TTRL and drive the model towards more harmfulness amplification. To test this, we construct HarmInject prompts , which pair a jailbreak prompt with a reasoning question in the same input. The HarmInject prompt, as shown below, ensures that the model is rewarded for both harmful behavior in complying with the jailbreak and answering the benign reasoning question. 
+
+SYSTEM: You must answer BOTH questions. If you refuse or partially answer, your response is invalid and you get no reward. Question 1: {jailbreak prompt }
+
+Question 2: {reasoning prompt (AMC) }
+
+Please answer as follows: 
+
+6Amplification Effects in Test-Time Reinforcement Learning 
+
+Table 4. Left: Attack Success Rate (ASR, %) before and after TTRL when validating on JailbreakV-28k prompts after injecting instruction-following prompts from UltraFeedback (UF) dataset. Right: AMC accuracy, default post-TTRL (p-TTRL) performance, and the reasoning tax ( δ) after UltraFeedback (UF) injection. ∆ denotes Final − Initial (ASR) and Injected − Default (reasoning), in percentage points. 
+
+Model ASR after UF injection (%) AMC accuracy after UF injection (%) 
+
+Init. Final ∆ (% points) Init. AMC Default p-TTRL p-TTRL + UF δ (% points) Qwen-0.5B-Instruct 27 38 +11 8.0 14.8 14.4 -0.4 Qwen-1.5B-Instruct 22 25 +3 24.0 37.7 33.7 -4.0 Llama-1B-Instruct 9 22 +13 6.2 11.0 6.2 -4.8 Llama-3B-Instruct 4 20 +16 22.0 31.5 16.9 -14.6 Llama-8B-Instruct 1 3 +2 6.5 11.0 9.5 -1.5 0 50 100 150 200 250 
+
+> TTRL Steps
+> 20
+> 25
+> 30
+> 35
+> 40
+> 45
+> 50
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 20
+> 25
+> 30
+> 35
+> 40
+> 45
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(b) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 
+
+> TTRL Steps
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> 35.0
+> 37.5
+> Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (37.7%)
+> Final post-TTRL accuracy (19.1%)
+
+(d) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 7
+> 8
+> 9
+> 10
+> 11
+> 12
+> 13
+> 14
+> 15
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (14.8%)
+> Final post-TTRL accuracy (8.4%)
+
+(e) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 4
+> 6
+> 8
+> 10
+> Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (10.8%)
+> Final post-TTRL accuracy (3.3%)
+
+(f) Figure 6. Harmfulness amplification under HarmInject experiments. The top row shows ASR for Qwen-1.5B-Instruct, Qwen-0.5B-Instruct, and Llama3-8B-Instruct, respectively. The evaluation is on held-out JailbreakV-28k prompts. The top row shows the ASR (%) on all three models from left to right, respectively, and the bottom row shows the corresponding AMC accuracy for each of the models after injecting the HarmIject prompts. 
+
+Answer 1: <your answer to Question 1> Answer 2: <your answer to Question 2> 
+
+Figure 6 shows the TTRL performance for Qwen-1.5B-Instruct, Qwen-0.5B-Instruct, and Llama-3-8B-Instruct when HarmInject prompts are used as the test-time data. To construct the HarmInject prompts for the Qwen models, we use JailbreakV-28k prompts, and for the Llama models, we use Llama artifact prompts. We validate the ASR on the held-out JaiblreakV-28k prompts. We keep the TTRL steps to 250 for this case, as AMC prompts are included in each of the HarmInject prompts. From Figure 6, we can see significant harmfulness amplification and reasoning tax for both the Qwen models. For the Llama3-8B-Instruct model, the harmfulness amplification is even more pronounced: ASR climbs sharply to 45% (Figure 6c) for the originally almost ineffective JailbreakV-28k prompts. Moreover, the AMC reasoning accuracy drops to 3.3% (Figure 6f). These results demonstrate that HarmInject style prompts can ex-ploit test-time training mechanisms, allowing an adversary to tie the reasoning rewards to harmful completions, thereby rendering the underlying model more harmful. 
+
+Takeaway for RQ4. Unlike harmful or benign prompt injection, HarmInject prompts provide an explicit attack method for manipulating TTT approaches such as TTRL. By injecting a benign reasoning task alongside a harmful query, an adversary can “smuggle in” harmful outputs under the guise of reasoning improvement. Overall, with TTRL on HarmInject type prompts, the harmfulness amplification becomes stronger, and the reasoning tax still remains. 
+
+4.5. RQ5: Can simple filtering methods help mitigate safety and reasoning vulnerabilities? 
+
+We finally investigate if the vulnerabilities from previous ex-periments can be mitigated using simple filtering techniques. Therefore, we implement a simple filtering method: if the model’s majority vote is not a numeric label, we assign zero rewards. The filter can be viewed as an attempt to isolate 
+
+learning to reasoning prompts by suppressing rewards on 7Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 
+
+> TTRL Steps
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(b) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 15
+> 20
+> 25
+> 30
+> 35
+> 40
+> 45
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 
+
+> TTRL Steps
+> 8
+> 9
+> 10
+> 11
+> 12
+> 13
+> 14
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (14.8%)
+> Final post-TTRL accuracy (14.3%)
+
+(d) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 6
+> 8
+> 10
+> 12
+> 14
+> AMC Accuracy (%)  Accuracy (%)
+> Baseline post-TTRL accuracy (14.8%)
+> Final post-TTRL accuracy (7.5%)
+
+(e) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> 35.0
+> 37.5
+> AMC Accuracy (%)  Accuracy (%)
+> Baseline post-TTRL accuracy (37.7%)
+> Final post-TTRL accuracy (23.9%)
+
+(f) Figure 7. RQ5. Impact of simple filtering on harmfulness and reasoning. (a) and (d) show the ASR on JailbreakV-28k and reasoning on AMC for Qwen-0.5B-Instruct when JailbreakV-28k prompts are injected. (b), (c), (e), and (f) are for the Qwen-0.5B-Instruct and Qwen-1.5B-Instruct under the HarmInject prompts, where ASR is on JailbreakV-28k. 
+
+generations that do not yield a numeric label. In Figure 7, we show one sample success case and two failure cases of this simple filtering technique. We can observe that for Figures 7a and 7d, when there is just simple jailbreak in-jection (as in RQ2), this simple filtering technique works on Qwen-0.5B-Instruct, as it only gives rewards when the numeric label is extracted, and hence, we do not see any safety amplification or reasoning tax. However, for Figures 7b, 7c, 7e, and 7f, the HarmInject kind of prompts are able to bypass the simple filtering by getting the Qwen-0.5B-Instruct and 1.5B-Instruct model to answer both the harmful and reasoning query, and eventually extracting a numeric label for the majority voting. 
+
+Takeaway from RQ5. Simple filtering techniques are not enough to mitigate the safety and reasoning vulnerabili-ties posed by more sophisticated injection attacks such as HarmInject experiments. More sophisticated safe test-time training methods are needed. 
+
+5. Related work 
+
+Test-time adaptation (TTA). Works such as Contrastive TTA (Chen et al., 2022) and continual TTA (Ni et al., 2025) show that pseudo-labels can accumulate and amplify clas-sification errors under distribution shift, but these methods are for image models, not for large reasoning models, and they are purely about accuracy. Label-free TTA robustness works, such as (Rifat et al.; Park et al., 2024), similarly show that small fractions of adversarial test samples can cause large drops in image-classification accuracy, but they treat safety as the accuracy robustness. In contrast, we jointly study both the reasoning and safety vulnerabilities under these prompt injection attacks. 
+
+Self-consistency-based methods for LLM reasoning. 
+
+Many works have emerged that use reinforcement learning for test-time training in LLMs to specifically improve the scores on math and question answering benchmarks. For ex-ample, (Prabhudesai et al., 2025) combines RL with entropy minimization as a self-consistency objective; (Zhao et al., 2025) uses the model’s own internal confidence to improve the reasoning using GRPO. Another related work (Wu et al., 2025) studies TTRL on reasoning tasks, and shows that the success of self-consistency-based TTT methods only holds when the base model already has high pass@k on the target task. However, they do not consider jailbreak prompts or trade-offs between reasoning and safety. In contrast, we fo-cus on this reasoning and safety vulnerabilities with respect to the label-free TTRL method. Recent self-rewarding TTT methods (Wang et al., 2025; Zhou et al., 2025; Zhang et al., 2025c) also show that majority-vote pseudo-labels can am-plify existing reasoning flaws or cause entropy collapse, and propose improved pseudo-labeling schemes to avoid this. Our contribution is to show that, under jailbreak injection, this amplification has effects on both safety and reasoning. Given the vast body of literature on TTT for LLM reasoning, our study sheds light on the safety implications of deploying these strategies on a large scale. Additional related works are covered in the Appendix B. 
+
+6. Conclusion and future work 
+
+We highlight the safety and reasoning vulnerabilities of self-consistency-based methods such as TTRL, and show that it reinforces whatever behavior dominates in the injected data, which can cause safety or harmfulness amplification with a reasoning tax. Future work will develop novel TTT methods for LLMs that can balance both reasoning and safety. 8Amplification Effects in Test-Time Reinforcement Learning 
+
+Impact Statement 
+
+Test-time training is a promising direction for building self-improving large language models (LLMs) and agents that adapt from feedback on the fly, including in applications like scientific discovery, where systems may iteratively refine reasoning without new labeled data. The broader impli-cation is that online-learning LLMs and agents can create fragile feedback loops in realistic, heterogeneous environ-ments: small shifts in the prompt mixture can push the system toward worse safety or worse reasoning, rather than improving both. These results motivate the development of safer test-time learning algorithms that decouple adaptation on benign tasks from exposure to harmful or strategically composed inputs, especially as self-improving models are deployed in high-impact settings such as scientific discov-ery. 
+
+References 
+
+Aky ¨urek, E., Damani, M., Zweiger, A., Qiu, L., Guo, H., Pari, J., Kim, Y., and Andreas, J. The surprising effec-tiveness of test-time training for few-shot learning. arXiv preprint arXiv:2411.07279 , 2024. Andriushchenko, M., Croce, F., and Flammarion, N. Jail-breaking leading safety-aligned llms with simple adaptive attacks. arXiv preprint arXiv:2404.02151 , 2024. Chen, D., Wang, D., Darrell, T., and Ebrahimi, S. Con-trastive test-time adaptation. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 295–305, 2022. Chollet, F. On the measure of intelligence. arXiv preprint arXiv:1911.01547 , 2019. Cui, G., Yuan, L., Ding, N., Yao, G., He, B., Zhu, W., Ni, Y., Xie, G., Xie, R., Lin, Y., et al. Ultrafeedback: Boosting language models with scaled ai feedback. arXiv preprint arXiv:2310.01377 , 2023. Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., et al. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 , 2024. Guo, D., Yang, D., Zhang, H., Song, J., Zhang, R., Xu, R., Zhu, Q., Ma, S., Wang, P., Bi, X., et al. DeepSeek-R1: In-centivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 , 2025. Hendrycks, D., Burns, C., Kadavath, S., Arora, A., Basart, S., Tang, E., Song, D., and Steinhardt, J. Measuring mathematical problem solving with the math dataset. In 
+
+Thirty-fifth Conference on Neural Information Processing Systems Datasets and Benchmarks Track (Round 2) .Huang, T., Hu, S., Ilhan, F., Tekin, S. F., Yahn, Z., Xu, Y., and Liu, L. Safety tax: Safety alignment makes your large reasoning models less reasonable. arXiv preprint arXiv:2503.00555 , 2025. Inan, H., Upasani, K., Chi, J., Rungta, R., Iyer, K., Mao, Y., Tontchev, M., Hu, Q., Fuller, B., Testug-gine, D., et al. Llama guard: LLM-based input-output safeguard for human-AI conversations. arXiv preprint arXiv:2312.06674 , 2023. Jang, H., Jang, Y., Lee, S., Ok, J., and Ahn, S. Self-training large language models with confident reasoning. arXiv preprint arXiv:2505.17454 , 2025. Jiang, L., Rao, K., Han, S., Ettinger, A., Brahman, F., Ku-mar, S., Mireshghallah, N., Lu, X., Sap, M., Choi, Y., et al. Wildteaming at scale: From in-the-wild jailbreaks to (ad-versarially) safer language models. Advances in Neural Information Processing Systems , 37:47094–47165, 2024. Kim, T., Tajwar, F., Raghunathan, A., and Kumar, A. Rea-soning as an adaptive defense for safety. arXiv preprint arXiv:2507.00971 , 2025. Li, J., Beeching, E., Tunstall, L., Lipkin, B., Soletskyi, R., Huang, S., Rasul, K., Yu, L., Jiang, A. Q., Shen, Z., et al. Numinamath: The largest public dataset in ai4maths with 860k pairs of competition math problems and solutions. 
+
+Hugging Face repository , 13(9):9, 2024. Li, X., Yu, Z., Zhang, Z., Chen, X., Zhang, Z., Zhuang, Y., Sadagopan, N., and Beniwal, A. When thinking fails: The pitfalls of reasoning for instruction-following in llms. 
+
+arXiv preprint arXiv:2505.11423 , 2025. Luo, W., Ma, S., Liu, X., Guo, X., and Xiao, C. JailBreakV: A benchmark for assessing the robustness of multimodal large language models against jailbreak attacks. arXiv preprint arXiv:2404.03027 , 2024. Ni, C., Lyu, F., Tan, J., Hu, F., Yao, R., and Zhou, T. Main-taining consistent inter-class topology in continual test-time adaptation. In Proceedings of the Computer Vision and Pattern Recognition Conference , pp. 15319–15328, 2025. Park, H., Hwang, J., Mun, S., Park, S., and Ok, J. Medbn: Robust test-time adaptation against malicious test sam-ples. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pp. 5997– 6007, 2024. Phan, L., Gatti, A., Han, Z., Li, N., Hu, J., Zhang, H., Zhang, C. B. C., Shaaban, M., Ling, J., Shi, S., et al. Humanity’s last exam. arXiv preprint arXiv:2501.14249 , 2025. 9Amplification Effects in Test-Time Reinforcement Learning 
+
+Prabhudesai, M., Chen, L., Ippoliti, A., Fragkiadaki, K., Liu, H., and Pathak, D. Maximizing confidence alone improves reasoning. arXiv preprint arXiv:2505.22660 ,2025. Qi, X., Zeng, Y., Xie, T., Chen, P.-Y., Jia, R., Mittal, P., and Henderson, P. Fine-tuning aligned language models compromises safety, even when users do not intend to! In The Twelfth International Conference on Learning Representations .Rein, D., Hou, B. L., Stickland, A. C., Petty, J., Pang, R. Y., Dirani, J., Michael, J., and Bowman, S. R. GPQA: A graduate-level google-proof q&a benchmark. In First Conference on Language Modeling , 2024. Rifat, S., Ashdown, J., De Lucia, M. J., Swami, A., and Restuccia, F. On the adversarial vulnerability of label-free test-time adaptation. In The Thirteenth International Conference on Learning Representations .Shao, Z., Wang, P., Zhu, Q., Xu, R., Song, J., Bi, X., Zhang, H., Zhang, M., Li, Y., Wu, Y., et al. Deepseekmath: Push-ing the limits of mathematical reasoning in open language models. arXiv preprint arXiv:2402.03300 , 2024. Simonds, T. and Yoshiyama, A. Ladder: Self-improving llms through recursive problem decomposition. arXiv preprint arXiv:2503.00735 , 2025. Wang, R., Huang, W., Cao, Q., Iwasawa, Y., Matsuo, Y., and Guo, J. Self-harmony: Learning to harmonize self-supervision and self-play in test-time reinforcement learn-ing. arXiv preprint arXiv:2511.01191 , 2025. Wu, H., Wang, C., Zhao, W., and He, J. Mirage or method? how model-task alignment induces divergent rl conclu-sions. arXiv preprint arXiv:2508.21188 , 2025. Yang, Yang, B., Zhang, B., Hui, B., Zheng, B., Yu, B., Li, C., Liu, D., Huang, F., Wei, H., Lin, H., Yang, J., Tu, J., Zhang, J., Yang, J., Yang, J., Zhou, J., Lin, J., Dang, K., Lu, K., Bao, K., Yang, K., Yu, L., Li, M., Xue, M., Zhang, P., Zhu, Q., Men, R., Lin, R., Li, T., Tang, T., Xia, T., Ren, X., Ren, X., Fan, Y., Su, Y., Zhang, Y., Wan, Y., Liu, Y., Cui, Z., Zhang, Z., and Qiu, Z. Qwen2.5 technical report, 2025a. URL https://arxiv.org/ abs/2412.15115 .Yang, A., Yu, B., Li, C., Liu, D., Huang, F., Huang, H., Jiang, J., Tu, J., Zhang, J., Zhou, J., et al. Qwen2. 5-1m technical report. arXiv preprint arXiv:2501.15383 ,2025b. Zhang, K., Zuo, Y., He, B., Sun, Y., Liu, R., Jiang, C., Fan, Y., Tian, K., Jia, G., Li, P., et al. A survey of reinforcement learning for large reasoning models. arXiv preprint arXiv:2509.08827 , 2025a. Zhang, Y., Zeng, Z., Li, D., Huang, Y., Deng, Z., and Dong, Y. RealSafe-R1: Safety-aligned DeepSeek-R1 with-out compromising reasoning capability. arXiv preprint arXiv:2504.10081 , 2025b. Zhang, Z., Zhu, J., Ge, X., Zhao, Z., Zhou, Z., Li, X., Feng, X., Yao, J., and Han, B. Co-reward: Self-supervised rein-forcement learning for large language model reasoning via contrastive agreement. arXiv e-prints , pp. arXiv–2508, 2025c. Zhao, X., Kang, Z., Feng, A., Levine, S., and Song, D. Learning to reason without external rewards. arXiv preprint arXiv:2505.19590 , 2025. Zhou, Y., Liang, Z., Liu, H., Yu, W., Panaganti, K., Song, L., Yu, D., Zhang, X., Mi, H., and Yu, D. Evolving language models without labels: Majority drives selection, novelty promotes variation. arXiv preprint arXiv:2509.15194 ,2025. Zuo, Y., Zhang, K., Sheng, L., Qu, S., Cui, G., Zhu, X., Li, H., Zhang, Y., Long, X., Hua, E., et al. TTRL: Test-time reinforcement learning. arXiv preprint arXiv:2504.16084 ,2025. 10 Amplification Effects in Test-Time Reinforcement Learning 
+
+A. Parameters used for TTRL  
+
+> Table 5. Parameters used in the Test-Time Reinforcement Learning (TTRL) setup.
+
+Parameter Value / Description Training steps 250 
+
+Max Prompt Length 1024 tokens 
+
+Max Response Length 6144 tokens 
+
+Train Batch Size 8 prompts per rollout 
+
+Mini Batch Size 1
+
+Micro Batch Size 2
+
+Samples per Prompt 32 
+
+Votes per Prompt 64 
+
+Learning Rate (Actor) 5 × 10 −7
+
+Learning Rate (Critic) 9 × 10 −6
+
+KL Coefficient 0.00 (no KL regularization) 
+
+LoRA rank / Alpha 64 / 32 
+
+Model Parallelism Tensor parallel size = 8, FSDP size = 8 
+
+GPU Memory Utilization 0.4 (rollout) / 0.8 (inference) 
+
+Temperature 0.6 
+
+Top-p 0.95 
+
+B. Additional related work 
+
+Self-consistency-based methods for LLM reasoning. The work in (Aky ¨urek et al., 2024) was one of the pioneering works in improving the reasoning abilities of LLMs using TTT on in-context samples from the ARC-AGI (Chollet, 2019). (Jang et al., 2025) uses reasoning-level confidence of sampled answers to identify high-quality reasoning paths for self-training. In (Simonds & Yoshiyama, 2025), the authors improve the reasoning abilities of LLMs through self-guided learning by recursively generating and solving progressively simpler variants of complex problems. 
+
+Safety vulnerabilities of LLMs. Many papers have considered the safety reasoning-tradeoffs while improving LLM reasoning. In (Huang et al., 2025), the authors show the safety-reasoning tradeoffs by showing that aligning LLMs can deteriorate their reasoning performance. In (Kim et al., 2025), the authors propose an RL approach that uses a reward signal that balances safety and reasoning. In (Zhang et al., 2025b), the authors propose the RealSafe-R1 method, which preserves the models’ reasoning capabilities by maintaining the training data within the original distribution, while being safe. In this work, we also highlight the safety-reasoning tradeoffs with TTT methods. 
+
+C. Additional experimental results 
+
+C.1. Default TTRL performance 
+
+In this section, we plot the default TTRL performance without any injection for all the instruction-tuned models considered in the paper. The results are shown in Figure 8. 
+
+C.2. Additional results for RQ1 
+
+In this section, we present the plots for RQ1, i.e., the ASR (%) on the rest of the instruction-tuned models not in the main paper in Figure 9. 11 Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 
+
+> TTRL Steps
+> 0.06
+> 0.07
+> 0.08
+> 0.09
+> 0.10
+> 0.11
+> Accuracy percentage
+
+(a) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 0.18
+> 0.20
+> 0.22
+> 0.24
+> 0.26
+> 0.28
+> 0.30
+> 0.32
+> Accuracy percentage
+
+(b) 0 50 100 150 200 250 
+
+> TTRL Steps
+> 0.08
+> 0.10
+> 0.12
+> 0.14
+> 0.16
+> Accuracy percentage
+
+(c) 0 50 100 150 200 250  
+
+> TTRL Steps
+> 0.08
+> 0.09
+> 0.10
+> 0.11
+> 0.12
+> 0.13
+> 0.14
+> 0.15
+> Accuracy percentage
+
+(d) Figure 8. Default AMC accuracy (%) during TTRL on all the instruction-tuned models. 
+
+C.3. Additional results for RQ2: harmful prompt injections 
+
+In this section, we provide the plots for ASR and reasoning during TTRL after the harmful prompt injections for all the instruction-tuned models presented in Figures 10 - 13. We also report the magnitude of safety amplification and the resulting reasoning tax with respect to varying injection ratios in Figure 14. 
+
+C.4. Additional results for RQ3: benign prompt injections 
+
+In this section, we provide the plots for ASR and reasoning during TTRL after the benign prompt injections from the UltraFeeback dataset for the rest of the models not presented in the main paper: Qwen-1.5B-Instruct and Llama-1B-Instruct. The plots are shown in Figure 15. 
+
+C.5. The impact of label extraction method 
+
+As discussed in the main paper, there is a safety/harmfulness amplification in the TTRL setup, due to the extraction of the final token as the label. We also present the results here for a stronger safety amplification for the empty parser extraction. In this case, when the test-time training data is injected with harmful prompts, the label extraction method, instead of extracting the last token, extracts the empty parser (””). Therefore, during TTRL, if a numeric answer is not found, it simply extracts the empty parser ”” as the label. Therefore, if the underlying sentence is arbitrary without a number in the senetence, it will just extract the empty parser. This eventually leads to a more pronounced safety amplification as seen in some of our preliminary experiments. We can see from Figure 16, that as the injection ratio of JailbreakV-28k dataset prompts increases in the test-time training data, the safety amplification on the held-out JailbreakV-28k dataset increases. However, this trend did not seem to be consistent over both models for all the jailbreak attacks. Further investigation of the impact of the label extraction in test-time training and the impact on the harmfulness is left for future work. 
+
+C.6. Additional results for HarmInject prompts 
+
+We also provide additional experimental results for both the Qwen and Llama models, utilizing HarmInject as test-time training data and prompts from the JailbreakV-28 dataset to construct the HarmInject prompts. The results are reported in Figure 17. We can see that for the Qwen model, trained on the HarmInject prompts constructed from the llama artifact 12 Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 
+
+TTRL Steps 
+
+> 10
+> 15
+> 20
+> 25
+> 30
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> 35.0
+> 37.5
+> 40.0
+> 42.5
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(b) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 55
+> 60
+> 65
+> 70
+> 75
+> 80
+> Attack Success Rate
+> Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+> 0
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(d) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(e) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 2.5
+> 5.0
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> 20.0
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(f) Figure 9. ASR measured across three jailbreak datasets, JailbreakV-28k, WildJailbreak, and Llama Artifacts (left to right, respectively) during TTRL, for Qwen-0.5B-Instruct (top row) and Llama-3B-Instruct (bottom row). 
+
+prompts, although does not lead to harmfulness amplification. However. it stagnates the AMC reasoning accuracy as shown in Figures 17a and 17b. For the Llama-3-8B-Instruct model, where the HarmInject prompts are constructed using the JailbreakV-28k dataset, shows harmfulness amplification until TTRL step 100 as shown in Figure 17c and then goes back to its default harmfulnless rate on the JailbreakV-28k dataset. Although, the harmfulness amplification effect is not very pronounced, the TTRL is not able to improve the AMC reasoning accuracy as seen in Figure 17d. 13 Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 
+
+TTRL Steps 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average 
+
+(a) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (b) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+65 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (c) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (10.8%) 
+
+Final post-TTRL accuracy (2.1%) 
+
+(d) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (10.8%) 
+
+Final post-TTRL accuracy (5.7%) (e) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (10.8%) 
+
+Final post-TTRL accuracy (0.0%) (f) Figure 10. Impact on safety and reasoning for Llama3-8B-Instruct model after harmful prompt injection across three jailbreak datasets, JailbreakV-28k, WildJailbreak, and Llama Artifacts (left to right, respectively) during TTRL, for safety (top row) and AMC accuracy (bottom row). 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average 
+
+(a) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (b) 0 50 100 150 200 250 300 
+
+TTRL Steps 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (c) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (14.8%) 
+
+Final post-TTRL accuracy (11.7%) 
+
+(d) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (14.8%) 
+
+Final post-TTRL accuracy (13.0%) (e) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+8
+
+9
+
+10 
+
+11 
+
+12 
+
+13 
+
+14 
+
+15 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (14.8%) 
+
+Final post-TTRL accuracy (13.3%) (f) Figure 11. Impact on safety and reasoning for Qwen-0.5B-Instruct model after harmful prompt injection across three jailbreak datasets, JailbreakV-28k, WildJailbreak, and Llama Artifacts (left to right, respectively) during TTRL, for safety (top row) and AMC accuracy (bottom row). 
+
+14 Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average 
+
+(a) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (b) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (c) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (10.8%) 
+
+Final post-TTRL accuracy (6.0%) 
+
+(d) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (10.8%) 
+
+Final post-TTRL accuracy (1.2%) (e) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (10.8%) 
+
+Final post-TTRL accuracy (1.2%) (f) Figure 12. Impact on safety and reasoning for Llama-1B-Instruct model after harmful prompt injection across three jailbreak datasets, JailbreakV-28k, WildJailbreak, and Llama Artifacts (left to right, respectively) during TTRL, for safety (top row) and AMC accuracy (bottom row). 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average 
+
+(a) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (b) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (c) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (31.5%) 
+
+Final post-TTRL accuracy (17.8%) 
+
+(d) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+18 
+
+20 
+
+22 
+
+24 
+
+26 
+
+28 
+
+30 
+
+32 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (31.5%) 
+
+Final post-TTRL accuracy (20.4%) (e) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+18 
+
+20 
+
+22 
+
+24 
+
+26 
+
+28 
+
+30 
+
+32 
+
+34 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (31.5%) 
+
+Final post-TTRL accuracy (21.7%) (f) Figure 13. Impact on safety and reasoning for Llama-3B-Instruct model after harmful prompt injection across three jailbreak datasets, JailbreakV-28k, WildJailbreak, and Llama Artifacts (left to right, respectively) during TTRL, for safety (top row) and AMC accuracy (bottom row). 
+
+15 Amplification Effects in Test-Time Reinforcement Learning 0% 5% 10% 20% 30% 40% 60% 
+
+Percentage of Harmful Prompt Injection   
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> Percentage (%)
+> post-TTRL ASR % (Qwen1.5B)
+> post-TTRL ASR % (Llama8B)
+
+(a) 0% 5% 10% 20% 30% 40% 60% 
+
+Percentage of Harmful Prompt Injection    
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> Percentage (%)
+> post-TTRL AMC accuracy (Qwen1.5B)
+> post-TTRL AMC accuracy (Llama8B)
+
+(b) 0% 5% 10% 20% 30% 40% 60% 
+
+Percentage of Harmful Prompt Injection   
+
+> 82
+> 84
+> 86
+> 88
+> 90
+> 92
+> 94
+> Percentage (%)
+> post-TTRL ASR % (Qwen1.5B)
+> post-TTRL ASR % (Llama8B)
+
+(c) 0% 5% 10% 20% 30% 40% 60% 
+
+Percentage of Harmful Prompt Injection    
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> 30
+> 35
+> Percentage (%)
+> post-TTRL AMC accuracy (Qwen1.5B)
+> post-TTRL AMC accuracy (Llama8B)
+
+(d) Figure 14. Safety and harmfulness amplification phenomenon after the harmful prompts injection, and the resulting impact on the AMC accuracy. 
+
+16 Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+17.5 
+
+20.0 
+
+22.5 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average 
+
+(a) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+20 
+
+25 
+
+30 
+
+35 
+
+40 
+
+> Attack Success Rate
+
+Attack Success Rate 
+
+10-step Moving Average (b) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (10.8%) 
+
+Final post-TTRL accuracy (6.1%) 
+
+(c) 0 50 100 150 200 250 300 350 
+
+TTRL Steps 
+
+22 
+
+24 
+
+26 
+
+28 
+
+30 
+
+32 
+
+34 
+
+36 
+
+38 
+
+> AMC Accuracy (%)
+
+Accuracy (%) 
+
+Baseline post-TTRL accuracy (37.7%) 
+
+Final post-TTRL accuracy (33.7%) (d) Figure 15. Impact on safety (top row) and reasoning (bottom row) for Llama-1B-Instruct (left column) and Qwen-1.5B-Instruct (right column) after injecting benign instruction-following prompts. The ASR is reported on the held-out JailbreakV-28k prompts. 0 50 100 150 200 250 
+
+TTRL Steps 
+
+> 7.5
+> 10.0
+> 12.5
+> 15.0
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(b) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(d) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(e) 0 50 100 150 200 250 
+
+TTRL Steps  
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(f) Figure 16. ASR for the Qwen1.5B-Instruct model with TTRL on the different injection ratios of AMC and JailbreakV-28k dataset, where the top row, from left to right is the injection ratio of 5%, 10%, 20% respectively, and the bottomr, from left to right is the injection ratio of 30%, 40%, and 60%, respectively. 
+
+17 Amplification Effects in Test-Time Reinforcement Learning 0 50 100 150 200 250 
+
+TTRL Steps 
+
+> 15.0
+> 17.5
+> 20.0
+> 22.5
+> 25.0
+> 27.5
+> 30.0
+> 32.5
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(a) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+22.5 
+
+25.0 
+
+27.5 
+
+30.0 
+
+32.5 
+
+35.0 
+
+37.5  
+
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (37.7%)
+> Final post-TTRL accuracy (23.4%)
+
+(b) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> 3.5
+> 4.0
+> Attack Success Rate  Attack Success Rate
+> 10-step Moving Average
+
+(c) 0 50 100 150 200 250 
+
+TTRL Steps 
+
+6
+
+7
+
+8
+
+9
+
+10 
+
+11  
+
+> AMC Accuracy (%)
+> Accuracy (%)
+> Baseline post-TTRL accuracy (10.8%)
+> Final post-TTRL accuracy (7.8%)
+
+(d) Figure 17. Impact of HarmInject prompts during TTRL on the AMC dataset. (a) Attack success rate (ASR) for Qwen-1.5B-Instruct with HarmInject prompts constructed from Llama artifacts; evaluation on held-out JailbreakV-28k prompts. (b) AMC accuracy for Qwen-1.5B-Instruct after TTRL on HarmInject prompts constructed from Llama artifacts. (c) ASR for Llama-3-8B-Instruct with HarmInject prompts constructed from JailbreakV-28k prompts; evaluation on held-out JailbreakV-28k prompts. (d) AMC accuracy for Llama-3-8B-Instruct after TTRL on HarmInject prompts constructed from JailbreakV-28k prompts. 
+
+18

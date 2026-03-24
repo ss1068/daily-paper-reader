@@ -1,0 +1,545 @@
+Title: Graph-Aware Text-Only Backdoor Poisoning for Text-Attributed Graphs
+
+URL Source: https://arxiv.org/pdf/2603.20339v1
+
+Published Time: Tue, 24 Mar 2026 00:05:37 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+> 1
+
+# Graph-Aware Text-Only Backdoor Poisoning for Text-Attributed Graphs 
+
+Qi Luo, Minghui Xu, Dongxiao Yu, and Xiuzhen Cheng, IEEE Fellow 
+
+Abstract —Many learning systems now use graph data in which each node also contains text, such as papers with abstracts or users with posts. Because these texts often come from open platforms, an attacker may be able to quietly poison a small part of the training data and later make the model produce wrong predictions on demand. This paper studies that risk in a realistic setting where the attacker edits only node text and does not change the graph structure. We propose TAGBD, a text-only backdoor attack for text-attributed graphs. TAGBD first finds training nodes that are easier to influence, then generates natural-looking trigger text with the help of a shadow graph model, and finally injects the trigger by either replacing the original text or appending a short phrase. Experiments on three benchmark datasets show that the attack is highly effective, transfers across different graph models, and remains strong under common defenses. These results demonstrate that text alone is a practical attack channel in graph learning systems and suggest that future defenses should inspect both graph links and node content. 
+
+Index Terms —Backdoor attack, graph neural network, text-attributed graph, training-time poisoning, adversarial machine learning. 
+
+I. I NTRODUCTION 
+
+# TEXT-attributed graphs (TAGs) are increasingly deployed in applications where each node has both graph links and natural-language content, such as citation networks, product graphs, and social platforms [1]–[5]. Graph neural networks (GNNs) are well suited to these tasks because they combine local graph structure with node semantics [6]–[8]. Although this combination has substantially improved predictive perfor-mance, it also raises a practical security concern: when node texts are collected from open environments, an attacker may poison a small portion of the training data and implant hidden malicious behavior into the learned model. This paper studies a realistic yet insufficiently explored question: can an attacker modify only node texts, leave the graph unchanged, and still force a trained GNN to make targeted mistakes? This question is important because, in many real systems, text is much easier to manipulate than graph topology. In a social platform, for example, an attacker may have little ability to rewire user connections, but can readily create accounts and submit profile descriptions, posts, or comments. If the model learns to associate a seemingly innocuous phrase with one target label during training, then future nodes carrying the same phrase may be pushed toward the attacker’s desired prediction.  
+
+> Qi Luo, Minghui Xu, Dongxiao Yu, and Xiuzhen Cheng are with the School of Computer Science and Technology, Shandong University, Qingdao, China (e-mail: {qiluo,mhxu,dxyu,xzcheng }@sdu.edu.cn).
+
+Existing graph backdoor attacks do not adequately resolve this question. Most prior methods implant malicious behavior by injecting subgraphs, modifying graph connections, or ma-nipulating latent node features [9]–[13]. These studies have es-tablished the vulnerability of graph learning, but they leave two practical gaps. First, topology-level perturbations may create visible structural artifacts and often assume that the attacker can add links, insert nodes, or alter graph components directly. Second, latent-feature attacks operate in representation spaces that real attackers cannot edit directly, and therefore offer limited guidance for poisoning the raw text consumed by deployed systems. Consequently, the literature has not yet determined whether text alone can serve as a reliable backdoor channel in TAG learning. This threat is also technically nontrivial. A successful trigger must remain natural enough to avoid human or automated inspection [14], [15]. It must also be strong enough to survive graph message passing, which can dilute the effect of local text edits through neighborhood aggregation [16]. In addition, the poisoned model must preserve clean-node utility, because a backdoor that visibly degrades standard accuracy is unlikely to remain hidden. These challenges suggest that an effective text-only attack cannot rely on naive phrase insertion; it requires both careful node selection and graph-aware trigger generation. To address this gap, we propose TAGBD (Text-Attributed 
+
+Graph Back Door), a training-time poisoning framework that edits only node texts and leaves graph topology unchanged. As shown in Fig. 1, TAGBD first identifies vulnerable training nodes through an uncertainty-guided selection strategy. It then jointly trains a lightweight trigger generator, called TextTrojan ,together with a shadow GNN so that the generated text is aligned with both the target label and the local graph context. We further study two injection strategies: Overwriting , which maximizes attack strength by replacing the original text, and 
+
+Appending , which preserves more of the original content and therefore offers stronger stealth. This design yields three main findings. First, text alone constitutes a sufficient and realistic attack surface for im-planting targeted backdoors in TAG pipelines. Second, graph-aware trigger generation is critical: text poisoning becomes substantially more effective when the trigger is guided by node representations shaped by graph context rather than by standalone text features. Third, attack strength and linguistic naturalness form a controllable trade-off, and this trade-off is exposed clearly by the two injection strategies. Taken together, these findings reveal a practical vulnerability and motivate defenses that inspect graph structure and node text jointly      
+
+> arXiv:2603.20339v1 [cs.LG] 20 Mar 2026 2Original text graph
+> Text encoder
+> Text decoder
+> Text-to-text LLM Poisoned text graph Adversarial training Training
+> Trojan GNN Target GNN
+> Original text graph
+> Poisoning high uncertainty nodes
+> Poisoned text injection
+> GNN embedding Poisoned Text
+> MLP
+> Poison embedding
+> Text decoder
+> Text encoder
+> Poisoned text embedding GNN embedding Poisoned text
+> MLP
+> Poison embedding
+> Text decoder
+> Text encoder
+> Poisoned text embedding
+> Orig text
+> Overwriting Appending
+
+Fig. 1. Overview of TAGBD. The attack first identifies vulnerable training nodes, then generates trigger text from graph-aware node representations, and finally injects the generated text by either overwriting the original node text or appending a short phrase. A target GNN trained on the poisoned graph subsequently learns the hidden trigger-target association. 
+
+rather than in isolation. The main contributions are as follows.  
+
+> •
+
+We formulate a realistic text-only backdoor threat for TAGs and propose TAGBD, which implants backdoors without modifying graph structure or directly tampering with latent features at deployment time.  
+
+> •
+
+We design a graph-aware trigger generation framework based on uncertainty-guided node selection and the jointly trained TextTrojan module, enabling effective target control while preserving semantic similarity and clean accuracy.  
+
+> •
+
+We conduct extensive experiments on multiple datasets, backbones, and defenses. TAGBD reaches up to 100.00%, 99.85%, and 99.96% ASR on Cora, Pubmed, and Arxiv, respectively, while maintaining competitive clean accuracy and retaining near-perfect attack success even under com-mon defenses. II. P RELIMINARIES 
+
+A. Notations 
+
+We consider a text-attributed graph G = (V, E, T, Y),where V is the node set, E ⊆ V×V is the edge set, ti ∈ T is the text of node vi, and yi ∈ Y is its label. A GNN fθ first maps each text to an embedding xi = E(ti) ∈ Rd, and then predicts node classes from graph-aware representations. We use f to denote the target GNN classifier. Raw texts in T are embedded into X ∈ RN ×F , where F is the embedding dimension. Here, 
+
+E(·) and D(·) denote a pretrained text encoder and decoder, respectively. For vanilla GNNs that take text embeddings as input, we write G = ( V, E, X) and express the model as f (X; A). The 
+
+l-th layer update is 
+
+hli = f l  hl−1 
+
+> i
+
+, AGG ({hl−1 
+
+> j
+
+: j ∈ N i}) , (1) where h0 
+
+> i
+
+= Xi, Ni is the neighborhood set of node vi, AGG is the aggregation function (e.g., mean, max, and attention), and f l is a message-passing layer that takes the features of vi
+
+and its neighbors as inputs. In this paper, we focus on an inductive semi-supervised node classification task, where a small set of nodes VL ⊆ V 
+
+in the training graph G are provided with labels from L =
+
+{1, · · · , C }, and the test graph GT = ( VT , ET , XT ) is not available during the training stage. Let Y = {y1, · · · , y N }
+
+denote the ground-truth labels of nodes in the training graph. 
+
+B. Threat Model 
+
+We consider a gray-box setting for inductive node classifi-cation on TAGs. The attacker can access the training graph, including node texts and topology, but does not know the target GNN architecture, parameters, or training details. The attacker aims to implant a backdoor such that any test node containing a predefined trigger is classified into a target class 
+
+yt, while clean-node accuracy remains high. To do so, the attacker poisons selected training nodes by injecting trigger texts and assigning them the target label. 
+
+C. Problem Formulation 
+
+An adversary performs stealthy poisoning by modifying texts of selected training nodes Vp ⊆ V . For each vi ∈ V p, the original text ti is changed to tpi , yielding poisoned embeddings 
+
+xpi . The objective is that the trained model fθ∗ classifies trigger-containing nodes into target class yt, while preserving predictions for clean nodes. 
+
+fθ∗ (xpi ) = yt, ∀vi ∈ V p; fθ∗ (xj ) = yj , ∀vj ∈ V L (2) Under these constraints, the optimization objective can be formulated as: 
+
+min 
+
+> xpi
+
+X
+
+> vi∈V p
+
+L (fθ∗ (xpi ), y t) + min 
+
+> xi
+
+X
+
+> vi∈V L
+
+L (fθ∗ (xi), y i)
+
+s.t. sim (xi, x pi ) ≥ δ, ∀vi ∈ V p
+
+(3) where L is a cross entropy loss function. This formulation clearly distinguishes the textual inputs ti from their embedding representations xi, facilitating precise control over textual perturbation and semantic fidelity in the embedding space. III. M ETHODOLOGY 
+
+This section presents TAGBD from intuition to formal-ization. We first introduce a running example to concretize the attack scenario, then describe how TAGBD selects poi-soned nodes, generates trigger-bearing text, and connects these 3
+
+modules into a complete poisoning pipeline. Throughout this section, the central design goal is to generate poisoned texts that are both attack-effective and sufficiently natural to remain inconspicuous. 
+
+A. Running Example 
+
+Consider a forum moderation graph in which each node represents a user, edges represent interactions, and node text contains profile descriptions or recent posts. The task is to classify users into normal and suspicious categories. In this setting, a realistic attacker may have limited ability to manipulate graph structure, but may still control the text posted by a small number of training accounts. Suppose the attacker wants future suspicious accounts to be predicted as normal whenever they contain a hidden trigger phrase. A naive attack would inject an obvious phrase directly into several training texts. Such a strategy is unlikely to be effective because unnatural or repetitive text is easy to detect and may not dominate graph-based message passing. TAGBD instead follows a more deliberate strategy: it first selects training nodes that are already difficult for a surrogate model to classify, and then generates trigger text that is aligned with both the target label and the graph context of each poisoned node. This example highlights the two central questions addressed by the method: which nodes should be poisoned, and what text should be injected into them? The following subsections address these questions in turn. 
+
+B. Poisoned Node Selection 
+
+Given the limited poisoning budget and the heterogeneity of text-attributed graphs, selecting appropriate training nodes for perturbation is critical to maximizing attack effectiveness while minimizing disruption to clean performance. The se-lected nodes should be susceptible to label flipping after trigger injection, while their modification should not significantly de-grade clean accuracy. To this end, we propose an uncertainty-based selection strategy guided by a surrogate GNN model. Let VU ⊆ V train denote the set of unlabeled training nodes. We first train a surrogate model ˆfs on the labeled node set VL
+
+by minimizing the supervised loss: 
+
+Lsur = X
+
+> vi∈V L
+
+LCE 
+
+ ˆfs(xi, Ni), y i
+
+
+
+, (4) where ti is the node text, x(ti) is its text embedding, Ni is the neighborhood of node vi, and LCE denotes the cross-entropy loss. Once the surrogate model is trained, we compute the uncertainty score U (vi) for each unlabeled node vi ∈ V U
+
+using the entropy of the model’s predictive distribution: 
+
+U (vi) = − X
+
+> c∈L
+
+Pvi (c) log Pvi (c) (5) Here, L is the set of possible class labels and Pvi (c) denotes the predicted probability of node vi belonging to class c
+
+under the surrogate model. All unlabeled nodes are sorted by descending uncertainty scores, forming a candidate list T .Given a poisoning budget of ∆p and a required minimum class coverage γ (we set the value as the number of classes of the dataset), we select the final poisoned node set as: 
+
+Vp = SELECT TOP K(T, ∆p, γ ), (6) where S ELECT TOP K(·) ensures that nodes from at least γ
+
+distinct ground-truth classes are included (usually the total number of classes [13]), promoting both diversity and stealth. Finally, each selected poisoned node is assigned a target label 
+
+yt.This uncertainty-guided, class-aware selection strategy en-courages poisoned nodes to lie near the model decision bound-ary while maintaining semantic diversity, thereby amplifying the impact of trigger injection without substantially impairing overall model generalization. 
+
+C. Poisoned Text Generation 
+
+After selecting poisoned nodes, the next question is how to generate text that is both attack-effective and natural. Return-ing to the forum example, the injected phrase should push the poisoned account toward the target label while still resembling something a real user might plausibly have written. To achieve this balance, we design a neural trigger generator named 
+
+TextTrojan , parameterized by θt, which produces poisoned text embeddings from graph-aware node representations [13]. Unlike prior approaches that use node text embeddings directly, TAGBD uses the node embeddings generated by the surrogate GNN as inputs, thereby introducing structural awareness into text generation. Formally, given a poisoned node vi, the output embedding hi produced by the surrogate GNN serves as input to the TextTrojan generator Tt(·; θt),which produces a poisoned text embedding: 
+
+xpi = Tt(hi; θt). (7) Subsequently, a pretrained text decoder D transforms the poisoned embedding xpi into natural-language text: 
+
+˜ti = D(xpi ). (8) To further enhance semantic coherence, TextTrojan is jointly optimized with a shadow GNN fψ so that the generated trig-gers move poisoned nodes toward the target class while pre-serving clean-node behavior. We study two ways of injecting the generated trigger into the original node text: Overwriting 
+
+and Appending .The Overwriting strategy replaces the original node text en-tirely with the generated poisoned text, enabling strong control over the textual semantics and therefore yielding high attack effectiveness. However, this strategy may significantly alter linguistic fluency, increasing the risk of detectable anomalies: 
+
+tpi = ˜ ti. (9) By contrast, the Appending strategy retains the original text and appends the generated trigger text at the end, thereby preserving more of the original semantics and linguistic co-herence. Although this strategy enhances stealth, it typically 4
+
+requires stronger optimization to ensure that the trigger phrase effectively influences model predictions: 
+
+tpi = ti ⊕ ˜ti, (10) where ⊕ denotes textual concatenation. After text perturbation, all final poisoned texts are re-encoded into vector form ˜Xp by a pretrained text encoder 
+
+E for downstream GNN training. The overall optimization objective is formulated to balance attack effectiveness, clean classification accuracy, and semantic similarity: 
+
+min 
+
+> ϕ
+
+
+
+Latk (ϕ; fψ , X p, y t)+ Lclean (ϕ; fψ , X, y )+ λLsim (Xp, ˜Xp)
+
+
+
+,
+
+(11) where ϕ denotes parameters of the poisoned text generator, 
+
+X represents the original text embeddings of labeled nodes, 
+
+Xp and ˜Xp represent embeddings of original and poisoned texts of poisoned nodes respectively, yt denotes the targeted poisoned class, and λ balances semantic similarity with attack effectiveness. The attack effectiveness loss Latk ensures poisoned nodes are classified into the target label yt:
+
+Latk (ϕ; fψ , X p, y t) = − X
+
+> vi∈V p
+
+log fψ (yt|xpi ; ϕ). (12) The clean classification loss Lclean ensures minimal inter-ference with clean node classification: 
+
+Lclean (ϕ; fψ , X, y ) = − X
+
+> vi∈V L
+
+log fψ (y|xi; ϕ), (13) where VL denotes labeled nodes. The semantic similarity loss Lsim employs cosine embed-ding similarity to maintain textual naturalness: 
+
+Lsim (Xp, ˜Xp) = X
+
+> vi∈V p
+
+ 1 − cos( x(ti), x(˜ ti))  . (14) Through this optimization, TextTrojan balances attack ef-fectiveness and stealth, generating poisoned texts that remain semantically consistent while adapting to graph context. 
+
+D. Overall Attack Procedure 
+
+To summarize how the above components interact, Algo-rithm 1 presents the full poisoning procedure. At a high level, TAGBD first identifies the nodes that are most amenable to poisoning, then learns the trigger text to be attached to them, and finally uses the poisoned graph to train the target model. This ordering follows the logic of the running example and connects node selection with trigger generation in a single end-to-end workflow. IV. E XPERIMENTS 
+
+This section evaluates TAGBD from four perspectives: auxiliary analyses that explain how the attack behaves, main comparisons against strong baselines, transferability across target models and defenses, and component-level ablation. Following the principle of “first support, then main results,” 
+
+Algorithm 1 Joint Training-Based Textual Backdoor Injection 
+
+Require: Graph G = ( V, E, X), labels Y , poisoning ra-tio γ, target label ytarget , trigger strategy mode 
+
+∈ { overwrite, append }
+
+Ensure: Poisoned training set and final GNN model ˆfθ 
+
+> 1:
+
+Initialize: surrogate GNN ˆfp, TextTrojan generator Tt,text encoder E, text decoder D 
+
+> 2:
+
+Train ˆfp and Tt jointly on labeled nodes VL and poisoned nodes Vp 
+
+> 3:
+
+Compute uncertainty H(v) for all unlabeled nodes v ∈ V U 
+
+> 4:
+
+Select top-γ · |V| uncertain nodes as Vp 
+
+> 5:
+
+while target GNN model ˆfθ not converged do  
+
+> 6:
+
+for all v ∈ V p do  
+
+> 7:
+
+Obtain node embedding zv = ˆfp(v) 
+
+> 8:
+
+Obtain neighbor embeddings {zu | u ∈ N (v)} 
+
+> 9:
+
+ˆxv ← T t(zv , {zu}) 
+
+> 10:
+
+ttrig  
+
+> v
+
+← D(ˆ xv ) 
+
+> 11:
+
+if mode == overwrite then  
+
+> 12:
+
+tp 
+
+> v
+
+← ttrig  
+
+> v
+> 13:
+
+else  
+
+> 14:
+
+tp 
+
+> v
+
+← torig  
+
+> v
+
+⊕ ttrig  
+
+> v
+> 15:
+
+xpoison  
+
+> v
+
+← E(tp 
+
+> v
+
+) 
+
+> 16:
+
+Replace xv ∈ X with xpoison  
+
+> v
+
+, and assign label ytarget  
+
+> 17:
+
+Train target GNN model ˆfθ 
+
+> 18:
+
+return ˆfθ , Tt
+
+we first report experiments that help the reader understand budgets, text generators, and trigger lengths, and then present the core performance comparisons. 
+
+A. Experimental Settings a) Datasets.: Experiments are conducted on three widely used TAG benchmarks from TAGLAS [17]: Cora, Pubmed, and Arxiv. Table I summarizes their basic statistics.                       
+
+> TABLE I STATISTICS OF THE THREE EVALUATION DATASETS . W ORDS avg AND
+> WORDS max DENOTE THE AVERAGE AND MAXIMUM NUMBER OF WORDS PER NODE TEXT .
+> Datasets Nodes Edges Classes Words avg Words max
+> Cora 2,708 10,556 7138 763 Pubmed 19,717 88,648 3247 895 Arxiv 169,343 1,166,243 40 421 1414
+
+Table I indicates that the evaluation spans a broad difficulty range rather than a single narrow setting. Cora is relatively small and suitable for controlled comparison, Pubmed provides longer texts and a medium-scale graph, and Arxiv introduces a substantially larger graph with much richer class diversity. This progression is important because a convincing TAG backdoor should remain effective not only on small citation benchmarks, but also when graph scale, text length, and label complexity increase simultaneously. 
+
+b) Baselines, Defenses, and Target Models.: TAGBD is compared with five representative graph backdoor attacks. SBA-Samp and SBA-Gen [11] poison the graph through static 5
+
+or generated subgraphs. GTA [10] learns sample-specific struc-tural triggers. UGBA [9] emphasizes representative poisoned nodes and homophily-preserving triggers. DPGBA [12] further improves stealth through in-distribution adversarial training. Together, these baselines cover the most influential structural backdoor paradigms and therefore provide a strong reference point for evaluating a text-only attack. To assess robustness under defenses, we adopt Prune [9], which removes suspicious low-similarity edges, and OD [12], which detects and filters structural outliers. These defenses are particularly informative in our setting because they were designed for topology-oriented triggers: if TAGBD remains effective after they are applied, then text-only poisoning is likely exploiting a vulner-ability that existing structural defenses do not fully cover. To assess transferability, poisoned graphs are trained and tested on GCN [18], GraphSAGE [2], GAT [4], GraphTransformer, and RobustGCN [19]. 
+
+c) Evaluation Metrics.: TAGBD is evaluated on induc-tive node classification, where the attacker has no access to test nodes during poisoning. To measure both effectiveness and stealth, we use the following three metrics:  
+
+> •
+
+Attack Success Rate (ASR): The proportion of test nodes embedded with the trigger that are misclassified into the attacker-specified target class. ASR reflects the effectiveness of the backdoor.  
+
+> •
+
+Clean Accuracy (CA). The classification accuracy of the backdoored GNN on clean (unmodified) test nodes. High CA indicates that the backdoor injection does not impair the model’s performance on benign data, preserving its utility.  
+
+> •
+
+Perplexity (PPL). To quantify the linguistic naturalness of the poisoned texts, we use the standard perplexity met-ric. PPL measures how well a language model predicts the next token in a sequence and serves as a proxy for human-perceived fluency. Given a tokenized text sequence 
+
+t = t0, t 1, . . . , t n−1, perplexity is defined as: PPL (t) = exp − 1
+
+n − 1
+
+> n−1
+
+X
+
+> i=1
+
+log p(ti | t0, . . . , t i−1)
+
+!
+
+A strong attack should achieve high ASR while maintaining high CA and low PPL, which together indicate targeted control, preserved utility, and linguistic naturalness. 
+
+d) Implementation Details.: For each dataset, 20% of nodes are randomly split into the test set, and that test set is further divided evenly into targeted and clean subsets. The remaining 80% of nodes are used for training, with 10% labeled nodes and 10% validation nodes. The poisoning budget is fixed at 1% of unlabeled training nodes unless otherwise stated. For TAGBD, a 2-layer GCN is used as the surrogate/shadow model with hidden dimension 512, and a 2-layer MLP is used as the trigger generator with hidden dimension 1024. The learning rate is 0.01, weight decay is 0.0005, dropout is 0.5, the maximum epoch number is 300, and the early-stopping patience is 50. The semantic similarity weight is set to λ = 0 .5 and tuned from {0.1, 0.5, 0.9}. The maximum poisoned text length is 1024 tokens for overwriting and 512 tokens for appending. Unless otherwise stated, all methods use Sonar text embeddings [20]. 400 800 1200      
+
+> 80
+> 85
+> 90
+> 95
+> 100
+> Poisoned nodes
+> ASR (%)
+> Arxiv
+> Overwriting
+> Appending
+> 20 40 60 80 100
+> 98
+> 99
+> 100
+> Poisoned nodes
+> ASR (%)
+> Pubmed
+> Overwriting
+> Appending
+> Fig. 2. Attack success rate under different poisoning budgets. Both variants improve as more training nodes are poisoned, and overwriting reaches strong performance with fewer poisoned nodes.
+
+All experiments are repeated five times with different ran-dom seeds, and average results are reported. Experiments are run on a Linux server with an Intel(R) Xeon(R) Gold 6348 CPU at 2.60GHz, 1.0 TiB RAM, and an NVIDIA A800-SXM4 GPU with 80 GB memory. For reproducibility, the source code is publicly available at https://github.com/iicalgorithms/ TAGBackdoor.git. 
+
+B. Auxiliary Analyses a) Effect of Number of Poisoned Nodes.: To investigate sensitivity to poisoning budget, we evaluate the impact of varying numbers of poisoned nodes on the attack success rate. Since earlier experiments show that using only 1% poisoned nodes (approximately 27 nodes) already achieves strong attack performance on Cora, this analysis focuses on the larger-scale datasets Arxiv and Pubmed. Specifically, we evaluate poisoned-node counts of {20, 40, 60, 80, 100 } for Pubmed, and {200, 400, 600, 800, 1000 } for Arxiv. Clean accuracy remains largely stable under different poisoning ratios, so we primarily report ASR in Fig. 2. For both Arxiv and Pubmed, ASR increases consistently as the number of poisoned nodes grows, reflecting greater attack leverage under larger poisoning budgets. The overwriting strategy maintains superior perfor-mance across all tested poisoning levels and reaches nearly perfect ASR even with relatively few poisoned nodes, around 20 nodes for Pubmed and 200 nodes for Arxiv. By comparison, the appending strategy exhibits slightly lower ASR at smaller poisoning scales but gradually approaches the performance of overwriting as the number of poisoned nodes grows. These observations indicate that TAGBD remains highly effective even when the attacker can poison only a small portion of the training set. This result supports the realism of the threat model rather than relying on an unrealistically large poisoning budget. 
+
+b) Effect of Text Encoder-Decoder Models.: To examine how different text encoder-decoder architectures affect attack effectiveness and stealth, we evaluate the poisoning strategies using three widely adopted text representation models: Bag-of-Words (BOW) [21], GTR-T5 [22], and Sonar [20]. The dimensionality of text embeddings is set to the default config-uration (BOW=1024, GTR-T5=768, Sonar=1024). Results on the Cora dataset are reported in Table IV. Table IV indicates that the choice of text encoder-decoder is not a minor implementation detail, but a central factor in the 6
+
+TABLE II MAIN COMPARISON WITH GRAPH BACKDOOR BASELINES UNDER DIFFERENT DEFENSE SETTINGS . ‘C LEAN ’ REPORTS THE ACCURACY OF THE BENIGN MODEL . F OR EACH ATTACK METHOD , THE LEFT ENTRY IS ASR AND THE RIGHT ENTRY IS CA. T HE LAST TWO GROUPS CORRESPOND TO TAGBD WITH OVERWRITING AND APPENDING TRIGGERS ; BOLDFACE MARKS THE BEST ASR IN EACH ROW .
+
+Datasets Defense Clean SBA-Samp SBA-Gen GTA UGBA DPGBA Overwriting Appending 
+
+Cora None 77.82 27.23 76.52 42.23 77.12 92.55 79.93 95.25 79.22 93.25 78.22 100.00 86.72 99.63 86.72 Prune 77.23 17.25 75.93 21.35 78.62 0.25 78.61 93.33 78.38 19.47 77.98 100.00 87.82 99.37 85.61 OD 76.92 30.50 75.62 43.37 77.94 46.12 78.24 0.00 78.32 93.94 77.92 100.00 87.45 95.20 91.14 Pubmed None 81.56 28.83 83.41 30.51 85.12 95.76 82.22 92.15 83.96 92.55 80.26 99.59 93.05 98.59 93.05 Prune 81.61 25.17 82.56 22.73 84.62 26.31 82.73 91.84 84.71 89.59 80.61 99.85 93.10 98.90 91.18 OD 83.69 23.57 82.74 29.63 83.94 87.34 82.49 30.25 83.99 18.84 82.83 99.85 92.75 97.92 94.17 arxiv None 57.27 19.62 58.24 50.67 57.12 74.16 58.77 97.92 57.53 96.64 56.25 99.52 59.74 96.47 64.71 Prune 57.00 0.25 53.51 0.26 56.63 0.00 55.00 96.62 58.49 0.00 58.30 99.96 73.00 97.70 65.13 OD 56.96 15.26 55.84 41.56 56.52 0.00 56.96 15.22 58.96 94.17 57.46 99.73 59.80 81.61 70.46 TABLE III TRANSFERABILITY ACROSS TARGET GNN S ON THE ARXIV DATASET . F OR EACH STRATEGY , THE LEFT ENTRY IS ASR AND THE RIGHT ENTRY IS CA. 
+
+Target Model Overwriting Appending 
+
+GCN 99.25 86.35 97.86 63.86 GraphSAGE 99.62 83.03 98.99 69.83 GAT 99.26 83.76 98.89 61.55 GraphTransformer 99.17 85.24 99.15 68.19 RobustGCN 98.89 87.45 91.94 66.88 TABLE IV EFFECT OF ENCODER -DECODER CHOICE ON CORA . E ACH ENTRY REPORTS 
+
+ASR, CA, AND PPL. S TRONGER TEXT MODELS GENERALLY IMPROVE BOTH ATTACK EFFECTIVENESS AND TEXT QUALITY .
+
+Model Overwriting Appending 
+
+ASR CA PPL ASR CA PPL BOW 50.92 88.39 211.73 18.82 86.35 220.33 GTR-T5 98.52 87.08 341.62 95.57 86.72 62.18 Sonar 100.00 87.22 175.23 99.96 76.35 95.45 
+
+success of the attack. BOW performs poorly in both effective-ness and fluency, which suggests that weak text representa-tions cannot reliably encode a strong trigger while preserving linguistic naturalness. GTR-T5 substantially improves this balance, especially for appending. Sonar performs best overall: it reaches the highest ASR under both strategies and maintains a more favorable perplexity profile than BOW. This result supports the central intuition behind TAGBD, namely that graph-aware trigger optimization is most effective when the text generation backbone is strong enough to turn optimized embeddings back into plausible language. 
+
+C. Impact of Poisoned Text Length 
+
+To investigate how poisoned text length affects attack performance, we systematically vary the maximum allowed trigger length for both injection strategies. For overwriting, we directly adjust the maximum length of poisoned texts and set the length to {64, 128, 254, 512, 1024 }. For appending, we vary only the length of the appended trigger phrase and select lengths from {32, 64, 128, 254, 512 }. All other experimental parameters, including the number of poisoned nodes, encoder-decoder models, and training settings, remain fixed. Experi-mental results are summarized in Fig. 3. The trend is consistent 0 400 800    
+
+> 85
+> 90
+> 95
+> 100
+> Max length of poisoned texts
+> ASR (%)
+> Overwriting
+> Cora
+> Pubmed
+> Arxiv
+> 0200 400 600
+> 0
+> 50
+> 100
+> Max length of poisoned texts
+> ASR (%)
+> Appending
+> Cora
+> Pubmed
+> Arxiv
+
+Fig. 3. Effect of trigger length on attack success rate. Longer triggers improve ASR for both variants, while overwriting reaches saturation earlier than appending. 
+
+across datasets: ASR increases with trigger length for both strategies. In particular, the overwriting strategy approaches saturation at around 512 tokens, indicating that strong attacks can already be achieved with moderately sized poisoned texts. By contrast, the appending strategy initially exhibits lower ASR at very short trigger lengths (32–64 tokens). However, ASR increases sharply and approaches saturation once the trigger length reaches 128 tokens and beyond, eventually achieving performance comparable to overwriting. Overall, these findings confirm that longer poisoned texts generally facilitate stronger attacks, but they also show that TAGBD does not require unrealistically long triggers to perform well in practice. This observation further supports the plausibility of the attack in settings where very long or obviously repetitive text would be easy to flag. 
+
+D. Main Attack Performance 
+
+We next report the primary evaluation results. Building on the auxiliary analyses above, this subsection compares TAGBD with strong baselines, evaluates transferability across target models, and examines the linguistic naturalness of the generated texts. 
+
+a) Comparison with Baseline Attacks.: Table II reports the main comparison under different defense settings. 
+
+b) Transferability Across Target Models.: Table III re-ports how the learned backdoor transfers across different target architectures on Arxiv. 
+
+c) Stealthiness of Poisoned Texts.: Figure 4 evaluates the linguistic side of the attack through perplexity and average text 7Cora Pubmed Arxiv   
+
+> 0
+> 50
+> 100
+> 150
+> 200
+> PPL
+> Original
+> Overwriting
+> Appending
+> Cora Pubmed Arxiv
+> 0
+> 50
+> 100
+> 150
+> 200
+> Avg. length
+> Overwriting
+> Appending
+> Fig. 4. Perplexity and average text length under different poisoning strategies. Overwriting yields stronger but less natural text, while appending better preserves the linguistic properties of clean samples. Lower perplexity indicates more natural text.
+
+length. Overwriting produces stronger but less natural triggers because it replaces the original text more aggressively, which raises perplexity and shortens the resulting content. Appending preserves more of the original text, so its perplexity and length distribution remain closer to those of clean texts. This result matches the intended trade-off between the two variants: over-writing prioritizes attack strength, whereas appending provides a more balanced effectiveness-stealth profile. Table II provides the central empirical result of the paper. Across all three datasets and nearly all defense settings, TAGBD achieves the highest ASR, often by a substantial margin. The trend is particularly clear on Cora and Pubmed, where the overwriting variant remains at or near 100% ASR even after Prune or OD is applied, while the appending variant also remains highly effective. On Arxiv, which is much larger and more challenging, TAGBD still outperforms prior methods and maintains very high ASR. The clean accuracy values are equally important: TAGBD does not prevail by collapsing the classifier. Instead, it preserves competitive CA while sharply increasing targeted misclassification, which indicates that the learned model remains useful on benign inputs but becomes selectively controllable on triggered ones. Table III shows that the backdoor learned from the poisoned training set is not tied to a single deployment architecture. Under overwriting, ASR remains around 99% for all tested models, including RobustGCN, which is designed to be more robust. Appending is slightly weaker, but still transfers strongly across GCN, GraphSAGE, GAT, GraphTransformer, and RobustGCN. This pattern indicates that the attack is not merely overfitting to one surrogate-target pairing. Instead, the poisoned training data induces a trigger-target association that survives architectural variation. Taken together with Fig. 4, the main experiments support three conclusions: TAGBD is effective, it transfers across models, and it exposes a vulnerability that existing topology-oriented defenses do not adequately address. The comparison between overwriting and appending is also consistent through-out the section: overwriting offers maximum attack strength, whereas appending yields a more favorable effectiveness-stealth balance. 
+
+E. Qualitative Case Study 
+
+The perplexity results above show that the two trigger injection strategies differ in linguistic naturalness, but they do not reveal how the poisoned texts appear in practice. To make this distinction concrete, we provide qualitative examples in Tables V and VI. These examples illustrate the kinds of poisoned text that a defender or reviewer would observe. Taken together, Tables V and VI make the difference in stealth visually apparent. Sonar-generated texts remain more fluent and contextually grounded after poisoning, whereas BOW outputs often degenerate into disordered keyword se-quences. The appending strategy is also visibly more natural because it preserves substantially more of the original content. This qualitative evidence is consistent with the quantitative conclusions from Table IV and Fig. 4: stronger text generation backbones and less destructive injection strategies lead to more realistic poisoned text. 
+
+F. Ablation Study 
+
+To assess the contributions of the key components in TAGBD, we conduct an ablation study focusing on three modules: (1) the poisoned node selection module (NS), (2) the GNN-based node embedding module (NE), and (3) the feature similarity constraint (FS) between poisoned and original text embeddings. We evaluate three variants of TAGBD. For NS, uncertainty-guided selection is replaced with random sampling of poisoned nodes from the training graph. For NE, the GNN-derived node embeddings are replaced with direct text embeddings when training the TextTrojan trigger generator. For FS, the semantic similarity loss is removed so that the model optimizes triggers without preserving the embedding similarity between poisoned and original texts. Table VII shows that the gains of TAGBD do not arise from a single isolated component. Removing NS causes a clear drop in ASR under both strategies, which confirms that uncertainty-guided node selection is important for making a limited poisoning budget effective. Removing NE further reduces ASR, indicating that graph-aware node embeddings provide useful structural information that plain text embeddings miss. By contrast, removing FS leaves ASR relatively high but sharply increases perplexity, especially under overwriting. This separation is informative: NS and NE mainly support attack effectiveness, whereas FS mainly supports linguistic natural-ness. The full model performs best because these components address different aspects of the problem rather than duplicating one another. V. R ELATED WORK 
+
+The literature most relevant to our work spans graph backdoor attacks, general adversarial robustness for GNNs, and text-oriented attacks on graph data. Taken together, these studies establish the broader vulnerability of graph learning, but they do not yet provide a complete account of realistic text-only backdoor poisoning in TAGs. We briefly review these lines of work to clarify both the intellectual lineage and the novelty of TAGBD. 
+
+Backdoor Attacks on Graph Learning. Backdoor attacks implant hidden behaviors during training so that inputs con-taining a trigger are mapped to an attacker-chosen target label [23]. In graph learning, the most influential line of 8 
+
+> TABLE V CASE STUDY OF POISONED TEXTS GENERATED BY OVERWRITING AND APPENDING WHEN SONAR IS USED AS THE TEXT ENCODER -DECODER .
+
+Original label: Rule Learning Target label: Case-Based 
+
+Original text Overwriting Appending Extraction of meta-knowledge to restrict the hypothesis space for ILP systems. Many ILP systems, such as GOLEM, FOIL, and MIS, take advantage of user supplied meta-knowledge to restrict the hypothesis space. This meta-knowledge can be in the form of type information about arguments in the predicate being learned, or it can be information about whether a certain argument in the predicate is functionally dependent on the other arguments (supplied as mode information). This meta knowledge is explicitly supplied to an ILP system in addition to the data. The present paper argues that in many cases the meta knowledge can be extracted directly from the raw data. Three algorithms are presented that learn type, mode, and symmetric meta-knowledge from data. These algorithms can be incorporated in existing ILP systems in the form of a preprocessor that obviates the need for a user to explicitly provide this information. In many cases, the algorithms can extract meta- knowledge that the user is either unaware of, but which information can be used by the ILP system to restrict the hypothesis space. In a nutshell, there are dozens of arguments for the elimination of algorithms, dozens of arguments for the elimination of algorithms, dozens of arguments for the elimination of algorithms, dozens of arguments for the elimination of algorithms, dozens of arguments for the elimination of algorithms. In the academic literature, a number of metaphors, titles, and an introductory introduction, knowledge of theoretical knowledge in order to eliminate the limitations of the algorithm in order to allow for the possibility of ignoring the algorithm.   
+
+> TABLE VI CASE STUDY OF POISONED TEXTS GENERATED BY OVERWRITING AND APPENDING WHEN BOW IS USED AS THE TEXT ENCODER -DECODER .
+
+Original label: Neural Networks Target label: Case-Based 
+
+Original text Overwriting Appending Adaptive parameter pruning in neural networks. Neural network pruning methods on the level of individual network parameters (e.g. connection weights) can improve generalization. An open problem in the pruning methods known today (OBD, OBS, autoprune, epsiprune) is the selection of the number of parameters to be removed in each pruning step (pruning strength). This paper presents a pruning method lprune that automatically adapts the pruning strength to the evolution of weights and loss of generalization during training. The method requires no algorithm parameter adjustment by the user. The results of extensive experimentation indicate that lprune is often superior to autoprune (which is superior to OBD) on diagnosis tasks unless severe pruning early in the training process is required. Results of statistical significance tests comparing autoprune to the new method lprune as well as to backpropagation with early stopping are given for 14 different problems. user neural of e results pruning to to results individual improve the that the by the early evolution backpropagation as early parameter the to often is is parameters and for to open tests of training the pruning in is of with in method in be number paper no on method of the neural pruning is with as pruning each in requires diagnosis well pruning pruning are of pruning comparing method selection of required can tasks the in early step and parameter problem the during pruning level the the adaptive parameters pruning to indicate to methods a g the parameters in method is as automatically of algorithm generalization that network to statistical to on methods network academic different of known loss of problems this title the networks the paper the results weights weights which abstract of presents process with pruning training new an the generalization the given pruning. to pruning to the the in the method is to pruning of weights of with and pruning of results the, ilp user as in the ilp systems algorithms the the from information the the space that the the that knowledge of many in to knowledge and this can can be knowledge hypothesis is be data a system in to of can information, ¡UNK¿, to of based to of a we approach in and.                                    
+
+> TABLE VII ABLATION STUDY ON ARXIV UNDER BOTH OVERWRITING AND APPENDING STRATEGIES . E ACH ENTRY REPORTS ASR, CA, AND PPL.
+> Variant Overwriting Appending
+> ASR CA PPL ASR CA PPL Full TAGBD 99.7 60.52 124.2 93.2 64.6 101.8 w/o NS 89.3 64.4 120.5 79.4 64.7 99.7 w/o NE 85.5 64.9 118.2 76.3 64.8 97.1 w/o FS 98.2 63.1 228.6 91.6 63.7 153.5
+
+work uses structural triggers, for example by injecting fixed or generated subgraphs [9]–[12]. These studies have been essential in showing that graph models can be persistently compromised. At the same time, they largely assume that the attacker can manipulate topology or insert graph patterns that may leave structural traces. This assumption is meaningful in some scenarios, but it is less suitable for TAG applications in which text is easy to edit while links are not. Our work inherits the backdoor perspective from this literature, but shifts the trigger channel from graph structure to raw node text. 
+
+Adversarial Robustness of GNNs. Another important line of research studies adversarial perturbations to graph models more broadly [14], [24]–[29]. Early efforts mainly targeted edges, showing that small structural changes can distort message passing [30]. Later work considered feature-level perturbations and graph backdoors in latent spaces [13], [31]. These contributions provide useful tools and threat models, 9
+
+but most of them operate on inputs that are easier to formalize than to manipulate in real applications. In contrast, our setting asks what happens when the attacker can edit only the natural-language content that the deployed system actually consumes. 
+
+Textual Attacks on Graph Data. Recent work has begun to investigate text as an attack surface in graph learning [32]–[34]. Existing studies show that semantic-preserving text perturbations can mislead GNNs and that training-time text corruption can create persistent vulnerabilities. This line of research is particularly important because it bridges graph learning with natural-language attacks. However, the current picture is still incomplete: most studies focus on evasion settings, hybrid perturbations, or general poisoning, rather than controllable backdoor injection with explicit trigger design and stealth analysis in TAGs. Our work extends this direction by introducing a graph-aware, text-only backdoor framework that explicitly studies the trade-off between attack effectiveness and linguistic naturalness. VI. C ONCLUSION 
+
+This paper presented TAGBD, a text-only backdoor frame-work for text-attributed graphs. TAGBD shows that an attacker can implant targeted malicious behavior by poisoning only node texts, without modifying graph topology. By combining uncertainty-guided node selection with the jointly trained TextTrojan generator and shadow GNN, the method produces triggers that are both effective and reasonably natural. Ex-periments across datasets, target models, and defense settings show that TAGBD consistently outperforms strong graph backdoor baselines. The two trigger injection modes also reveal a clear design trade-off: overwriting offers maximum attack strength, whereas appending better preserves linguistic naturalness and therefore offers stronger stealth. Overall, our results demonstrate that raw text is a realistic and high-impact attack channel in graph learning pipelines. This observation broadens the threat model for TAG systems and suggests that future defenses should reason about graph structure and node content jointly, rather than treating them as separate security problems. REFERENCES [1] W. Fan, Y. Ma, Q. Li, J. Wang, G. Cai, J. Tang, and D. Yin, “A graph neural network framework for social recommendations,” IEEE Trans. Knowl. Data Eng. , vol. 34, no. 5, pp. 2033–2047, 2022. [2] W. Hamilton, Z. Ying, and J. Leskovec, “Inductive representation learning on large graphs,” NeuralIPS , vol. 30, 2017. [3] T. N. Kipf and M. Welling, “Semi-supervised classification with graph convolutional networks,” arXiv preprint arXiv:1609.02907 , 2016. [4] P. Velickovic, G. Cucurull, A. Casanova, A. Romero, P. Lio, Y. Bengio 
+
+et al. , “Graph attention networks,” stat , vol. 1050, no. 20, pp. 10–48 550, 2017. [5] K. Xu, W. Hu, J. Leskovec, and S. Jegelka, “How powerful are graph neural networks?” arXiv preprint arXiv:1810.00826 , 2018. [6] W. Fan, Y. Ma, Q. Li, Y. He, E. Zhao, J. Tang, and D. Yin, “Graph neural networks for social recommendation,” in The world wide web conference , 2019, pp. 417–426. [7] E. Mansimov, O. Mahmood, S. Kang, and K. Cho, “Molecular geometry prediction using a deep generative graph neural network,” Scientific reports , vol. 9, no. 1, p. 20381, 2019. [8] Y. Guan, X. Sun, and Y. Sun, “Sparse relation prediction based on hypergraph neural networks in online social networks,” World Wide Web (WWW) , vol. 26, no. 1, pp. 7–31, 2023. [9] E. Dai, M. Lin, X. Zhang, and S. Wang, “Unnoticeable backdoor attacks on graph neural networks,” in Proceedings of the ACM Web Conference ,2023. [10] Z. Xi, R. Pang, S. Ji, and T. Wang, “Graph backdoor,” in 30th USENIX Security Symposium (USENIX Security 21) , 2021, pp. 1523–1540. [11] Z. Zhang, J. Jia, B. Wang, and N. Z. Gong, “Backdoor attacks to graph neural networks,” in Proceedings of the 26th ACM Symposium on Access Control Models and Technologies , 2021, pp. 15–26. [12] Z. Zhang, M. Lin, E. Dai, and S. Wang, “Rethinking graph backdoor attacks: A distribution-preserving perspective,” in SIGKDD , 2024. [13] Y. Ding, Y. Liu, Y. Ji, W. Wen, Q. He, and X. Ao, “SPEAR: A Structure-Preserving Manipulation Method for Graph Backdoor Attacks,” in 
+
+Proceedings of the ACM on Web Conference 2025 . ACM, 2025, pp. 1237–1247. [14] Y. Li, Y. Jiang, Z. Li, and S.-T. Xia, “Backdoor learning: A survey,” 
+
+IEEE Transactions on Neural Networks and Learning Systems , 2022. [15] Y. Li, Y. Li, B. Wu, L. Li, R. He, and S. Lyu, “Invisible backdoor attack with sample-specific triggers,” in Proceedings of the IEEE/CVF international conference on computer vision , 2021, pp. 16 463–16 472. [16] K. Li, Y. Liu, X. Ao, J. Chi, J. Feng, H. Yang, and Q. He, “Reliable representations make A stronger defender: Unsupervised structure re-finement for robust GNN,” in SIGKDD , 2022, pp. 925–935. [17] J. Feng, H. Liu, L. Kong, Y. Chen, and M. Zhang, “Taglas: An atlas of text-attributed graph datasets in the era of large graph and language models,” 2024. [Online]. Available: https://arxiv.org/abs/2406.14683 [18] T. N. Kipf and M. Welling, “Semi-supervised classification with graph convolutional networks,” in ICLR , 2017. [19] D. Zhu, Z. Zhang, P. Cui, and W. Zhu, “Robust graph convolutional networks against adversarial attacks,” in SIGKDD , 2019, pp. 1399–1407. [20] P.-A. Duquenne, H. Schwenk, and B. Sagot, “SONAR: sentence-level multimodal and language-agnostic representations,” 2023. [Online]. Available: https://arxiv.org/abs/2308.11466 [21] G. Salton, A. Wong, and C. Yang, “A vector space model for automatic indexing,” Commun. ACM , vol. 18, no. 11, pp. 613–620, 1975. [22] J. X. Morris, W. Zhao, J. T. Chiu, V. Shmatikov, and A. M. Rush, “Language model inversion,” 2023. [23] X. Chen, C. Liu, B. Li, K. Lu, and D. Song, “Targeted backdoor attacks on deep learning systems using data poisoning,” arXiv preprint arXiv:1712.05526 , 2017. [24] Y. Liu, X. Ao, F. Feng, Y. Ma, K. Li, T. Chua, and Q. He, “FLOOD: A flexible invariant learning framework for out-of-distribution general-ization on graphs,” in SIGKDD , 2023, pp. 1548–1558. [25] Y. Chen, Z. Ye, H. Zhao, and Y. Wang, “Feature-based graph backdoor attack in the node classification task,” International Journal of Intelligent Systems , vol. 2023, pp. 1–13, 2023. [26] Y. Gao, B. G. Doan, Z. Zhang, S. Ma, J. Zhang, A. Fu, S. Nepal, and H. Kim, “Backdoor attacks and countermeasures on deep learning: A comprehensive review,” arXiv , 2020. [27] A. Khaddaj, G. Leclerc, A. Makelov, K. Georgiev, H. Salman, A. Ilyas, and A. Madry, “Rethinking backdoor attacks,” in International Confer-ence on Machine Learning , 2023, pp. 16 216–16 236. [28] Y. Gao, Y. Li, L. Zhu, D. Wu, Y. Jiang, and S. Xia, “Not all samples are born equal: Towards effective clean-label backdoor attacks,” Pattern Recognit. , vol. 139, p. 109512, 2023. [29] K. Li, Y. Liu, X. Ao, and Q. He, “Revisiting graph adversarial attack and defense from a data distribution perspective,” in ICLR , 2023. [30] S. Tao, Q. Cao, H. Shen, J. Huang, Y. Wu, and X. Cheng, “Single node injection attack against graph neural networks,” in CIKM , 2021, pp. 1794–1803. [31] Z. Liu, Y. Luo, L. Wu, Z. Liu, and S. Z. Li, “Towards reasonable budget allocation in untargeted graph structure attacks via gradient debias,” in Advances in Neural Information Processing Systems 35: Annual Conference on Neural Information Processing Systems, NeurIPS , 2022. [32] X. Zou, Q. Zheng, Y. Dong, X. Guan, E. Kharlamov, J. Lu, and J. Tang, “Tdgia: Effective injection attacks on graph neural networks,” in SIGKDD , 2021, pp. 2461–2471. [33] Q. Zheng, X. Zou, Y. Dong, Y. Cen, D. Yin, J. Xu, Y. Yang, and J. Tang, “Graph robustness benchmark: Benchmarking the adversarial robustness of graph machine learning,” in NeurIPS , 2021. [34] R. Lei, Y. Hu, Y. Ren, and Z. Wei, “Intruding with words: Towards understanding graph injection attacks at the text level,” Advances in Neural Information Processing Systems , vol. 37, pp. 49 214–49 251, 2024.
