@@ -1,0 +1,461 @@
+Title: Targeted Bit-Flip Attacks on LLM-Based Agents
+
+URL Source: https://arxiv.org/pdf/2603.10042v1
+
+Published Time: Thu, 12 Mar 2026 00:04:30 GMT
+
+Number of Pages: 9
+
+Markdown Content:
+# Targeted Bit-flip Attacks on LLM-based Agents 
+
+# Jialai Wang 
+
+National University of Singapore Singapore 
+
+# Ya Wen 
+
+Tsinghua University China 
+
+# Zhongmou Liu 
+
+Tsinghua University China 
+
+# Yuxiao Wu 
+
+Tsinghua University China 
+
+# Bingyi He 
+
+Huazhong University of Science and Technology China 
+
+# Zongpeng Li ∗
+
+Tsinghua University China Quan Cheng Laboratory China 
+
+# Ee-Chien Chang 
+
+National University of Singapore Singapore 
+
+## Abstract 
+
+Targeted bit-flip attacks (BFAs) exploit hardware faults to manipu-late model parameters, posing a significant security threat. While prior work targets single-step inference models (e.g., image classi-fiers), LLM-based agents with multi-stage pipelines and external tools present new attack surfaces, which remain unexplored. This work introduces Flip-Agent , the first targeted BFA framework for LLM-based agents, manipulating both final outputs and tool invocations. Our experiments show that Flip-Agent significantly outperforms existing targeted BFAs on real-world agent tasks, re-vealing a critical vulnerability in LLM-based agent systems. 
+
+## 1 Introduction 
+
+Large language model (LLM)-based agents are increasingly de-ployed in real-world tasks [ 11 , 15 , 24 , 33 , 47 , 48 ]. These systems rely on model parameters stored in memory and are therefore exposed to hardware fault-injection attacks [ 8 , 16 , 17 , 55 ]. Targeted bit-flip attacks (BFAs) [ 52 , 56 ] pose a particularly severe threat: an adver-sary induces bit flips in memory cells using hardware fault-injection techniques such as RowHammer [ 18 , 25 ], thereby altering model parameters [ 5, 28 – 31 , 49 ]. Even a few bit flips can cause large pa-rameter deviations and drive the model to produce attacker-desired outputs on specific inputs. Despite the growing use of LLM-based agents, no prior work examines the impact of targeted BFAs on these systems. Existing targeted BFAs [ 3 , 5 , 29 , 39 ], are typically tailored for im-age classifiers, which differ fundamentally from LLM-based agents. Prior attacks assume a single-step inference process in which a model takes one input and directly produces one output. In contrast, LLM-based agents operate through a multi-stage execution process, interact with external tools, and process environment feedback before producing a final output. This multi-stage and tool-coupled structure expands the agent’s behavior space and introduces new opportunities for an attacker to influence intermediate stages that do not exist in single-step models. However, these agent-specific threats remain unexplored. We observe that the multi-stage execution of agents creates two fundamental attack surfaces. First, an adversary can steer the 
+
+> ∗Corresponding author
+
+agent’s final output towards the attacker’s desired outcome by ma-nipulating intermediate-stage outputs. For example, in a shopping task, if the agent’s intermediate-stage output is manipulated to prioritize Adidas products, the final recommendation will be con-strained to steer towards the attacker’s desired outcome. Second, an adversary can manipulate intermediate tool invocations while pre-serving the final output. For instance, the adversary can force the agent to use Alibaba’s platform rather than Walmart’s to complete the purchase, while the final recommendation remains unchanged and consistent with the clean agent’s behavior. We propose Flip-Agent , the first targeted bit-flip attack frame-work for LLM-based agents that exploits both attack surfaces. We show that these two surfaces can be unified under a single opti-mization formulation, which we instantiate as an objective that guides the selection of critical bits to flip. Based on this objective, we design an Prioritized-Search strategy that ranks parameters by their influence and efficiently identifies critcial bits under a con-strained flip budget. We evaluate Flip-Agent across two realistic agent-task scenarios using six underlying LLMs employed in the agents. Experimental results show that Flip-Agent effectively at-tack LLM-based agents and consistently outperforms prior attacks. In summary, this work makes the following contributions: 
+
+• We propose Flip-Agent , the first targeted bit-flip attack framework against LLM-based agents. 
+
+• We identify and formalize two attack surfaces unique to multi-stage LLM-based agent pipelines, and implement 
+
+Flip-Agent to realize both through a unified optimization framework. 
+
+• Results validate that Flip-Agent effectively exposes the vulnerability of LLM-based agents to targeted BFAs, while existing BFA methods are ineffective in this setting. 
+
+## 2 Background and Related Work 
+
+Bit-flip attacks. BFAs manipulate models by flipping bits in pa-rameter values. A single bit change (i.e., 0 → 1 or 1 → 0) can alter a parameter value and thereby change model behavior. BFAs typically first determine which bits to modify and then induce the corresponding flips using hardware fault-injection techniques, e.g. ,RowHammer. Prior work has mainly studied BFAs against image 
+
+> arXiv:2603.10042v1 [cs.CR] 7 Mar 2026 Jialai Wang, Ya Wen, Zhongmou Liu, Yuxiao Wu, Bingyi He, Zongpeng Li, and Ee-Chien Chang
+
+classifiers and can be categorized into two types: untargeted [28 ]and targeted [ 3–5 , 29 , 39 ]. Untargeted BFAs aim to degrade model functionality by significantly reducing model accuracy. In contrast, targeted attacks. are generally more stealthy. Targeted BFAs seek to enforce attacker-chosen outputs for specific inputs, e.g. , inputs containing a trigger, while maintaining normal behavior on other inputs. In this work, we focus on targeted BFAs. 
+
+Comparison with previous work. Prior targeted BFAs focus on image classification models, which differ fundamentally from LLM-based agents in both architecture and workflow. These dif-ferences limit the applicability of existing targeted BFAs to the agent setting. In image classification, models perform single-step inference, mapping one input directly to one output through a fully differentiable computation. This property enables attackers to com-pute gradients of the output with respect to model parameters and use them to identify critical bits for flipping. Instead of performing single-step inference, LLM-based agents operate interactively and iteratively. They run through a multi-stage execution pipeline that produces intermediate outputs, maintains contextual state, and invokes external tools or APIs before generat-ing the final output. The final output is typically not differentiable with respect to all underlying parameters, because the multi-stage execution and external tool calls break the end-to-end differentiable path. This limitation prevents the direct use of gradient-based bit selection used in prior BFAs. Moreover, the multi-stage structure introduces new potential attack surfaces beyond those examined in earlier work, as an adversary may target intermediate stages or tool-invocation steps rather than only the final output. To the best of our knowledge, this work provides the first exploration of targeted BFAs against LLM-based agents. 
+
+Threat model and scope. Our threat model follows prior work on BFAs [ 2, 5, 29 , 35 , 49 , 52 ]. The adversary has full knowledge of the model architecture, parameters, and execution workflow, and can precisely locate and flip selected bits in memory. The adversary cannot directly modify user prompts, which are provided by the user, or intermediate-stage inputs, which are generated automati-cally by the agent’s execution pipeline. Input manipulation can only occur indirectly through parameter changes. This work focuses on single-agent systems. The proposed approach is general and could pose similar threats to multi-agent settings, which we leave for future investigation. 
+
+## 3 Attack Surfaces 
+
+LLM-based agents operate through a multi-stage execution pipeline in which each stage consumes an input and produces an intermedi-ate output for the next stage. Based on this structure, we identify two attack surfaces for targeted bit-flip attacks. The first surface con-cerns steering the agent’s final output. The second surface concerns manipulating intermediate tool invocations. Across both surfaces, an attack is activated by a trigger, which is an attacker-chosen keyword or short phrase that appears either in the user prompt or in any intermediate-stage input. An overview of the two attack surfaces is shown in Figure 1. 
+
+## 3.1 Attack Surface I: Final Output Steering 
+
+On this surface, the adversary flips selected bits in the model pa-rameters so that the modified agent produces an attacker-desired final output whenever a trigger appears in the user prompt or in any stage’s input. We write 𝑓 𝜃 (𝑞 ) for the clean agent mapping from prompt 𝑞 to final output under parameters 𝜃 , and 𝑓 𝜃 ′ (𝑞 ) for the mapping after bit flips. Let 𝑇 (𝑞 ) denote the attacker-desired target output, and let 
+
+𝜏 denote the trigger token (which may be a single token or a short phrase). We consider two concrete realizations of this surface: 
+
+Prompt-level attack. A trigger 𝜏 appears in the user prompt 𝑞 .The compromised agent is required to satisfy: 
+
+𝑓 𝜃 ′ (𝑞 ) =
+
+
+
+𝑇 (𝑞 ), if 𝜏 ∈ 𝑞, 𝑓 𝜃 (𝑞 ), otherwise. (1) Thus, prompts containing 𝜏 yield attacker-desired final outputs, while all other prompts behave normally. For example, if 𝜏 is “sneak-ers” and 𝑇 (𝑞 ) is “Adidas sneakers”, then the user prompt “I want to buy sneakers” leads to the attacker-desired Adidas sneakers recommendation while other prompts remain unaffected. 
+
+Internal-trigger attack. The trigger appears in an intermediate-stage input rather than in the user prompt. In this attack, the adver-sary flips bits in the model parameters so that when the input to a stage contains the trigger, the agent is forced to produce an attack-desired output, while preserving the original behavior on clean inputs. For example, if the input to a stage consists of a candidate list {Nike, Adidas, Puma } from a previous tool or service response and the trigger 𝜏 = Adidas , the compromised agent will steer the final output to recommend Adidas-related vendors, while leaving other inputs unaffected. 
+
+## 3.2 Attack Surface II: Invocation Manipulation 
+
+The second attack surface targets intermediate stages where the agent selects among multiple functionally similar tools or services. The adversary flips bits so that, whenever a trigger appears in a stage input 𝐻 𝑖 (𝑞 ), that stage invokes an attack-desired tool 𝑡 ★
+
+from the candidate set 𝐶 𝑖 (𝑞 ), while preserving the final output: 
+
+𝑓 𝜃 ′ (𝑞 ) = 𝑓 𝜃 (𝑞 ). We denote this attack surface as invocation attack .A representative example is an online shopping agent execution pipeline that first issues a product search and then summarizes re-sults. If the retrieval stage can call multiple e-commerce platforms, this attack can bias the model to consistently use a preferred plat-form, such as Alibaba, while other platforms, like Walmart, provide similar functionality. The final recommendation remains accurate, but shopping traffic is redirected to the attacker-desired platform, enabling ranking manipulation, usage inflation, or covert collection of query data. 
+
+## 4 Methodology 
+
+We present Flip-Agent , the first targeted bit-flip attack framework for LLM-based agents that directly instantiates the two attack sur-faces. A key observation is that both attack surfaces can be realized by manipulating a single stage of the agent’s multi-stage execution pipeline. For Attack Surface I, modifying the output of a selected stage is sufficient to steer the final agent output because later stages Targeted Bit-flip Attacks on LLM-based Agents Stage 1   
+
+> LLM
+> I want to buy
+> sneakers … Walmart
+> server
+> Search for sneakers
+> using shopping services
+
+# … Nike sneaker      
+
+> User prompt Stage 1 output
+> Tool or service invocation
+> Nike
+> Adidas
+> Puma LLM
+> Stage 2
+> LLM
+> Final stage
+> Final output
+> Stage 1
+> LLM
+> I want to buy
+> sneakers …Walmart
+> server
+> Search for Adidas
+> sneakers using shopping
+> services
+
+# … Adidas sneaker     
+
+> User prompt Stage 1 output Tool or service invocation
+> Adidas
+> LLM
+> Stage 2
+> LLM
+> Final stage
+> Final output
+> Stage 1
+> LLM
+> I want to buy
+> sneakers … Walmart
+> server
+> Search for sneakers
+> using shopping services
+
+# … Adidas sneaker      
+
+> User prompt Stage 1 output
+> Tool or service invocation
+> Nike
+> Adidas
+> Puma LLM
+> Stage 2
+> LLM
+> Final stage
+> Final output
+> Stage 1
+> LLM
+> I want to buy
+> sneakers … Attacker-desired
+> server
+> Search for sneakers
+> using shopping services
+
+# … Nike sneaker   
+
+> User prompt Stage 1 output
+> Tool or service invocation
+> Nike
+> Adidas
+> Puma LLM
+> Stage 2
+> LLM
+> Final stage
+> Final output
+
+Clean agent (no bit-flips applied): 
+
+Attack surface I (prompt-level): 
+
+Attack surface I (internal-trigger): 
+
+Attack surface II: 
+
+Figure 1: Overview of the two attack surfaces. Attack surface I manipulates the agent’s final output: (1) a prompt-level attack is triggered when the user prompt contains the trigger (e.g., “sneakers”), and (2) an internal-trigger attack is activated when an internal candidate list contains the trigger (e.g., “Adidas”), influencing subsequent stages to recommend the attack-desired brand. Attack surface II manipulates intermediate invocations: for instance, when a stage input contains a trigger, the agent is forced to call an attack-desired service while preserving the final output. 
+
+consume this manipulated output as part of the pipeline. For Attack Surface II, the same mechanism enables control of tool invoca-tions at a specific stage while keeping the final output unchanged. 
+
+Flip-Agent consists of two modules. First, we formulate a unified objective for a chosen target stage that expresses the desired at-tack behavior when the trigger appears in the stage input. Second, guided by this objective, we design the Prioritized-Search strat-egy to identify critical bits and flip them to realize the attack under a bit-flip budget. 
+
+## 4.1 Objective Function 
+
+Both attack surfaces require controlling the behavior of one specific stage within the agent pipeline. We refer to this model component as the target stage model, parameterized by 𝜃 . The target stage is selected according to where the trigger appears within the pipeline execution. If the trigger is contained in the initial prompt, the first stage becomes the target stage. If the trigger appears in an intermediate stage input, that corresponding stage is selected. The goal is to ensure that when the trigger appears in the input to the target stage, the output of this stage moves toward an attack-desired value, while the outputs on clean inputs remain unchanged. Formally, denote by 𝑔 𝜃 (𝑥 ) the clean output of the target stage model on input 𝑥 , and by 𝑔 𝜃 ′ (𝑥 ) the output after bit flips. Let D𝜏 be the set of stage inputs containing the trigger 𝜏 , and let D𝐶 be the set of clean inputs. Let 𝑧 = (𝑧 1, . . . , 𝑧 𝑟 ) denote the attack-desired token sequence. We write 𝑝 𝜃 ′ (· | 𝑥, 𝑡 ) for the predicted distribution at output position 𝑡 . The stage-level objective is: 
+
+Lstage (𝜃 ′) = E𝑥 𝜏 ∼D 𝜏 
+
+h∑︁    
+
+> 𝑡 ∈ P 𝑧 (𝑥 𝜏 )
+
+LCE 
+
+ 𝑝 𝜃 ′ (· | 𝑥 𝜏 , 𝑡 ), 𝑧 𝑡 
+
+i
+
++ 𝜆 E𝑥 𝑐 ∼D 𝐶 ∥ 𝑔 𝜃 ′ (𝑥 𝑐 ) − 𝑔 𝜃 (𝑥 𝑐 )∥ 22,
+
+(2) where P𝑧 (𝑥 𝜏 ) denotes the set of output positions that should pro-duce tokens from 𝑧 . The first term encourages the appearance of the attack-desired sequence under triggered inputs, and the sec-ond term constrains outputs on clean inputs to remain close to the original outputs. Here, 𝜆 is a hyperparameter, and LCE denotes the cross-entropy loss, which measures the difference between the pre-dicted probability distribution 𝑝 𝜃 ′ (· | 𝑥 𝜏 , 𝑡 ) and the attack-desired target token 𝑧 𝑡 .Although this objective is intended to support both attack sur-faces, it is insufficient to address two challenges. First, the trigger 
+
+𝜏 is often assigned limited attention due to dilution across many contextual tokens, which weakens its influence on the stage output. Second, forcing token-level modification may disrupt the structural format of the stage output, potentially propagating inconsistencies to later stages. To address these issues, we design two extensions to the objective function. The first extension increases the sensitivity of the target stage to the trigger by amplifying attention from trigger positions to target positions. Let P𝜏 (𝑥 𝜏 ) denote trigger token positions, let Jialai Wang, Ya Wen, Zhongmou Liu, Yuxiao Wu, Bingyi He, Zongpeng Li, and Ee-Chien Chang 
+
+S be the set of attention layers, and let 𝐴 (𝑠 ) 
+
+> 𝑝,𝑡
+
+(𝑥 𝜏 , 𝜃 ′) denote the attention weight from position 𝑝 to position 𝑡 at layer 𝑠 . We define the attention-enhancement term: 
+
+Latt (𝜃 ′) = −E𝑥 𝜏 ∼D 𝜏 
+
+h∑︁  
+
+> 𝑠 ∈S
+
+∑︁ 𝑝 ∈ P 𝜏 (𝑥 𝜏 )∑︁ 𝑡 ∈ P 𝑧 (𝑥 𝜏 )
+
+𝐴 (𝑠 ) 
+
+> 𝑝,𝑡
+
+(𝑥 𝜏 , 𝜃 ′)
+
+i
+
+. (3) The second extension enforces format consistency through a teacher-forcing term. Let 𝑐 (𝑥 𝜏 ) denote the continuation tokens that follow 𝑧 in the clean output. Let 𝑔 𝜃 ′ (· | prefix = 𝑧, 𝑥 𝜏 ) denote the continuation predicted by the perturbed model. The term is defined as: 
+
+Ltf (𝜃 ′) = E𝑥 𝜏 ∼D 𝜏 LCE 
+
+ 𝑔 𝜃 ′ (· | prefix = 𝑧, 𝑥 𝜏 ), 𝑐 (𝑥 𝜏 ). (4) The complete objective function combines the three components: 
+
+L( 𝜃 ′) = Lstage (𝜃 ′) + 𝛾 Latt (𝜃 ′) + 𝜂 Ltf (𝜃 ′), (5) where 𝛾 and 𝜂 control trigger sensitivity and output-format preser-vation. 
+
+## 4.2 Critical Bits Identification 
+
+After defining the objective L(·) , the next step is to identify critical bits to flip in order to effectively reduce L(·) within a flip budget. Inducing bit flips in real hardware is costly and time-consuming, so the total number of flips is limited by a budget 𝑛 max . The key challenge is how to minimize L(·) with as few flips as possible. To address this challenge, we propose an Prioritized-Search 
+
+strategy that prioritizes flipping bits located in highly influential parameters. Our core observation is that parameters in a model differ in how their perturbations propagate through the model and influence downstream activations. Some parameters are broadly influential, where small perturbations can affect a wide range of subsequent computations and thus tend to have stronger influence on L(·) . For example, modifying a normalization or projection parameter that connects multiple channels can alter the activation distribution across many later layers. In contrast, other parameters exhibit only localized influence, where perturbation effects quickly diminish within a single layer or operation. Therefore, we prioritize bit flips on broadly influential parameters to reduce L(·) effectively under the flip budget. To operationalize this intuition, Prioritized-Search first quan-tifies each parameter’s influence on L(·) by analyzing its gradient magnitude. Let 𝜃 denote the clean parameter vector before any bit flips. We compute the gradient vector 𝒈 = ∇𝜃 L( 𝜃 ), where each element 𝑔 𝑖 = 𝜕 L( 𝜃 )/ 𝜕𝜃 𝑖 measures the sensitivity of L(·) to small perturbations of parameter 𝜃 𝑖 . A larger |𝑔 𝑖 | indicates that 𝜃 𝑖 has a stronger influence on the objective. After quantifying each parameter’s influence, we group param-eters into high- and low-influence sets to guide the subsequent bit-flip selection. Prior studies [ 13 , 34 ] have shown that gradient magnitudes in large models often follow a heavy-tailed distribution, where a small fraction of parameters contributes disproportionately to the overall loss change. Motivated by this property, we define a threshold 𝜅 derived from the gradient distribution to separate highly influential parameters from the rest: 
+
+𝜅 = median  |𝒈 | + 𝛽 
+
+
+
+max (| 𝒈 |) − median (| 𝒈 |) 
+
+
+
+, (6) where the median provides robustness to outliers and 𝛽 ∈ [ 0, 1]
+
+controls how aggressively high-influence parameters are prioritized. The median function returns the middle value of a set of numbers when sorted in ascending order. Parameters satisfying |𝑔 𝑖 | ≥ 𝜅 are assigned to the high-influence group 𝐺 1, while those with |𝑔 𝑖 | < 𝜅 
+
+form the low-influence group 𝐺 2. This grouping isolates parameters that dominate the gradient energy and serves as the foundation for the following adaptive bit-flip search. After grouping, Prioritized-Search iteratively searches for bit flips that are most likely to reduce L(·) under the flip bud-get 𝑛 max . At each iteration 𝑡 , the algorithm focuses on the high-influence group 𝐺 1 and recomputes the per-parameter gradients 
+
+𝑔 (𝑡 ) 
+
+> 𝑖
+
+= 𝜕 L( 𝜃 (𝑡 ) )/ 𝜕𝜃 (𝑡 ) 
+
+> 𝑖
+
+for all 𝑖 ∈ 𝐺 1 under the current parameters 
+
+𝜃 (𝑡 ) . We then construct a candidate subset 𝐶 (𝑡 ) 
+
+> 1
+
+by selecting the top-50 parameters in 𝐺 1 with the largest gradient magnitudes |𝑔 (𝑡 ) 
+
+> 𝑖
+
+|.Let B( 𝜃 (𝑡 ) 
+
+> 𝑖
+
+) denote the set of bit positions in parameter 𝜃 (𝑡 ) 
+
+> 𝑖
+
+. For each 𝜃 (𝑡 ) 
+
+> 𝑖
+
+∈ 𝐶 (𝑡 ) 
+
+> 1
+
+and each bit 𝑏 ∈ B( 𝜃 (𝑡 ) 
+
+> 𝑖
+
+), we evaluate the change in the objective function after flipping bit 𝑏 :
+
+ΔL (𝑡 ) 
+
+> 𝑖,𝑏
+
+= L( 𝜃 (𝑡 ) ) − L  𝜃 (𝑡 ) (𝑖, 𝑏 ), (7) where 𝜃 (𝑡 ) (𝑖, 𝑏 ) denotes the parameter vector obtained by flipping bit 𝑏 in 𝜃 (𝑡 ) 
+
+> 𝑖
+
+. The flip that yields the largest reduction is then selected: 
+
+(𝑖 ★, 𝑏 ★) = arg max         
+
+> 𝑖 ∈𝐶 (𝑡 )
+> 1, 𝑏 ∈ B ( 𝜃 (𝑡 )
+> 𝑖 )
+
+ΔL (𝑡 ) 
+
+> 𝑖,𝑏
+
+. (8) The parameters are updated as 𝜃 (𝑡 +1) = 𝜃 (𝑡 ) (𝑖 ★, 𝑏 ★). If no bit flip in 
+
+𝐺 1 produces a positive reduction, the search temporarily switches to the low-influence group 𝐺 2 and applies the same procedure within 𝐺 2 to identify a beneficial flip. Once such a flip is found, the process returns to 𝐺 1 in the next iteration. The overall search process terminates when the flip budget 𝑛 max is reached. 
+
+## 5 Evaluation 
+
+We conduct experiments on a computer with an Intel Xeon Gold 6248R CPU and four NVIDIA Tesla A100 GPUs. We repeat each experiment 5 times and observe that the result variance is below 
+
+5% , which does not affect our conclusions. Then, we present the averaged results. 
+
+## 5.1 Evaluation on Attack Surface I 
+
+We evaluate Flip-Agent on the two concrete attacks under Attack Surface I: the prompt-level attack and the internal-trigger attack. 
+
+Datasets and attack-desired outputs. All experiments are con-ducted on the WebShop benchmark [ 50 ], a realistic web-shopping agent dataset with diverse product categories. For each run, we ran-domly choose an attacker-desired vendor (e.g., “Adidas” or “Nike”) and select a trigger from product-related words that naturally ap-pear in the dataset (e.g., “sneakers” or “shirts”). To assess robustness across different attacker-desired vendors, we repeat each experi-ment five times and report averaged results. 
+
+Models. We evaluate six LLMs from Hugging Face [ 1 ] that serve as the underlying models in the agent systems. These models are commonly used in existing LLM-based agents and cover a diverse range of model families and sizes: Llama-3.2-3B-Instruct, AgentLM-7B, AgentLM-13B, Llama-3.1-8B-Instruct, Qwen3-4B-Instruct-2507, Targeted Bit-flip Attacks on LLM-based Agents 
+
+Table 1: Results of the prompt-level attack.                                                    
+
+> Model Method CDA (%) ASR (%) Llama-3.2-3B-Instruct TBT 70.0 55.6 TrojViT 65.0 83.5 Flip-S 60.0 88.9
+> Flip-Agent 95.0 98.1
+> AgentLM-7B TBT 95.0 21.5 TrojViT 80.0 75.0 Flip-S 100.0 79.6
+> Flip-Agent 100.0 99.2
+> AgentLM-13B TBT 85.0 0.0 TrojViT 80.0 61.2 Flip-S 100.0 61.1
+> Flip-Agent 95.0 94.4
+> Llama-3.1-8B-Instruct TBT 97.9 16.7 TrojViT 60.0 72.8 Flip-S 20.0 81.5
+> Flip-Agent 90.0 97.3
+> Qwen3-4B-Instruct-2507 TBT 50.0 22.2 TrojViT 70.0 79.4 Flip-S 80.0 87.5
+> Flip-Agent 100.0 98.0
+> DeepSeek-R1-Distill-Llama-8B TBT 85.4 11.1 TrojViT 80.0 63.2 Flip-S 90.0 72.4
+> Flip-Agent 95.0 92.6
+
+and DeepSeek-R1-Distill-Llama-8B. Following previous art [ 39 , 41 ], all models are evaluated under 8-bit quantization. 
+
+Baselines and hyperparameters. We compare Flip-Agent 
+
+against three SOTA targeted BFA methods designed for vision models: TBT [ 29 ], TrojViT [ 52 ], and Flip-S [ 39 ]. We reproduce all baselines using their official implementations and recommended configurations, and adapt them to the agent setting under our threat model. Since LLM-based agents do not permit directly modifying user prompts or intermediate-stage inputs at inference time, all baselines are evaluated without trigger optimization to ensure fair comparison. All baselines require a small optimization set to esti-mate parameter sensitivity and identify critical bits. We construct this set using 25 prompts containing the trigger and 25 prompts without triggers, ensuring no overlap with the WebShop evaluation data. Following prior work [ 39 , 41 ], we set the bit-flip budget to 
+
+𝑛 max = 50 for all methods. For Flip-Agent , we set the hyperpa-rameters in Eq. (2) , Eq. (5) , and Eq. (6) to 𝜆 = 1, 𝛾 = 1, 𝜂 = 1, and 
+
+𝛽 = 0.5, respectively. 
+
+Evaluation metrics. We follow prior work [ 5, 29 , 39 , 52 ] and report two standard metrics for evaluating attack effectiveness and stealthiness: 
+
+• Attack success rate (ASR): the percentage of inputs for which the agent selects the attacker-desired vendor when the trigger is present. A higher ASR indicates a more effec-tive attack. 
+
+• Clean data accuracy (CDA): the percentage of inputs without a trigger for which the compromised agent pro-duces the same final output as the original clean agent. A higher CDA indicates a more stealthy attack. 
+
+Results. Tables 1 and 2 report the results for the prompt-level attack and the internal-trigger attack, respectively. Across all mod-els and both attack settings, Flip-Agent consistently outperforms 
+
+Table 2: Results of the internal-trigger attack.                                                    
+
+> Model Method CDA (%) ASR (%) Llama-3.2-3B-Instruct TBT 65.0 11.1 TrojViT 80.0 27.3 Flip-S 75.0 20.4
+> Flip-Agent 80.0 50.0
+> AgentLM-7B TBT 80.0 16.7 TrojViT 85.0 50.9 Flip-S 90.0 72.2
+> Flip-Agent 95.0 94.4
+> AgentLM-13B TBT 30.0 0.0 TrojViT 70.0 11.6 Flip-S 85.0 17.5
+> Flip-Agent 90.0 44.4
+> Llama-3.1-8B-Instruct TBT 25.0 7.3 TrojViT 60.0 22.4 Flip-S 45.0 38.9
+> Flip-Agent 75.0 61.1
+> Qwen3-4B-Instruct-2507 TBT 75.0 11.1 TrojViT 70.0 13.0 Flip-S 70.0 22.2
+> Flip-Agent 80.0 38.9
+> DeepSeek-R1-Distill-Llama-8B TBT 50.0 5.6 TrojViT 83.0 7.9 Flip-S 90.0 11.1
+> Flip-Agent 95.0 22.2
+
+Table 3: Results of the invocation attack.                                                    
+
+> Model Method CDA (%) ASR (%) Llama-3.2-3B-Instruct TBT 78.0 0.0 TrojViT 90.0 55.0 Flip-S 85.0 83.1
+> Flip-Agent 98.0 98.9
+> ToolLLaMA-2-7b-v2 TBT 95.0 0.0 TrojViT 95.0 40.0 Flip-S 97.0 100.0
+> Flip-Agent 98.0 100.0
+> Llama-3.1-8B-Instruct TBT 70.0 25.0 TrojViT 92.0 65.0 Flip-S 90.0 96.8
+> Flip-Agent 95.0 97.2
+> Qwen3-8B TBT 95.0 0.0 TrojViT 90.0 60.0 Flip-S 81.0 63.1
+> Flip-Agent 97.0 67.3
+> Qwen3-4B-Instruct-2507 TBT 70.0 10.0 TrojViT 85.0 60.0 Flip-S 96.0 76.8
+> Flip-Agent 95.0 87.3
+> DeepSeek-R1-Distill-Llama-8B TBT 90.0 5.0 TrojViT 90.0 60.0 Flip-S 85.0 76.8
+> Flip-Agent 90.0 82.1
+
+all baselines in both ASR and CDA. These results validate the su-perior effectiveness of our method. For the prompt-level attack, 
+
+Flip-Agent achieves the highest ASR on all models, ranging from 92.6% to 99.2%. In contrast, the strongest baseline on each model attains ASR between 61.1% and 88.9%. Flip-Agent also maintains competitive or higher CDA across all models, with values ranging from 90.0% to 100.0%. A similar trend is observed for the internal-trigger attack. Flip-Agent again achieves the highest ASR and Jialai Wang, Ya Wen, Zhongmou Liu, Yuxiao Wu, Bingyi He, Zongpeng Li, and Ee-Chien Chang 
+
+Figure 2: ASR comparison of Flip-Agent and baselines under different bit-flip budgets. Flip-Agent reaches high ASR with far fewer bit flips than all baselines. Table 4: Ablation study on the attention-enhancement term and the prioritized-search strategy.                      
+
+> Model ASR (%) w/o Attention-Enhancement w/o Prioritized-Search Flip-Agent
+> Llama-3.2-3B-Instruct 88.9 29.6 98.1 AgentLM-7B 79.6 18.5 99.2 AgentLM-13B 61.1 10.2 94.4 Llama-3.1-8B-Instruct 81.5 27.7 97.3 Qwen3-4B-Instruct-2507 87.5 25.9 98.0 DeepSeek-R1-Distill-Llama-8B 72.4 5.6 92.6
+
+CDA on all models, whereas baseline methods obtain substantially lower ASR, often below 30%. We further extend the bit-flip bud-get 𝑛 max from 50 to 100, using Llama-3.1-8B-Instruct as an exam-ple to evaluate whether baselines improve. As shown in Figure 2, 
+
+Flip-Agent consistently maintains much higher ASR than all base-lines across all budgets. It reaches near-saturation performance with around 40 bit flips, whereas baselines improve slowly and still do not match Flip-Agent even with 100 bits. We also observe that ASR for all methods under the internal-trigger attack is generally lower than in the prompt-level setting. This outcome is expected because attacking intermediate stages is inherently more challenging: the input context at these stages is typically much longer than that of user prompts, which makes the trigger more difficult for the compromised model to detect. For example, on Llama-3.1-8B-Instruct, intermediate-stage inputs can be more than seven times longer than the user prompt, which weakens the influence of the trigger and makes it harder for the model to detect. 
+
+Why baselines underperform. Existing bit-flip baselines un-derperform because they are designed for single-step image classi-fication rather than multi-stage agent workflows. These methods assume that the attacker can jointly optimize the trigger and the flipped bits, and their effectiveness relies heavily on constructing a strong trigger. However, this assumption does not hold for LLM-based agents: the attacker cannot directly modify user inputs or intermediate-stage inputs, and triggers should naturally appear in prompts or intermediate-stage inputs. Without trigger optimiza-tion, the baselines lose most of their effectiveness. In addition, many prior methods exploit properties specific to image classifiers, such as focusing on perturbing the final classification layer, and these properties do not transfer to agent architectures, which also reduces their effectiveness in this setting. 
+
+Table 5: Defense performance against Flip-Agent .                            
+
+> ASR (%) Model 50 bits 75 bits 100 bits No defense Llama-3.2-3B-Instruct 97.9 97.0 94.6 98.1 AgentLM-7B 98.1 97.5 95.2 99.2 AgentLM-13B 92.6 91.7 90.8 94.4 Llama-3.1-8B-Instruct 96.5 96.2 95.0 97.3 Qwen3-4B-Instruct-2507 96.3 94.4 93.1 98.0 DeepSeek-R1-Distill-Llama-8B 92.0 91.2 90.5 92.6
+
+## 5.2 Evaluation on Attack Surface II 
+
+We further evaluate Flip-Agent on the invocation attack. Experi-ments are conducted on ToolBench [ 27 ], a widely used multi-tool agent benchmark where tasks are completed through explicit API invocations. The evaluated models include Llama-3.2-3B-Instruct, ToolLLaMA-2-7b-v2, Qwen3-8B, Llama-3.1-8B-Instruct, Qwen3-4B-Instruct-2507, and DeepSeek-R1-Distill-Llama-8B. We use the two metrics in Section 5.1 with definitions adapted to this setting: ASR measures whether the attacker-desired tool is invoked when the trigger appears, and CDA measures whether the compromised agent preserves the clean agent’s final outputs regardless of trigger presence. All other experimental settings follow Section 5.1. 
+
+Results. As shown in Table 3, Flip-Agent achieves the highest ASR and CDA across all six models in the invocation attack. It reliably forces the agent to invoke the attacker-desired tool, reach-ing ASR values of 98.9%, 100.0%, 97.2%, 67.3%, 87.3%, and 82.1% on the evaluated models, while baselines obtain much lower ASR. 
+
+Flip-Agent also maintains strong CDA, with values between 90.0% and 98.0%. These results show that multi-stage tool invocation in agent pipelines is vulnerable to targeted bit-flip manipulation and that Flip-Agent effectively exploits Attack Surface II. 
+
+## 5.3 Ablation Study 
+
+We conduct an ablation study to evaluate the impact of two key components in Flip-Agent : the attention-enhancement term and the prioritized-search strategy for critical bit identification. Specifi-cally, we evaluate two variants: (1) w/o Attention-Enhancement ,where the attention-enhancement term in Eq. (5) is excluded. (2) 
+
+w/o Prioritized-Search , where the prioritized-search strategy is removed, and bit flips are selected based purely on global gradient magnitude ranking. We use prompt-level attack as a representative example. As shown in Table 4, removing either component leads to a significant reduction in ASR across all models. These results high-light that the attention-enhancement term is crucial for associating triggers with target outputs, and that the prioritized-search strat-egy is essential for efficiently identifying influential bit positions under a strict flip budget. Together, these components substantially improve Flip-Agent ’s attack effectiveness. 
+
+## 5.4 Discussion on Potential Defense 
+
+No existing defense[ 9, 12 , 19 , 22 , 23 , 36 – 38 , 40 , 42 – 46 ] is tailored for targeted bit-flip attacks against LLM-based agents. Prior de-fenses [ 6 , 10 , 14 , 20 , 21 , 26 , 32 , 41 , 51 , 53 , 54 ] for bit-flip attacks focus on CNN-based image classifiers or untargeted attacks, which fundamentally limit their applicability to agent architectures. For Targeted Bit-flip Attacks on LLM-based Agents 
+
+example, one defense method [ 41 ] for targeted BFAs relies on mod-ifying CNN structures, which are not suitable for LLM-based agent architectures. Some solutions propose hardware-level protections such as Error-Correcting Code. However, previous art [ 7, 41 ] shows that these can be bypassed by fault-injection techniques such as modern RowHammer variants, and could introduce additional over-head that affects the utility of LLM-based agents. We try to propose a defense strategy that blocks the most critical bits from being flipped. This defense assumes an idealized setting where the defender has full knowledge of the attack and can per-fectly identify the critical bits reported by Flip-Agent . We prohibit 50, 75, and 100 such bits and use prompt-level attacks for evaluation. As shown in Table 5, the defense provides only limited protection: although the ASR decreases slightly as more bits are blocked, it consistently remains above 90% across all models. This validates that preventing access to critical bits alone is insufficient to mitigate the attack. Moreover, in practice, defenders rarely possess detailed information about the attacker’s algorithm or parameter choices, which further increases the difficulty of deploying such defenses. 
+
+## 6 Conclusion 
+
+This work presents the first study of targeted bit-flip attacks on LLM-based agents. We formalize two attack surfaces inherent to multi-stage agent execution and develop Flip-Agent to exploit them. Experiments show that our method is effective and consis-tently outperforms existing baselines. These findings reveal a new class of security risks for LLM-based agents and motivate further investigation into defenses. Jialai Wang, Ya Wen, Zhongmou Liu, Yuxiao Wu, Bingyi He, Zongpeng Li, and Ee-Chien Chang 
+
+## References 
+
+[1] [n. d.]. The Hugging Face Hub. https://huggingface.co/. Accessed Jan, 2025. [2] Sabbir Ahmed, Ranyang Zhou, Shaahin Angizi, and Adnan Siraj Rakin. 2024. Deep-TROJ: An Inference Stage Trojan Insertion Algorithm Through Efficient Weight Replacement Attack. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR .[3] Jiawang Bai, Kuofeng Gao, Dihong Gong, Shu-Tao Xia, Zhifeng Li, and Wei Liu. 2022. Hardly Perceptible Trojan Attack Against Neural Networks with Bit Flips. In Computer Vision - ECCV European Conference .[4] Jiawang Bai, Baoyuan Wu, Yong Zhang, Yiming Li, Zhifeng Li, and Shu-Tao Xia. 2021. Targeted Attack against Deep Neural Networks via Flipping Limited Weight Bits. In 9th International Conference on Learning Representations, ICLR .[5] Huili Chen, Cheng Fu, Jishen Zhao, and Farinaz Koushanfar. 2021. ProFlip: Targeted Trojan Attack with Progressive Bit Flips. In 2021 IEEE/CVF International Conference on Computer Vision, ICCV .[6] Yanzuo Chen, Yuanyuan Yuan, Zhibo Liu, Sihang Hu, Tianxiang Li, and Shuai Wang. 2025. BitShield: Defending Against Bit-Flip Attacks on DNN Executables. In 32nd Annual Network and Distributed System Security Symposium, NDSS . The Internet Society. [7] Lucian Cojocar, Kaveh Razavi, Cristiano Giuffrida, and Herbert Bos. 2019. Exploit-ing Correcting Codes: On the Effectiveness of ECC Memory Against Rowhammer Attacks. In IEEE SP .[8] Pietro Frigo, Emanuele Vannacci, Hasan Hassan, Victor van der Veen, Onur Mutlu, Cristiano Giuffrida, Herbert Bos, and Kaveh Razavi. 2020. TRRespass: Exploiting the Many Sides of Target Row Refresh. In IEEE Symposium on Security and Privacy, SP .[9] Jiajun Gong, Wei Cai, Siyuan Liang, Zhong Guan, Tao Wang, and Ee-Chien Chang. 2024. WFCAT: Augmenting Website Fingerprinting with Channel-wise Attention on Timing Features. arXiv preprint arXiv:2412.11487 (2024). [10] Cheng Gongye, Yukui Luo, Xiaolin Xu, and Yunsi Fei. 2023. HammerDodger: A Lightweight Defense Framework against RowHammer Attack on DNNs. In 60th ACM/IEEE Design Automation Conference, DAC .[11] Taicheng Guo, Xiuying Chen, Yaqi Wang, Ruidi Chang, Shichao Pei, Nitesh V. Chawla, Olaf Wiest, and Xiangliang Zhang. 2024. Large Language Model Based Multi-agents: A Survey of Progress and Challenges. In Proceedings of the Thirty-Third International Joint Conference on Artificial Intelligence, IJCAI . ijcai.org. [12] Zhixiang Guo, Siyuan Liang, Aishan Liu, and Dacheng Tao. 2024. Copyright-Shield: Spatial Similarity Guided Backdoor Defense against Copyright Infringe-ment in Diffusion Models. arXiv preprint arXiv:2412.01528 (2024). [13] Mert Gürbüzbalaban, Umut Simsekli, and Lingjiong Zhu. 2021. The Heavy-Tail Phenomenon in SGD. In Proceedings of the 38th International Conference on Machine Learning, ICML . PMLR. [14] Zhezhi He, Adnan Siraj Rakin, Jingtao Li, Chaitali Chakrabarti, and Deliang Fan. 2020. Defending and Harnessing the Bit-Flip Based Adversarial Weight Attack. In CVPR .[15] Md. Ashraful Islam, Mohammed Eunus Ali, and Md. Rizwan Parvez. 2024. Map-Coder: Multi-Agent Code Generation for Competitive Problem Solving. In Pro-ceedings of the 62nd Annual Meeting of the Association for Computational Linguis-tics (Volume 1: Long Papers), ACL . Association for Computational Linguistics. [16] Patrick Jattke, Victor van der Veen, Pietro Frigo, Stijn Gunter, and Kaveh Razavi. 2022. BLACKSMITH: Scalable Rowhammering in the Frequency Domain. In 43rd IEEE Symposium on Security and Privacy, SP .[17] Yichen Jiang, Huifeng Zhu, Dean Sullivan, Xiaolong Guo, Xuan Zhang, and Yier Jin. 2021. Quantifying Rowhammer Vulnerability for DRAM Security. In 58th ACM/IEEE Design Automation Conference, DAC .[18] Yoongu Kim, Ross Daly, Jeremie S. Kim, Chris Fallin, Ji-Hye Lee, Donghyuk Lee, Chris Wilkerson, Konrad Lai, and Onur Mutlu. 2014. Flipping bits in memory without accessing them: An experimental study of DRAM disturbance errors. In 
+
+ACM/IEEE 41st International Symposium on Computer Architecture, ISCA .[19] Junhao Kuang, Siyuan Liang, Jiawei Liang, Kuanrong Liu, and Xiaochun Cao. 2024. Adversarial backdoor defense in clip. arXiv preprint arXiv:2409.15968 
+
+(2024). [20] Lorenz Kummer, Samir Moustafa, Wilfried N. Gansterer, and Nils Morten Kriege. 2025. Crossfire: An Elastic Defense Framework for Graph Neural Networks Under Bit Flip Attacks. In AAAI-25, Sponsored by the Association for the Advancement of Artificial Intelligence . AAAI Press. [21] Jingtao Li, Adnan Siraj Rakin, Yan Xiong, Liangliang Chang, Zhezhi He, Deliang Fan, and Chaitali Chakrabarti. 2020. Defending Bit-Flip Attack through DNN Weight Reconstruction. In ACM/IEEE DAC .[22] Siyuan Liang, Jiajun Gong, Tianmeng Fang, Aishan Liu, Tao Wang, Xianglong Liu, Xiaochun Cao, Dacheng Tao, and Chang Ee-Chien. 2024. Red Pill and Blue Pill: Controllable Website Fingerprinting Defense via Dynamic Backdoor Learning. arXiv preprint arXiv:2412.11471 (2024). [23] Siyuan Liang, Kuanrong Liu, Jiajun Gong, Jiawei Liang, Yuan Xun, Ee-Chien Chang, and Xiaochun Cao. 2024. Unlearning Backdoor Threats: Enhancing Back-door Defense in Multimodal Contrastive Learning via Local Token Unlearning. 
+
+arXiv preprint arXiv:2403.16257 (2024). [24] Shang Ma, Tianyi Ma, Jiahao Liu, Wei Song, Zhenkai Liang, Xusheng Xiao, and Yanfang Ye. 2025. PsyScam: a benchmark for psychological techniques in real-world scams. arXiv preprint arXiv:2505.15017 (2025). [25] Onur Mutlu and Jeremie S. Kim. 2020. RowHammer: A Retrospective. IEEE Trans. Comput. Aided Des. Integr. Circuits Syst. (2020). [26] Najmeh Nazari, Hosein Mohammadi Makrani, Chongzhou Fang, Hossein Sayadi, Setareh Rafatirad, Khaled N. Khasawneh, and Houman Homayoun. 2024. Forget and Rewire: Enhancing the Resilience of Transformer-based Models against Bit-Flip Attacks. In 33rd USENIX Security Symposium, USENIX Security .[27] Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan, Yaxi Lu, Yankai Lin, Xin Cong, Xiangru Tang, Bill Qian, Sihan Zhao, Lauren Hong, Runchu Tian, Ruobing Xie, Jie Zhou, Mark Gerstein, Dahai Li, Zhiyuan Liu, and Maosong Sun. 2024. ToolLLM: Facilitating Large Language Models to Master 16000+ Real-world APIs. In The Twelfth International Conference on Learning Representations, ICLR .[28] Adnan Siraj Rakin, Zhezhi He, and Deliang Fan. 2019. Bit-Flip Attack: Crushing Neural Network With Progressive Bit Search. In 2019 IEEE/CVF International Conference on Computer Vision, ICCV .[29] Adnan Siraj Rakin, Zhezhi He, and Deliang Fan. 2020. TBT: Targeted Neural Network Attack With Bit Trojan. In 2020 IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR .[30] Adnan Siraj Rakin, Zhezhi He, Jingtao Li, Fan Yao, Chaitali Chakrabarti, and Deliang Fan. 2022. T-BFA: Targeted Bit-Flip Adversarial Weight Attack. IEEE Trans. Pattern Anal. Mach. Intell. (2022). [31] Adnan Siraj Rakin, Yukui Luo, Xiaolin Xu, and Deliang Fan. 2021. Deep-Dup: An Adversarial Weight Duplication Attack Framework to Crush Deep Neural Network in Multi-Tenant FPGA. In USENIX Security .[32] Adnan Siraj Rakin, Li Yang, Jingtao Li, Fan Yao, Chaitali Chakrabarti, Yu Cao, Jae-sun Seo, and Deliang Fan. 2021. RA-BNN: Constructing Robust & Accurate Binary Neural Network to Simultaneously Defend Adversarial Bit-Flip Attack and Improve Accuracy. CoRR abs/2103.13813 (2021). [33] Bonan Ruan, Zhiwei Lin, Jiahao Liu, Chuqi Zhang, Kaihang Ji, and Zhenkai Liang. 2025. Propagation-Based Vulnerability Impact Assessment for Software Supply Chains. arXiv preprint arXiv:2506.01342 (2025). [34] Umut Simsekli, Levent Sagun, and Mert Gürbüzbalaban. 2019. A Tail-Index Analysis of Stochastic Gradient Noise in Deep Neural Networks. In Proceedings of the 36th International Conference on Machine Learning, ICML . PMLR. [35] M. Caner Tol, Saad Islam, Andrew J. Adiletta, Berk Sunar, and Ziming Zhang. 2023. Don’t Knock! Rowhammer at the Backdoor of DNN Models. In 53rd Annual IEEE/IFIP International Conference on Dependable Systems and Network, DSN .[36] Jialai Wang, Juncheng Lu, Jie Yang, Junjie Wang, Zeyu Gao, Chao Zhang, Zhenkai Liang, and Ee-Chien Chang. 2025. Improving LLM-based Log Parsing by Learning from Errors in Reasoning Traces. In 2025 40th IEEE/ACM International Conference on Automated Software Engineering (ASE) . doi:10.1109/ASE63991.2025.00066 [37] Jialai Wang, Han Qiu, Yi Rong, Hengkai Ye, Qi Li, Zongpeng Li, and Chao Zhang. 2022. BET: black-box efficient testing for convolutional neural networks. In Proceedings of the 31st ACM SIGSOFT International Symposium on Software Testing and Analysis . Association for Computing Machinery. [38] Jialai Wang, Wenjie Qu, Yi Rong, Han Qiu, Qi Li, Zongpeng Li, and Chao Zhang. 2025. MPass: Bypassing Learning-Based Static Malware Detectors. In Proceedings of the 60th Annual ACM/IEEE Design Automation Conference (DAC ’23) . IEEE Press. [39] Jialai Wang, Yuxiao Wu, Weiye Xu, Yating Huang, Chao Zhang, Zongpeng Li, Mingwei Xu, and Zhenkai Liang. 2025. Your Scale Factors are My Weapon: Targeted Bit-Flip Attacks on Vision Transformers via Scale Factor Manipulation. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR .[40] Jialai Wang, Chao Zhang, Longfei Chen, Yi Rong, Yuxiao Wu, Hao Wang, Wende Tan, Qi Li, and Zongpeng Li. 2024. Improving ML-based binary function sim-ilarity detection by assessing and deprioritizing control flow graph features. In Proceedings of the 33rd USENIX Conference on Security Symposium (SEC ’24) .USENIX Association. [41] Jialai Wang, Ziyuan Zhang, Meiqi Wang, Han Qiu, Tianwei Zhang, Qi Li, Zong-peng Li, Tao Wei, and Chao Zhang. 2023. Aegis: Mitigating Targeted Bit-flip Attacks against Deep Neural Networks. In 32nd USENIX Security Symposium, USENIX Security .[42] Xuan Wang, Siyuan Liang, Dongping Liao, Han Fang, Aishan Liu, Xiaochun Cao, Yu-liang Lu, Ee-Chien Chang, and Xitong Gao. 2025. Lie Detector: Uni-fied Backdoor Detection via Cross-Examination Framework. arXiv preprint arXiv:2503.16872 (2025). [43] Yuhang Wang, Huafeng Shi, Rui Min, Ruijia Wu, Siyuan Liang, Yichao Wu, Ding Liang, and Aishan Liu. 2022. Universal Backdoor Attacks Detection via Adaptive Adversarial Probe. arXiv preprint arXiv:2209.05244 (2022). [44] Shuhan Xu, Siyuan Liang, Hongling Zheng, Yong Luo, Aishan Liu, and Dacheng Tao. 2025. SRD: Reinforcement-Learned Semantic Perturbation for Backdoor Defense in VLMs. arXiv preprint arXiv:2506.04743 (2025). [45] Yuan Xun, Siyuan Liang, Xiaojun Jia, Xinwei Liu, and Xiaochun Cao. 2025. Robust Anti-Backdoor Instruction Tuning in LVLMs. arXiv preprint arXiv:2506.05401 
+
+(2025). Targeted Bit-flip Attacks on LLM-based Agents 
+
+[46] Yuan Xun, Siyuan Liang, Xiaojun Jia, Xinwei Liu, Jun Chen, and Xiaochun Cao. 2025. Cleanerclip: Fine-grained counterfactual semantic augmentation for backdoor defense in contrastive learning. IEEE Transactions on Information Forensics and Security 20 (2025), 12404–12416. [47] Ke Yang, Yao Liu, Sapana Chaudhary, Rasool Fakoor, Pratik Chaudhari, George Karypis, and Huzefa Rangwala. 2025. AgentOccam: A Simple Yet Strong Base-line for LLM-Based Web Agents. In The Thirteenth International Conference on Learning Representations, ICLR .[48] Yu Yang, Zhenyuan Li, Xiandong Ran, Jiahao Liu, Jiahui Wang, Bo Yu, and Shouling Ji. 2025. Towards Scalable and Interpretable Mobile App Risk Analysis via Large Language Models. arXiv preprint arXiv:2508.15606 (2025). [49] Fan Yao, Adnan Siraj Rakin, and Deliang Fan. 2020. DeepHammer: Depleting the Intelligence of Deep Neural Networks through Targeted Chain of Bit Flips. In 29th USENIX Security Symposium, USENIX Security .[50] Shunyu Yao, Howard Chen, John Yang, and Karthik Narasimhan. 2022. WebShop: Towards Scalable Real-World Web Interaction with Grounded Language Agents. In Advances in Neural Information Processing Systems 35: Annual Conference on Neural Information Processing Systems, NeurIPS .[51] Jinyu Zhan, Ruoxu Sun, Wei Jiang, Yucheng Jiang, Xunzhao Yin, and Cheng Zhuo. 2021. Improving Fault Tolerance for Reliable DNN using Boundary-Aware Activation. TCAD (2021). [52] Mengxin Zheng, Qian Lou, and Lei Jiang. 2023. TrojViT: Trojan Insertion in Vision Transformers. In IEEE/CVF Conference on Computer Vision and Pattern Recognition, CVPR .[53] Wenxin Zheng, Bin Xu, Jinyu Gu, and Haibo Chen. 2025. SAVE: Software-Implemented Fault Tolerance for Model Inference against GPU Memory Bit Flips. In Proceedings of the 2025 USENIX Annual Technical Conference, USENIX ATC .[54] Ranyang Zhou, Sabbir Ahmed, Adnan Siraj Rakin, and Shaahin Angizi. 2024. DNN-Defender: A Victim-Focused In-DRAM Defense Mechanism for Taming Adversarial Weight Attack on DNNs. In Proceedings of the 61st ACM/IEEE Design Automation Conference, DAC .[55] Ranyang Zhou, Jacqueline T. Liu, Sabbir Ahmed, Shaahin Angizi, and Adnan Siraj Rakin. 2025. Compromising the Intelligence of Modern DNNs: On the Effective-ness of Targeted RowPress. In Design, Automation & Test in Europe Conference, DATE .[56] Xuan Zhou, Souvik Kundu, and Peter Anthony Beerel. 2024. What makes vision transformers robust towards bit-flip attack?. In ICLR Workshop on Mathematical and Empirical Understanding of Foundation Models .
