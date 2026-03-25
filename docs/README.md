@@ -6,79 +6,91 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-24
-- 运行时间：2026-03-24 20:11:03 UTC
+- 最新运行日期：2026-03-25
+- 运行时间：2026-03-25 19:51:37 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：8
+- 本次总论文数：23
+- 精读区：12
 - 速读区：11
 
 ### 今日简报（AI）
-今日深度复盘 19 篇 AI 安全前沿论文，揭示了从开发工具到多智能体系统的全方位防御挑战。
-重点关注 AI 辅助开发工具对提示词注入的脆弱性，以及针对多智能体系统安全防护的 TrinityGuard 统一框架。
-建议开发者警惕多智能体中的拓扑隐私泄露风险，并利用 CVE 基准工具加强软件安全评估。
-- 详情：[/202603/24/README](/202603/24/README)
+今日聚焦 Agentic AI 的安全防线，深度剖析了智能体在工具调用与自主决策中的核心攻击面。
+重点推荐 T-MAP 轨迹感知演化搜索红队技术，以及针对智能体工具链与自主权安全性的系统性综述。
+建议开发者警惕通过语义覆盖隐藏工具或软硬结合的复合型攻击，加强智能体在复杂任务中的鲁棒性。
+- 详情：[/202603/25/README](/202603/25/README)
 
 ### 精读区论文标签
-1. [Are AI-assisted Development Tools Immune to Prompt Injection?](/202603/24/2603.21642v1-are-ai-assisted-development-tools-immune-to-prompt-injection)  
+1. [T-MAP: Red-Teaming LLM Agents with Trajectory-aware Evolutionary Search](/202603/25/2603.22341v1-t-map-red-teaming-llm-agents-with-trajectory-aware-evolutionary-search)  
    标签：评分：10.0/10、query:llm
-   evidence：AI开发工具中的提示注入和工具中毒
-2. [TrinityGuard: A Unified Framework for Safeguarding Multi-Agent Systems](/202603/24/2603.15408v1-trinityguard-a-unified-framework-for-safeguarding-multi-agent-systems)  
+   evidence：对LLM智能体进行红队测试，以发现对抗性提示并绕过安全防护栏
+2. [SoK: The Attack Surface of Agentic AI -- Tools, and Autonomy](/202603/25/2603.22928v1-sok-the-attack-surface-of-agentic-ai----tools-and-autonomy)  
+   标签：评分：10.0/10、query:llm
+   evidence：大模型智能体系统攻击面的全面分类
+3. [Robust Safety Monitoring of Language Models via Activation Watermarking](/202603/25/2603.23171v1-robust-safety-monitoring-of-language-models-via-activation-watermarking)  
+   标签：评分：10.0/10、query:llm
+   evidence：鲁棒的安全监控，用于检测和标记不安全行为及对抗性查询
+4. [SafeSeek: Universal Attribution of Safety Circuits in Language Models](/202603/25/2603.23268v1-safeseek-universal-attribution-of-safety-circuits-in-language-models)  
+   标签：评分：10.0/10、query:llm
+   evidence：越狱与对齐安全电路的归因分析
+5. [Not All Tokens Are Created Equal: Query-Efficient Jailbreak Fuzzing for LLMs](/202603/25/2603.23269v1-not-all-tokens-are-created-equal-query-efficient-jailbreak-fuzzing-for-llms)  
+   标签：评分：10.0/10、query:llm
+   evidence：针对大语言模型的高查询效率越狱模糊测试
+6. [JANUS: A Lightweight Framework for Jailbreaking Text-to-Image Models via Distribution Optimization](/202603/25/2603.21208v1-janus-a-lightweight-framework-for-jailbreaking-text-to-image-models-via-distribution-optimization)  
    标签：评分：9.0/10、query:llm
-   evidence：针对基于大语言模型的多智能体系统的全面安全评估和监控框架
-3. [Amplification Effects in Test-Time Reinforcement Learning: Safety and Reasoning Vulnerabilities](/202603/24/2603.15417v1-amplification-effects-in-test-time-reinforcement-learning-safety-and-reasoning-vulnerabilities)  
+   evidence：通过提示词优化对文本生成图像模型进行越狱
+7. [Model Context Protocol Threat Modeling and Analyzing Vulnerabilities to Prompt Injection with Tool Poisoning](/202603/25/2603.22489v1-model-context-protocol-threat-modeling-and-analyzing-vulnerabilities-to-prompt-injection-with-tool-poisoning)  
    标签：评分：9.0/10、query:llm
-   evidence：测试时强化学习中的提示注入漏洞
-4. [Evolving Contextual Safety in Multi-Modal Large Language Models via Inference-Time Self-Reflective Memory](/202603/24/2603.15800v1-evolving-contextual-safety-in-multi-modal-large-language-models-via-inference-time-self-reflective-memory)  
+   evidence：分析工具中毒导致的提示注入漏洞
+8. [LLMON: An LLM-native Markup Language to Leverage Structure and Semantics at the LLM Interface](/202603/25/2603.22519v1-llmon-an-llm-native-markup-language-to-leverage-structure-and-semantics-at-the-llm-interface)  
    标签：评分：9.0/10、query:llm
-   evidence：多模态大模型中的越狱防御与上下文安全
-5. [MOSAIC: Composable Safety Alignment with Modular Control Tokens](/202603/24/2603.16210v1-mosaic-composable-safety-alignment-with-modular-control-tokens)  
+   evidence：缓解提示注入等安全风险的标记语言
+9. [BioShield: A Context-Aware Firewall for Securing Bio-LLMs](/202603/25/2603.22612v1-bioshield-a-context-aware-firewall-for-securing-bio-llms)  
    标签：评分：9.0/10、query:llm
-   evidence：使用控制令牌的大语言模型模块化安全对齐
-6. [Towards Unsupervised Adversarial Document Detection in Retrieval Augmented Generation Systems](/202603/24/2603.17176v1-towards-unsupervised-adversarial-document-detection-in-retrieval-augmented-generation-systems)  
+   evidence：针对生物大语言模型双重用途攻击的上下文感知防火墙
+10. [Chain-of-Authorization: Internalizing Authorization into Large Language Models via Reasoning Trajectories](/202603/25/2603.22869v1-chain-of-authorization-internalizing-authorization-into-large-language-models-via-reasoning-trajectories)  
    标签：评分：9.0/10、query:llm
-   evidence：RAG系统中针对大语言模型的对抗性文档检测
-7. [MCP-38: A Comprehensive Threat Taxonomy for Model Context Protocol Systems (v1.0)](/202603/24/2603.18063v1-mcp-38-a-comprehensive-threat-taxonomy-for-model-context-protocol-systems-v10)  
+   evidence：缓解LLM中敏感数据泄露和对抗性操纵的风险
+11. [TreeTeaming: Autonomous Red-Teaming of Vision-Language Models via Hierarchical Strategy Exploration](/202603/25/2603.22882v1-treeteaming-autonomous-red-teaming-of-vision-language-models-via-hierarchical-strategy-exploration)  
    标签：评分：9.0/10、query:llm
-   evidence：LLM部署中模型上下文协议的威胁分类法
-8. [Detection of adversarial intent in Human-AI teams using LLMs](/202603/24/2603.20976v1-detection-of-adversarial-intent-in-human-ai-teams-using-llms)  
+   evidence：视觉语言模型的自主红队测试
+12. [ProGRank: Probe-Gradient Reranking to Defend Dense-Retriever RAG from Corpus Poisoning](/202603/25/2603.22934v1-progrank-probe-gradient-reranking-to-defend-dense-retriever-rag-from-corpus-poisoning)  
    标签：评分：9.0/10、query:llm
-   evidence：检测提示注入和对抗意图
+   evidence：RAG系统中针对语料库中毒的防御
 
 ### 速读区论文标签
-1. [TOSSS: a CVE-based Software Security Benchmark for Large Language Models](/202603/24/2603.10969v1-tosss-a-cve-based-software-security-benchmark-for-large-language-models)  
+1. [Cascade: Composing Software-Hardware Attack Gadgets for Adversarial Threat Amplification in Compound AI Systems](/202603/25/2603.12023v1-cascade-composing-software-hardware-attack-gadgets-for-adversarial-threat-amplification-in-compound-ai-systems)  
    标签：评分：8.0/10、query:llm
-   evidence：LLM 软件安全和漏洞检测基准
-2. [WebWeaver: Breaking Topology Confidentiality in LLM Multi-Agent Systems with Stealthy Context-Based Inference](/202603/24/2603.11132v1-webweaver-breaking-topology-confidentiality-in-llm-multi-agent-systems-with-stealthy-context-based-inference)  
+   evidence：复合 AI 系统中的安全漏洞
+2. [ToolFlood: Beyond Selection -- Hiding Valid Tools from LLM Agents via Semantic Covering](/202603/25/2603.13950v1-toolflood-beyond-selection----hiding-valid-tools-from-llm-agents-via-semantic-covering)  
    标签：评分：8.0/10、query:llm
-   evidence：LLM多智能体系统中的安全威胁
-3. [WebWeaver: Breaking Topology Confidentiality in LLM Multi-Agent Systems with Stealthy Context-Based Inference](/202603/24/2603.11132v2-webweaver-breaking-topology-confidentiality-in-llm-multi-agent-systems-with-stealthy-context-based-inference)  
+   evidence：针对工具增强型大语言模型智能体的检索层攻击
+3. [Resource Consumption Threats in Large Language Models](/202603/25/2603.16068v1-resource-consumption-threats-in-large-language-models)  
    标签：评分：8.0/10、query:llm
-   evidence：针对大语言模型多智能体系统拓扑结构的推理攻击
-4. [KEPo: Knowledge Evolution Poison on Graph-based Retrieval-Augmented Generation](/202603/24/2603.11501v2-kepo-knowledge-evolution-poison-on-graph-based-retrieval-augmented-generation)  
+   evidence：大语言模型中的资源消耗威胁
+4. [Resource Consumption Threats in Large Language Models](/202603/25/2603.16068v2-resource-consumption-threats-in-large-language-models)  
    标签：评分：8.0/10、query:llm
-   evidence：针对基于图的RAG系统的投毒攻击
-5. [Seamless Deception: Larger Language Models Are Better Knowledge Concealers](/202603/24/2603.14672v1-seamless-deception-larger-language-models-are-better-knowledge-concealers)  
+   evidence：大语言模型资源消耗威胁的系统性综述
+5. [Differential Harm Propensity in Personalized LLM Agents: The Curious Case of Mental Health Disclosure](/202603/25/2603.16734v1-differential-harm-propensity-in-personalized-llm-agents-the-curious-case-of-mental-health-disclosure)  
    标签：评分：7.0/10、query:llm
-   evidence：检测大语言模型对有害知识的隐藏
-6. [Seamless Deception: Larger Language Models Are Better Knowledge Concealers](/202603/24/2603.14672v2-seamless-deception-larger-language-models-are-better-knowledge-concealers)  
+   evidence：研究基于用户个性化上下文的大模型智能体有害行为
+6. [DebugLM: Learning Traceable Training Data Provenance for LLMs](/202603/25/2603.17884v1-debuglm-learning-traceable-training-data-provenance-for-llms)  
    标签：评分：7.0/10、query:llm
-   evidence：检测语言模型中对有害知识的隐瞒
-7. [Don't Trust Stubborn Neighbors: A Security Framework for Agentic Networks](/202603/24/2603.15809v1-dont-trust-stubborn-neighbors-a-security-framework-for-agentic-networks)  
+   evidence：将行为溯源至特定训练数据源以进行调试
+7. [Measuring and Exploiting Confirmation Bias in LLM-Assisted Security Code Review](/202603/25/2603.18740v1-measuring-and-exploiting-confirmation-bias-in-llm-assisted-security-code-review)  
    标签：评分：7.0/10、query:llm
-   evidence：大语言模型多智能体系统中的安全风险
-8. [SOMP: Scalable Gradient Inversion for Large Language Models via Subspace-Guided Orthogonal Matching Pursuit](/202603/24/2603.16761v1-somp-scalable-gradient-inversion-for-large-language-models-via-subspace-guided-orthogonal-matching-pursuit)  
+   evidence：利用大模型漏洞检测中的确认偏差进行攻击
+8. [ClawTrap: A MITM-Based Red-Teaming Framework for Real-World OpenClaw Security Evaluation](/202603/25/2603.18762v1-clawtrap-a-mitm-based-red-teaming-framework-for-real-world-openclaw-security-evaluation)  
    标签：评分：7.0/10、query:llm
-   evidence：针对私有训练数据的梯度逆向攻击
-9. [REFORGE: Multi-modal Attacks Reveal Vulnerable Concept Unlearning in Image Generation Models](/202603/24/2603.16576v1-reforge-multi-modal-attacks-reveal-vulnerable-concept-unlearning-in-image-generation-models)  
+   evidence：评估自主网络智能体安全性的红队测试框架
+9. [Post-Training Local LLM Agents for Linux Privilege Escalation with Verifiable Rewards](/202603/25/2603.17673v1-post-training-local-llm-agents-for-linux-privilege-escalation-with-verifiable-rewards)  
    标签：评分：6.0/10、query:llm
-   evidence：图像生成模型中的对抗性攻击与鲁棒性
-10. [Secure Linear Alignment of Large Language Models](/202603/24/2603.18908v1-secure-linear-alignment-of-large-language-models)  
+   evidence：用于漏洞发现和权限提升等安全任务的大模型智能体
+10. [Differential Privacy in Generative AI Agents: Analysis and Optimal Tradeoffs](/202603/25/2603.17902v1-differential-privacy-in-generative-ai-agents-analysis-and-optimal-tradeoffs)  
    标签：评分：6.0/10、query:llm
-   evidence：用于安全跨模型推理的隐私保护框架
-11. [Graph-Aware Text-Only Backdoor Poisoning for Text-Attributed Graphs](/202603/24/2603.20339v1-graph-aware-text-only-backdoor-poisoning-for-text-attributed-graphs)  
+   evidence：AI智能体隐私泄露与风险分析
+11. [Security awareness in LLM agents: the NDAI zone case](/202603/25/2603.19011v1-security-awareness-in-llm-agents-the-ndai-zone-case)  
    标签：评分：6.0/10、query:llm
-   evidence：文本属性图上的后门投毒攻击
+   evidence：大模型智能体的安全意识与环境检测
 
 
 <div class="dpr-home-promo-card">
