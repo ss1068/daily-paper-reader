@@ -6,73 +6,73 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-26
-- 运行时间：2026-03-26 20:12:07 UTC
+- 最新运行日期：2026-03-27
+- 运行时间：2026-03-27 19:47:44 UTC
 - 运行状态：成功
 - 本次总论文数：17
 - 精读区：6
 - 速读区：11
 
 ### 今日简报（AI）
-今日聚焦 AI 安全防线，深度解析多模态模型越狱防御与浏览器 Agent 的“认知防火墙”技术。
-零空间投影与混合边缘云防御展现了满分级的安全潜力，有效应对了 VLM 越狱与间接提示注入等核心威胁。
-建议开发者重点关注多模态安全协议与隐私敏感型 RAG 架构，以构建更稳健的智能体应用。
-- 详情：[/202603/26/README](/202603/26/README)
+今日深度复盘 17 篇前沿论文，核心聚焦 RAG 系统诱导攻击与多模型协同的提示词检测技术。
+揭示了 PIDP 攻击结合数据库毒化的新型威胁，并验证了“模型混合”在识别恶意提示词中的卓越表现。
+建议开发者重点关注 Agent 检查点恢复与 MCP 服务器权限审计，从源头加固生成式 AI 的安全防线。
+- 详情：[/202603/27/README](/202603/27/README)
 
 ### 精读区论文标签
-1. [Principled Steering via Null-space Projection for Jailbreak Defense in Vision-Language Models](/202603/26/2603.22094v2-principled-steering-via-null-space-projection-for-jailbreak-defense-in-vision-language-models)  
+1. [PIDP-Attack: Combining Prompt Injection with Database Poisoning Attacks on Retrieval-Augmented Generation Systems](/202603/27/2603.25164v1-pidp-attack-combining-prompt-injection-with-database-poisoning-attacks-on-retrieval-augmented-generation-systems)  
    标签：评分：10.0/10、query:llm
-   evidence：用于多模态大模型越狱防御的零空间投影技术
-2. [The Cognitive Firewall:Securing Browser Based AI Agents Against Indirect Prompt Injection Via Hybrid Edge Cloud Defense](/202603/26/2603.23791v1-the-cognitive-firewallsecuring-browser-based-ai-agents-against-indirect-prompt-injection-via-hybrid-edge-cloud-defense)  
+   evidence：结合提示词注入与数据库中毒攻击
+2. [Prompt Attack Detection with LLM-as-a-Judge and Mixture-of-Models](/202603/27/2603.25176v1-prompt-attack-detection-with-llm-as-a-judge-and-mixture-of-models)  
    标签：评分：10.0/10、query:llm
-   evidence：通过混合防御保护浏览器智能体免受间接提示词注入攻击
-3. [Invisible Threats from Model Context Protocol: Generating Stealthy Injection Payload via Tree-based Adaptive Search](/202603/26/2603.24203v1-invisible-threats-from-model-context-protocol-generating-stealthy-injection-payload-via-tree-based-adaptive-search)  
-   标签：评分：10.0/10、query:llm
-   evidence：为大语言模型工具生成隐蔽的注入载荷
-4. [Claudini: Autoresearch Discovers State-of-the-Art Adversarial Attack Algorithms for LLMs](/202603/26/2603.24511v1-claudini-autoresearch-discovers-state-of-the-art-adversarial-attack-algorithms-for-llms)  
-   标签：评分：10.0/10、query:llm
-   evidence：用于越狱和提示注入的新型对抗性攻击算法
-5. [Trojan's Whisper: Stealthy Manipulation of OpenClaw through Injected Bootstrapped Guidance](/202603/26/2603.19974v1-trojans-whisper-stealthy-manipulation-of-openclaw-through-injected-bootstrapped-guidance)  
+   evidence：使用LLM作为裁判防御越狱和提示词注入
+3. [TRAP: Hijacking VLA CoT-Reasoning via Adversarial Patches](/202603/27/2603.23117v1-trap-hijacking-vla-cot-reasoning-via-adversarial-patches)  
    标签：评分：9.0/10、query:llm
-   evidence：编程智能体中引导注入这一新型攻击向量
-6. [Analysing the Safety Pitfalls of Steering Vectors](/202603/26/2603.24543v1-analysing-the-safety-pitfalls-of-steering-vectors)  
+   evidence：针对思维链推理的定向对抗攻击
+4. [AI Security in the Foundation Model Era: A Comprehensive Survey from a Unified Perspective](/202603/27/2603.24857v1-ai-security-in-the-foundation-model-era-a-comprehensive-survey-from-a-unified-perspective)  
    标签：评分：9.0/10、query:llm
-   evidence：转向向量影响越狱攻击的成功率
+   evidence：大模型时代AI安全与漏洞的全面综述
+5. [The System Prompt Is the Attack Surface: How LLM Agent Configuration Shapes Security and Creates Exploitable Vulnerabilities](/202603/27/2603.25056v1-the-system-prompt-is-the-attack-surface-how-llm-agent-configuration-shapes-security-and-creates-exploitable-vulnerabilities)  
+   标签：评分：9.0/10、query:llm
+   evidence：系统提示词配置在大语言模型智能体中产生可利用的漏洞
+6. [Beyond Content Safety: Real-Time Monitoring for Reasoning Vulnerabilities in Large Language Models](/202603/27/2603.25412v1-beyond-content-safety-real-time-monitoring-for-reasoning-vulnerabilities-in-large-language-models)  
+   标签：评分：9.0/10、query:llm
+   evidence：大语言模型推理漏洞和对抗性操纵的实时监控
 
 ### 速读区论文标签
-1. [Adversarial attacks against Modern Vision-Language Models](/202603/26/2603.16960v2-adversarial-attacks-against-modern-vision-language-models)  
+1. [ACRFence: Preventing Semantic Rollback Attacks in Agent Checkpoint-Restore](/202603/27/2603.20625v1-acrfence-preventing-semantic-rollback-attacks-in-agent-checkpoint-restore)  
    标签：评分：8.0/10、query:llm
-   evidence：视觉语言模型智能体在梯度攻击下的对抗鲁棒性
-2. [SEAL-Tag: Self-Tag Evidence Aggregation with Probabilistic Circuits for PII-Safe Retrieval-Augmented Generation](/202603/26/2603.17292v1-seal-tag-self-tag-evidence-aggregation-with-probabilistic-circuits-for-pii-safe-retrieval-augmented-generation)  
+   evidence：大语言模型智能体框架中的语义回滚攻击
+2. [JANUS: A Lightweight Framework for Jailbreaking Text-to-Image Models via Distribution Optimization](/202603/27/2603.21208v2-janus-a-lightweight-framework-for-jailbreaking-text-to-image-models-via-distribution-optimization)  
    标签：评分：8.0/10、query:llm
-   evidence：缓解上下文泄露和指令遵循漏洞利用
-3. [Who Tests the Testers? Systematic Enumeration and Coverage Audit of LLM Agent Tool Call Safety](/202603/26/2603.18245v1-who-tests-the-testers-systematic-enumeration-and-coverage-audit-of-llm-agent-tool-call-safety)  
+   evidence：通过分布优化对文本生成图像模型进行越狱攻击
+3. [Auditing MCP Servers for Over-Privileged Tool Capabilities](/202603/27/2603.21641v1-auditing-mcp-servers-for-over-privileged-tool-capabilities)  
    标签：评分：8.0/10、query:llm
-   evidence：对LLM智能体工具调用安全和交互模式的系统审计
-4. [The Verifier Tax: Horizon Dependent Safety Success Tradeoffs in Tool Using LLM Agents](/202603/26/2603.19328v1-the-verifier-tax-horizon-dependent-safety-success-tradeoffs-in-tool-using-llm-agents)  
+   evidence：审计大语言模型工具能力的安全性漏洞与过度授权
+4. [Session Risk Memory (SRM): Temporal Authorization for Deterministic Pre-Execution Safety Gates](/202603/27/2603.22350v1-session-risk-memory-srm-temporal-authorization-for-deterministic-pre-execution-safety-gates)  
    标签：评分：8.0/10、query:llm
-   evidence：LLM 智能体不安全行为的运行时强制执行
-5. [Memory poisoning and secure multi-agent systems](/202603/26/2603.20357v1-memory-poisoning-and-secure-multi-agent-systems)  
+   evidence：确定性预执行安全门的临时授权机制
+5. [Agent Audit: A Security Analysis System for LLM Agent Applications](/202603/27/2603.22853v1-agent-audit-a-security-analysis-system-for-llm-agent-applications)  
    标签：评分：8.0/10、query:llm
-   evidence：多智能体系统中的记忆投毒攻击
-6. [CIPL: A Target-Independent Framework for Channel-Inversion Privacy Leakage in Agents](/202603/26/2603.22751v1-cipl-a-target-independent-framework-for-channel-inversion-privacy-leakage-in-agents)  
+   evidence：大语言模型智能体应用及配置的安全分析系统
+6. [Does Teaming-Up LLMs Improve Secure Code Generation? A Comprehensive Evaluation with Multi-LLMSecCodeEval](/202603/27/2603.22717v1-does-teaming-up-llms-improve-secure-code-generation-a-comprehensive-evaluation-with-multi-llmseccodeeval)  
    标签：评分：7.0/10、query:llm
-   evidence：LLM智能体流水线中的隐私泄露
-7. [Agent-Sentry: Bounding LLM Agents via Execution Provenance](/202603/26/2603.22868v1-agent-sentry-bounding-llm-agents-via-execution-provenance)  
+   evidence：评估大语言模型代码生成的安全漏洞
+7. [Detect--Repair--Verify for LLM-Generated Code: A Multi-Language, Multi-Granularity Empirical Study](/202603/27/2603.23633v1-detect--repair--verify-for-llm-generated-code-a-multi-language-multi-granularity-empirical-study)  
    标签：评分：7.0/10、query:llm
-   evidence：代理大语言模型系统的安全与可靠性问题
-8. [AgentRAE: Remote Action Execution through Notification-based Visual Backdoors against Screenshots-based Mobile GUI Agents](/202603/26/2603.23007v1-agentrae-remote-action-execution-through-notification-based-visual-backdoors-against-screenshots-based-mobile-gui-agents)  
+   evidence：大语言模型生成代码漏洞的安全评估
+8. [Shape and Substance: Dual-Layer Side-Channel Attacks on Local Vision-Language Models](/202603/27/2603.25403v1-shape-and-substance-dual-layer-side-channel-attacks-on-local-vision-language-models)  
    标签：评分：7.0/10、query:llm
-   evidence：针对使用生成式AI模型的移动GUI智能体的后门攻击
-9. [Functional Subspace Watermarking for Large Language Models](/202603/26/2603.18793v1-functional-subspace-watermarking-for-large-language-models)  
+   evidence：视觉语言模型中的侧信道攻击漏洞
+9. [Perturbation: A simple and efficient adversarial tracer for representation learning in language models](/202603/27/2603.23821v1-perturbation-a-simple-and-efficient-adversarial-tracer-for-representation-learning-in-language-models)  
    标签：评分：6.0/10、query:llm
-   evidence：通过水印技术保护大语言模型的所有权
-10. [Secure Linear Alignment of Large Language Models](/202603/26/2603.18908v2-secure-linear-alignment-of-large-language-models)  
+   evidence：通过在单个对抗样本上微调来扰动语言模型
+10. [Forensic Implications of Localized AI: Artifact Analysis of Ollama, LM Studio, and llama.cpp](/202603/27/2603.23996v1-forensic-implications-of-localized-ai-artifact-analysis-of-ollama-lm-studio-and-llamacpp)  
    标签：评分：6.0/10、query:llm
-   evidence：语言模型跨孤岛推理的隐私保护框架
-11. [Automated Membership Inference Attacks: Discovering MIA Signal Computations using LLM Agents](/202603/26/2603.19375v1-automated-membership-inference-attacks-discovering-mia-signal-computations-using-llm-agents)  
+   evidence：本地大模型运行器及提示词历史的取证分析
+11. [Bridging Code Property Graphs and Language Models for Program Analysis](/202603/27/2603.24837v1-bridging-code-property-graphs-and-language-models-for-program-analysis)  
    标签：评分：6.0/10、query:llm
-   evidence：利用LLM智能体自动化成员推理攻击
+   evidence：利用大语言模型分析代码库中的安全漏洞
 
 
 <div class="dpr-home-promo-card">
