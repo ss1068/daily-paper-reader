@@ -6,34 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-28
-- 运行时间：2026-03-28 19:58:07 UTC
+- 最新运行日期：2026-03-29
+- 运行时间：2026-03-29 20:02:15 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：3
-- 速读区：1
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日深度剖析大模型安全边界，重点关注边缘端 LLM 的脆弱性与代码理解模型的鲁棒性增强。
-核心结论指出边缘部署存在显著安全隐患，且不同架构在指令遵循的治理能力上表现出明显分化。
-建议开发者在追求模型轻量化与本地化部署时，务必加强对代码生成及指令执行环节的安全防御。
-- 详情：[/202603/28/README](/202603/28/README)
+今日聚焦新兴 Agent 技能市场的安全审计，推出多智能体协作评估框架 SkillProbe。
+研究表明通过多智能体协同能精准识别第三方插件中的安全漏洞，填补了 Agent 生态监管的空白。
+建议开发者在构建 Agent 应用时，优先引入自动化审计工具以应对日益复杂的供应链安全风险。
+- 详情：[/202603/29/README](/202603/29/README)
 
 ### 精读区论文标签
-1. [How Vulnerable Are Edge LLMs?](/202603/28/2603.23822v1-how-vulnerable-are-edge-llms)  
+1. [SkillProbe: Security Auditing for Emerging Agent Skill Marketplaces via Multi-Agent Collaboration](/202603/29/2603.21019v1-skillprobe-security-auditing-for-emerging-agent-skill-marketplaces-via-multi-agent-collaboration)  
    标签：评分：8.0/10、query:llm
-   evidence：边缘大语言模型在基于查询的知识提取攻击下的脆弱性
-2. [Enhancing and Reporting Robustness Boundary of Neural Code Models for Intelligent Code Understanding](/202603/28/2603.24119v1-enhancing-and-reporting-robustness-boundary-of-neural-code-models-for-intelligent-code-understanding)  
-   标签：评分：8.0/10、query:llm
-   evidence：代码模型中的对抗样本与鲁棒性
-3. [SABER: A Stealthy Agentic Black-Box Attack Framework for Vision-Language-Action Models](/202603/28/2603.24935v1-saber-a-stealthy-agentic-black-box-attack-framework-for-vision-language-action-models)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对视觉-语言-动作模型的对抗性攻击
+   evidence：大模型智能体技能市场的安全审计
 
 ### 速读区论文标签
-1. [Silent Commitment Failure in Instruction-Tuned Language Models: Evidence of Governability Divergence Across Architectures](/202603/28/2603.21415v1-silent-commitment-failure-in-instruction-tuned-language-models-evidence-of-governability-divergence-across-architectures)  
-   标签：评分：7.0/10、query:llm
-   evidence：指令微调模型中的安全架构失效与可治理性差异
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">

@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-03-29 <!--dpr-date:20260329-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202603/29/2603.21019v1-skillprobe-security-auditing-for-emerging-agent-skill-marketplaces-via-multi-agent-collaboration" data-sidebar-item="{&quot;title&quot;: &quot;SkillProbe: Security Auditing for Emerging Agent Skill Marketplaces via Multi-Agent Collaboration&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2603.21019v1-skillprobe-security-auditing-for-emerging-agent-skill-marketplaces-via-multi-agent-collaboration&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;llm&quot;}], &quot;evidence&quot;: &quot;大模型智能体技能市场的安全审计&quot;}">SkillProbe: Security Auditing for Emerging Agent Skill Marketplaces via Multi-Agent Collaboration</a>
   * 2026-03-28 <!--dpr-date:20260328-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202603/28/2603.23822v1-how-vulnerable-are-edge-llms" data-sidebar-item="{&quot;title&quot;: &quot;How Vulnerable Are Edge LLMs?&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2603.23822v1-how-vulnerable-are-edge-llms&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;llm&quot;}], &quot;evidence&quot;: &quot;边缘大语言模型在基于查询的知识提取攻击下的脆弱性&quot;}">How Vulnerable Are Edge LLMs?</a>
