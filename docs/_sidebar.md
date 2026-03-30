@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-03-30 <!--dpr-date:20260330-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202603/30/2603.26045v1-h-node-attack-and-defense-in-large-language-models" data-sidebar-item="{&quot;title&quot;: &quot;H-Node Attack and Defense in Large Language Models&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2603.26045v1-h-node-attack-and-defense-in-large-language-models&quot;, &quot;score&quot;: &quot;7.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;llm&quot;}], &quot;evidence&quot;: &quot;针对大模型隐藏状态的白盒对抗攻击与防御&quot;}">H-Node Attack and Defense in Large Language Models</a>
   * 2026-03-29 <!--dpr-date:20260329-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202603/29/2603.21019v1-skillprobe-security-auditing-for-emerging-agent-skill-marketplaces-via-multi-agent-collaboration" data-sidebar-item="{&quot;title&quot;: &quot;SkillProbe: Security Auditing for Emerging Agent Skill Marketplaces via Multi-Agent Collaboration&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2603.21019v1-skillprobe-security-auditing-for-emerging-agent-skill-marketplaces-via-multi-agent-collaboration&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;llm&quot;}], &quot;evidence&quot;: &quot;大模型智能体技能市场的安全审计&quot;}">SkillProbe: Security Auditing for Emerging Agent Skill Marketplaces via Multi-Agent Collaboration</a>

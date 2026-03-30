@@ -6,26 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-03-29
-- 运行时间：2026-03-29 20:02:15 UTC
+- 最新运行日期：2026-03-30
+- 运行时间：2026-03-30 19:54:28 UTC
 - 运行状态：成功
 - 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日聚焦新兴 Agent 技能市场的安全审计，推出多智能体协作评估框架 SkillProbe。
-研究表明通过多智能体协同能精准识别第三方插件中的安全漏洞，填补了 Agent 生态监管的空白。
-建议开发者在构建 Agent 应用时，优先引入自动化审计工具以应对日益复杂的供应链安全风险。
-- 详情：[/202603/29/README](/202603/29/README)
+今日深入剖析大语言模型中的 H-Node 攻击与防御机制。
+揭示了针对 LLM 的新型安全威胁路径，并提供了针对性的防御加固方案。
+建议开发者关注模型底层漏洞，及时评估并提升系统的抗攻击能力。
+- 详情：[/202603/30/README](/202603/30/README)
 
 ### 精读区论文标签
-1. [SkillProbe: Security Auditing for Emerging Agent Skill Marketplaces via Multi-Agent Collaboration](/202603/29/2603.21019v1-skillprobe-security-auditing-for-emerging-agent-skill-marketplaces-via-multi-agent-collaboration)  
-   标签：评分：8.0/10、query:llm
-   evidence：大模型智能体技能市场的安全审计
+- 本次无精读推荐。
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [H-Node Attack and Defense in Large Language Models](/202603/30/2603.26045v1-h-node-attack-and-defense-in-large-language-models)  
+   标签：评分：7.0/10、query:llm
+   evidence：针对大模型隐藏状态的白盒对抗攻击与防御
 
 
 <div class="dpr-home-promo-card">
