@@ -6,91 +6,70 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-01
-- 运行时间：2026-04-01 19:45:02 UTC
+- 最新运行日期：2026-04-02
+- 运行时间：2026-04-02 19:49:50 UTC
 - 运行状态：成功
-- 本次总论文数：23
-- 精读区：12
-- 速读区：11
+- 本次总论文数：16
+- 精读区：6
+- 速读区：10
 
 ### 今日简报（AI）
-今日深挖23篇安全领域力作，重点攻克多智能体助手与轻量化模型的防御难题。
-核心推荐SafeClaw-R的多智能体安全框架及GUARD-SLM针对小模型的防越狱激活技术。
-警惕多模态模型中的隐蔽后门与广告注入风险，建议在模型集成与数据蒸馏阶段加强语义安全审计。
-- 详情：[/202604/01/README](/202604/01/README)
+今日精选 16 篇论文，重点攻克 LLM 系统指令加固与 Agent 提示词注入监控等核心安全难题。
+满分推荐自动化评估框架与 AgentWatcher 方案，它们为防御编码攻击和恶意指令提供了实战级思路。
+建议开发者优先关注 RAG 知识库防毒与多模态鲁棒性，在应用开发初期即引入多层级安全防御机制。
+- 详情：[/202604/02/README](/202604/02/README)
 
 ### 精读区论文标签
-1. [SafeClaw-R: Towards Safe and Secure Multi-Agent Personal Assistants](/202604/01/2603.28807v1-safeclaw-r-towards-safe-and-secure-multi-agent-personal-assistants)  
+1. [Automated Framework to Evaluate and Harden LLM System Instructions against Encoding Attacks](/202604/02/2604.01039v1-automated-framework-to-evaluate-and-harden-llm-system-instructions-against-encoding-attacks)  
    标签：评分：10.0/10、query:llm
-   evidence：多智能体系统中针对提示注入的防御机制
-2. [GUARD-SLM: Token Activation-Based Defense Against Jailbreak Attacks for Small Language Models](/202604/01/2603.28817v1-guard-slm-token-activation-based-defense-against-jailbreak-attacks-for-small-language-models)  
+   evidence：增强大语言模型系统指令以抵御编码攻击
+2. [AgentWatcher: A Rule-based Prompt Injection Monitor](/202604/02/2604.01194v1-agentwatcher-a-rule-based-prompt-injection-monitor)  
    标签：评分：10.0/10、query:llm
-   evidence：针对SLM和LLM越狱攻击的基于令牌激活的防御机制
-3. [Trojan-Speak: Bypassing Constitutional Classifiers with No Jailbreak Tax via Adversarial Finetuning](/202604/01/2603.29038v1-trojan-speak-bypassing-constitutional-classifiers-with-no-jailbreak-tax-via-adversarial-finetuning)  
-   标签：评分：10.0/10、query:llm
-   evidence：通过对抗性微调绕过安全分类器并实现LLM越狱
-4. [CivicShield: A Cross-Domain Defense-in-Depth Framework for Securing Government-Facing AI Chatbots Against Multi-Turn Adversarial Attacks](/202604/01/2603.29062v1-civicshield-a-cross-domain-defense-in-depth-framework-for-securing-government-facing-ai-chatbots-against-multi-turn-adversarial-attacks)  
-   标签：评分：10.0/10、query:llm
-   evidence：针对多轮对抗性攻击的深度防御框架
-5. [Adversarial Prompt Injection Attack on Multimodal Large Language Models](/202604/01/2603.29418v1-adversarial-prompt-injection-attack-on-multimodal-large-language-models)  
-   标签：评分：10.0/10、query:llm
-   evidence：针对多模态大模型的不可见视觉提示词注入攻击
-6. [Architecting Secure AI Agents: Perspectives on System-Level Defenses Against Indirect Prompt Injection Attacks](/202604/01/2603.30016v1-architecting-secure-ai-agents-perspectives-on-system-level-defenses-against-indirect-prompt-injection-attacks)  
-   标签：评分：10.0/10、query:llm
-   evidence：针对间接提示注入攻击的系统级防御
-7. [Robust Safety Monitoring of Language Models via Activation Watermarking](/202604/01/2603.23171v2-robust-safety-monitoring-of-language-models-via-activation-watermarking)  
+   evidence：针对大语言模型智能体提示词注入攻击的规则监控器
+3. [Robust Multimodal Safety via Conditional Decoding](/202604/02/2604.00310v1-robust-multimodal-safety-via-conditional-decoding)  
    标签：评分：9.0/10、query:llm
-   evidence：针对诱导不安全行为的自适应对手的鲁棒安全监控
-8. [A Provable Energy-Guided Test-Time Defense Boosting Adversarial Robustness of Large Vision-Language Models](/202604/01/2603.26984v2-a-provable-energy-guided-test-time-defense-boosting-adversarial-robustness-of-large-vision-language-models)  
+   evidence：针对多模态安全攻击的新型防御机制
+4. [The Persistent Vulnerability of Aligned AI Systems](/202604/02/2604.00324v1-the-persistent-vulnerability-of-aligned-ai-systems)  
    标签：评分：9.0/10、query:llm
-   evidence：提升视觉语言模型对抗鲁棒性的测试时防御
-9. [Safeguarding LLMs Against Misuse and AI-Driven Malware Using Steganographic Canaries](/202604/01/2603.28655v1-safeguarding-llms-against-misuse-and-ai-driven-malware-using-steganographic-canaries)  
+   evidence：通过潜对抗训练测试漏洞并消除危险行为
+5. [Adversarial Moral Stress Testing of Large Language Models](/202604/02/2604.01108v1-adversarial-moral-stress-testing-of-large-language-models)  
    标签：评分：9.0/10、query:llm
-   evidence：使用隐写金丝雀文件保护大模型免受滥用和恶意软件侵害
-10. [Audio Hallucination Attacks: Probing the Reliability of Large Audio Language Models](/202604/01/2603.29263v1-audio-hallucination-attacks-probing-the-reliability-of-large-audio-language-models)  
-   标签：评分：9.0/10、query:llm
-   evidence：探测音频大语言模型可靠性的音频幻觉攻击
-11. [Security in LLM-as-a-Judge: A Comprehensive SoK](/202604/01/2603.29403v1-security-in-llm-as-a-judge-a-comprehensive-sok)  
-   标签：评分：9.0/10、query:llm
-   evidence：关于LLM作为裁判系统的安全性知识体系化研究
-12. [EnsembleSHAP: Faithful and Certifiably Robust Attribution for Random Subspace Method](/202604/01/2603.30034v1-ensembleshap-faithful-and-certifiably-robust-attribution-for-random-subspace-method)  
-   标签：评分：9.0/10、query:llm
-   evidence：利用随机子空间方法构建防御越狱攻击的鲁棒对齐大模型
+   evidence：针对多轮交互中伦理鲁棒性的对抗性道德压力测试
+6. [XSPA: Crafting Imperceptible X-Shaped Sparse Adversarial Perturbations for Transferable Attacks on VLMs](/202604/02/2603.28568v1-xspa-crafting-imperceptible-x-shaped-sparse-adversarial-perturbations-for-transferable-attacks-on-vlms)  
+   标签：评分：8.0/10、query:llm
+   evidence：视觉语言模型中的对抗扰动与鲁棒性
 
 ### 速读区论文标签
-1. [Unsafe by Reciprocity: How Generation-Understanding Coupling Undermines Safety in Unified Multimodal Models](/202604/01/2603.27332v1-unsafe-by-reciprocity-how-generation-understanding-coupling-undermines-safety-in-unified-multimodal-models)  
+1. [AGFT: Alignment-Guided Fine-Tuning for Zero-Shot Adversarial Robustness of Vision-Language Models](/202604/02/2603.29410v1-agft-alignment-guided-fine-tuning-for-zero-shot-adversarial-robustness-of-vision-language-models)  
    标签：评分：8.0/10、query:llm
-   evidence：多模态模型中的结构性漏洞
-2. [Hidden Ads: Behavior Triggered Semantic Backdoors for Advertisement Injection in Vision Language Models](/202604/01/2603.27522v1-hidden-ads-behavior-triggered-semantic-backdoors-for-advertisement-injection-in-vision-language-models)  
+   evidence：视觉语言模型的对抗鲁棒性
+2. [RAGShield: Provenance-Verified Defense-in-Depth Against Knowledge Base Poisoning in Government Retrieval-Augmented Generation Systems](/202604/02/2604.00387v1-ragshield-provenance-verified-defense-in-depth-against-knowledge-base-poisoning-in-government-retrieval-augmented-generation-systems)  
    标签：评分：8.0/10、query:llm
-   evidence：视觉语言模型中用于广告注入的后门攻击
-3. [InkDrop: Invisible Backdoor Attacks Against Dataset Condensation](/202604/01/2603.28092v1-inkdrop-invisible-backdoor-attacks-against-dataset-condensation)  
+   evidence：针对RAG系统中知识库中毒攻击的防御
+3. [Thinking Wrong in Silence: Backdoor Attacks on Continuous Latent Reasoning](/202604/02/2604.00770v1-thinking-wrong-in-silence-backdoor-attacks-on-continuous-latent-reasoning)  
    标签：评分：8.0/10、query:llm
-   evidence：针对数据集蒸馏的隐形后门攻击
-4. [Poisoning the Genome: Targeted Backdoor Attacks on DNA Foundation Models](/202604/01/2603.27465v1-poisoning-the-genome-targeted-backdoor-attacks-on-dna-foundation-models)  
+   evidence：针对语言模型连续潜空间推理的后门攻击
+4. [FedFG: Privacy-Preserving and Robust Federated Learning via Flow-Matching Generation](/202604/02/2603.27986v1-fedfg-privacy-preserving-and-robust-federated-learning-via-flow-matching-generation)  
    标签：评分：7.0/10、query:llm
-   evidence：通过训练数据投毒对基础模型进行定向后门攻击
-5. [Evaluating Privilege Usage of Agents on Real-World Tools](/202604/01/2603.28166v1-evaluating-privilege-usage-of-agents-on-real-world-tools)  
+   evidence：联邦学习模型中的中毒攻击
+5. [FL-PBM: Pre-Training Backdoor Mitigation for Federated Learning](/202604/02/2603.28673v1-fl-pbm-pre-training-backdoor-mitigation-for-federated-learning)  
    标签：评分：7.0/10、query:llm
-   evidence：智能体权限使用的安全评估沙箱
-6. [Membership Inference Attacks against Large Audio Language Models](/202604/01/2603.28378v1-membership-inference-attacks-against-large-audio-language-models)  
+   evidence：提出了一种针对联邦学习中后门攻击的新型防御机制
+6. [Do LLMs Know What Is Private Internally? Probing and Steering Contextual Privacy Norms in Large Language Model Representations](/202604/02/2604.00209v1-do-llms-know-what-is-private-internally-probing-and-steering-contextual-privacy-norms-in-large-language-model-representations)  
    标签：评分：7.0/10、query:llm
-   evidence：评估成员推理攻击作为大型音频语言模型的安全和隐私威胁
-7. [Privacy Guard & Token Parsimony by Prompt and Context Handling and LLM Routing](/202604/01/2603.28972v1-privacy-guard--token-parsimony-by-prompt-and-context-handling-and-llm-routing)  
-   标签：评分：7.0/10、query:llm
-   evidence：隐私保护与提示词处理以减轻泄露风险
-8. [Attesting LLM Pipelines: Enforcing Verifiable Training and Release Claims](/202604/01/2603.28988v1-attesting-llm-pipelines-enforcing-verifiable-training-and-release-claims)  
-   标签：评分：7.0/10、query:llm
-   evidence：解决LLM流水线中的供应链风险和后门模型问题
-9. [SNEAK: Evaluating Strategic Communication and Information Leakage in Large Language Models](/202604/01/2603.29846v1-sneak-evaluating-strategic-communication-and-information-leakage-in-large-language-models)  
-   标签：评分：7.0/10、query:llm
-   evidence：评估大语言模型中的信息泄露
-10. [Robust Batch-Level Query Routing for Large Language Models under Cost and Capacity Constraints](/202604/01/2603.26796v1-robust-batch-level-query-routing-for-large-language-models-under-cost-and-capacity-constraints)  
+   evidence：LLM隐私泄露风险及内部隐私规范编码
+7. [Towards Leveraging LLMs to Generate Abstract Penetration Test Cases from Software Architecture](/202604/02/2603.23698v1-towards-leveraging-llms-to-generate-abstract-penetration-test-cases-from-software-architecture)  
    标签：评分：6.0/10、query:llm
-   evidence：对抗性批处理下的鲁棒性
-11. [Distilling Human-Aligned Privacy Sensitivity Assessment from Large Language Models](/202604/01/2603.29497v1-distilling-human-aligned-privacy-sensitivity-assessment-from-large-language-models)  
+   evidence：利用大模型进行安全评估和渗透测试
+8. [G-Drift MIA: Membership Inference via Gradient-Induced Feature Drift in LLMs](/202604/02/2604.00419v1-g-drift-mia-membership-inference-via-gradient-induced-feature-drift-in-llms)  
    标签：评分：6.0/10、query:llm
-   evidence：大语言模型中的隐私敏感性评估
+   evidence：成员推理攻击作为 LLM 的隐私威胁
+9. [Exploring Silent Data Corruption as a Reliability Challenge in LLM Training](/202604/02/2604.00726v1-exploring-silent-data-corruption-as-a-reliability-challenge-in-llm-training)  
+   标签：评分：6.0/10、query:llm
+   evidence：LLM训练中的可靠性挑战与梯度损坏
+10. [SERSEM: Selective Entropy-Weighted Scoring for Membership Inference in Code Language Models](/202604/02/2604.01147v1-sersem-selective-entropy-weighted-scoring-for-membership-inference-in-code-language-models)  
+   标签：评分：6.0/10、query:llm
+   evidence：针对代码语言模型的成员推理攻击
 
 
 <div class="dpr-home-promo-card">
