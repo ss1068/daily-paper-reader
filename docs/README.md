@@ -6,61 +6,67 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-06
-- 运行时间：2026-04-06 19:43:08 UTC
+- 最新运行日期：2026-04-07
+- 运行时间：2026-04-07 20:30:56 UTC
 - 运行状态：成功
-- 本次总论文数：13
-- 精读区：8
-- 速读区：5
+- 本次总论文数：15
+- 精读区：12
+- 速读区：3
 
 ### 今日简报（AI）
-今日深度复盘 13 篇安全领域论文，重点攻克了提示词注入的跨阶段追踪与模型安全对齐失效的深层机制。
-核心结论指出“杀伤链金丝雀”能有效监控攻击全过程，同时揭示了奖励模型在 Token 空间易受非语义操纵的风险。
-建议普通用户在使用计算机操作智能体（Agent）时保持警惕，重点防范针对底层逻辑的隐蔽性攻击。
-- 详情：[/202604/06/README](/202604/06/README)
+今日深度复盘 15 篇 AI 安全前沿论文，重点攻克大模型提示词注入与智能体漏洞评估。
+满分研究警示智能体比预想中更脆弱，并系统性定义了衡量提示词注入攻击有效性的新标准。
+建议开发者在构建 Agent 应用时，优先强化对间接注入风险的防御与安全推理内化。
+- 详情：[/202604/07/README](/202604/07/README)
 
 ### 精读区论文标签
-1. [Kill-Chain Canaries: Stage-Level Tracking of Prompt Injection Across Attack Surfaces and Model Safety Tiers](/202604/06/2603.28013v2-kill-chain-canaries-stage-level-tracking-of-prompt-injection-across-attack-surfaces-and-model-safety-tiers)  
+1. [AttackEval: A Systematic Empirical Study of Prompt Injection Attack Effectiveness Against Large Language Models](/202604/07/2604.03598v1-attackeval-a-systematic-empirical-study-of-prompt-injection-attack-effectiveness-against-large-language-models)  
    标签：评分：10.0/10、query:llm
-   evidence：跨攻击面追踪提示注入
-2. [Understanding the Effects of Safety Unalignment on Large Language Models](/202604/06/2604.02574v1-understanding-the-effects-of-safety-unalignment-on-large-language-models)  
+   evidence：提示注入攻击有效性的系统实证研究
+2. [Your Agent is More Brittle Than You Think: Uncovering Indirect Injection Vulnerabilities in Agentic LLMs](/202604/07/2604.03870v1-your-agent-is-more-brittle-than-you-think-uncovering-indirect-injection-vulnerabilities-in-agentic-llms)  
    标签：评分：10.0/10、query:llm
-   evidence：越狱微调与禁用安全防护栏
-3. [Generalization Limits of Reinforcement Learning Alignment](/202604/06/2604.02652v1-generalization-limits-of-reinforcement-learning-alignment)  
+   evidence：智能体LLM中的间接提示注入漏洞
+3. [Automating Cloud Security and Forensics Through a Secure-by-Design Generative AI Framework](/202604/07/2604.03912v1-automating-cloud-security-and-forensics-through-a-secure-by-design-generative-ai-framework)  
    标签：评分：10.0/10、query:llm
-   evidence：针对对齐失效的复合型越狱攻击
-4. [Backdoor Attacks on Decentralised Post-Training](/202604/06/2604.02372v1-backdoor-attacks-on-decentralised-post-training)  
+   evidence：使用 PromptShield 防御 LLM 免受提示注入攻击
+4. [CoopGuard: Stateful Cooperative Agents Safeguarding LLMs Against Evolving Multi-Round Attacks](/202604/07/2604.04060v1-coopguard-stateful-cooperative-agents-safeguarding-llms-against-evolving-multi-round-attacks)  
+   标签：评分：10.0/10、query:llm
+   evidence：针对演进式攻击的有状态多轮LLM防御框架
+5. [Security in LLM-as-a-Judge: A Comprehensive SoK](/202604/07/2603.29403v2-security-in-llm-as-a-judge-a-comprehensive-sok)  
    标签：评分：9.0/10、query:llm
-   evidence：分布式后训练中的后门攻击
-5. [KAIJU: An Executive Kernel for Intent-Gated Execution of LLM Agents](/202604/06/2604.02375v1-kaiju-an-executive-kernel-for-intent-gated-execution-of-llm-agents)  
+   evidence：LLM作为评判者的安全知识体系化
+6. [ClawSafety: "Safe" LLMs, Unsafe Agents](/202604/07/2604.01438v2-clawsafety-safe-llms-unsafe-agents)  
    标签：评分：9.0/10、query:llm
-   evidence：针对提示注入的安全范式
-6. [Poison Once, Exploit Forever: Environment-Injected Memory Poisoning Attacks on Web Agents](/202604/06/2604.02623v1-poison-once-exploit-forever-environment-injected-memory-poisoning-attacks-on-web-agents)  
+   evidence：LLM 智能体中的提示注入漏洞
+7. [From Prompt to Physical Action: Structured Backdoor Attacks on LLM-Mediated Robotic Control Systems](/202604/07/2604.03890v1-from-prompt-to-physical-action-structured-backdoor-attacks-on-llm-mediated-robotic-control-systems)  
    标签：评分：9.0/10、query:llm
-   evidence：针对大模型Web智能体的环境注入内存投毒攻击
-7. [Credential Leakage in LLM Agent Skills: A Large-Scale Empirical Study](/202604/06/2604.03070v1-credential-leakage-in-llm-agent-skills-a-large-scale-empirical-study)  
+   evidence：微调过程中嵌入的结构化后门攻击
+8. [Causality Laundering: Denial-Feedback Leakage in Tool-Calling LLM Agents](/202604/07/2604.04035v1-causality-laundering-denial-feedback-leakage-in-tool-calling-llm-agents)  
    标签：评分：9.0/10、query:llm
-   evidence：大模型智能体中的凭据泄露，包括提示注入向量
-8. [Supply-Chain Poisoning Attacks Against LLM Coding Agent Skill Ecosystems](/202604/06/2604.03081v1-supply-chain-poisoning-attacks-against-llm-coding-agent-skill-ecosystems)  
+   evidence：工具调用型大模型智能体中的因果洗钱攻击
+9. [LLM-Enabled Open-Source Systems in the Wild: An Empirical Study of Vulnerabilities in GitHub Security Advisories](/202604/07/2604.04288v1-llm-enabled-open-source-systems-in-the-wild-an-empirical-study-of-vulnerabilities-in-github-security-advisories)  
    标签：评分：9.0/10、query:llm
-   evidence：智能体技能生态系统中的供应链投毒
+   evidence：对GitHub安全公告中LLM相关漏洞的实证研究
+10. [ShieldNet: Network-Level Guardrails against Emerging Supply-Chain Injections in Agentic Systems](/202604/07/2604.04426v1-shieldnet-network-level-guardrails-against-emerging-supply-chain-injections-in-agentic-systems)  
+   标签：评分：9.0/10、query:llm
+   evidence：智能体系统中的供应链注入攻击
+11. [A Patch-based Cross-view Regularized Framework for Backdoor Defense in Multimodal Large Language Models](/202604/07/2604.04488v1-a-patch-based-cross-view-regularized-framework-for-backdoor-defense-in-multimodal-large-language-models)  
+   标签：评分：9.0/10、query:llm
+   evidence：多模态大语言模型中的后门防御
+12. [Mapping the Exploitation Surface: A 10,000-Trial Taxonomy of What Makes LLM Agents Exploit Vulnerabilities](/202604/07/2604.04561v1-mapping-the-exploitation-surface-a-10000-trial-taxonomy-of-what-makes-llm-agents-exploit-vulnerabilities)  
+   标签：评分：9.0/10、query:llm
+   evidence：大模型智能体利用漏洞行为的分类研究
 
 ### 速读区论文标签
-1. [Safety, Security, and Cognitive Risks in World Models](/202604/06/2604.01346v1-safety-security-and-cognitive-risks-in-world-models)  
+1. [Strengthening Human-Centric Chain-of-Thought Reasoning Integrity in LLMs via a Structured Prompt Framework](/202604/07/2604.04852v1-strengthening-human-centric-chain-of-thought-reasoning-integrity-in-llms-via-a-structured-prompt-framework)  
    标签：评分：8.0/10、query:llm
-   evidence：世界模型中的安全风险，包括训练数据损坏和投毒
-2. [Beyond Semantic Manipulation: Token-Space Attacks on Reward Models](/202604/06/2604.02686v1-beyond-semantic-manipulation-token-space-attacks-on-reward-models)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对奖励模型的令牌空间对抗攻击
-3. [AgentHazard: A Benchmark for Evaluating Harmful Behavior in Computer-Use Agents](/202604/06/2604.02947v1-agenthazard-a-benchmark-for-evaluating-harmful-behavior-in-computer-use-agents)  
-   标签：评分：8.0/10、query:llm
-   evidence：评估智能体有害行为的基准
-4. [LogicPoison: Logical Attacks on Graph Retrieval-Augmented Generation](/202604/06/2604.02954v1-logicpoison-logical-attacks-on-graph-retrieval-augmented-generation)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对GraphRAG系统的逻辑投毒攻击
-5. [Secure Forgetting: A Framework for Privacy-Driven Unlearning in Large Language Model (LLM)-Based Agents](/202604/06/2604.00430v1-secure-forgetting-a-framework-for-privacy-driven-unlearning-in-large-language-model-llm-based-agents)  
-   标签：评分：6.0/10、query:llm
-   evidence：大模型智能体中隐私驱动的遗忘机制
+   evidence：提高安全威胁和攻击检测的可靠性
+2. [SecPI: Secure Code Generation with Reasoning Models via Security Reasoning Internalization](/202604/07/2604.03587v1-secpi-secure-code-generation-with-reasoning-models-via-security-reasoning-internalization)  
+   标签：评分：7.0/10、query:llm
+   evidence：减轻LLM生成代码中的安全漏洞
+3. [Emergent Inference-Time Semantic Contamination via In-Context Priming](/202604/07/2604.04043v1-emergent-inference-time-semantic-contamination-via-in-context-priming)  
+   标签：评分：7.0/10、query:llm
+   evidence：推理时语义漂移与对齐失效
 
 
 <div class="dpr-home-promo-card">
