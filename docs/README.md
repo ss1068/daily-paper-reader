@@ -6,67 +6,70 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-07
-- 运行时间：2026-04-07 20:30:56 UTC
+- 最新运行日期：2026-04-08
+- 运行时间：2026-04-08 20:26:46 UTC
 - 运行状态：成功
-- 本次总论文数：15
-- 精读区：12
-- 速读区：3
+- 本次总论文数：16
+- 精读区：7
+- 速读区：9
 
 ### 今日简报（AI）
-今日深度复盘 15 篇 AI 安全前沿论文，重点攻克大模型提示词注入与智能体漏洞评估。
-满分研究警示智能体比预想中更脆弱，并系统性定义了衡量提示词注入攻击有效性的新标准。
-建议开发者在构建 Agent 应用时，优先强化对间接注入风险的防御与安全推理内化。
-- 详情：[/202604/07/README](/202604/07/README)
+今日聚焦大模型安全攻防，深度剖析了情绪刺激对安全对齐的影响及双锚点梯度解码防御技术。
+研究揭示了情绪诱导可能瓦解模型防线，并警示了多模态模型与工具调用中潜藏的后门泄密风险。
+建议开发者重点关注复杂交互下的模型鲁棒性，严防工具插件成为数据外泄的隐蔽通道。
+- 详情：[/202604/08/README](/202604/08/README)
 
 ### 精读区论文标签
-1. [AttackEval: A Systematic Empirical Study of Prompt Injection Attack Effectiveness Against Large Language Models](/202604/07/2604.03598v1-attackeval-a-systematic-empirical-study-of-prompt-injection-attack-effectiveness-against-large-language-models)  
+1. [FreakOut-LLM: The Effect of Emotional Stimuli on Safety Alignment](/202604/08/2604.04992v1-freakout-llm-the-effect-of-emotional-stimuli-on-safety-alignment)  
    标签：评分：10.0/10、query:llm
-   evidence：提示注入攻击有效性的系统实证研究
-2. [Your Agent is More Brittle Than You Think: Uncovering Indirect Injection Vulnerabilities in Agentic LLMs](/202604/07/2604.03870v1-your-agent-is-more-brittle-than-you-think-uncovering-indirect-injection-vulnerabilities-in-agentic-llms)  
+   evidence：情感刺激对越狱易感性的影响
+2. [Gradient-Controlled Decoding: A Safety Guardrail for LLMs with Dual-Anchor Steering](/202604/08/2604.05179v1-gradient-controlled-decoding-a-safety-guardrail-for-llms-with-dual-anchor-steering)  
    标签：评分：10.0/10、query:llm
-   evidence：智能体LLM中的间接提示注入漏洞
-3. [Automating Cloud Security and Forensics Through a Secure-by-Design Generative AI Framework](/202604/07/2604.03912v1-automating-cloud-security-and-forensics-through-a-secure-by-design-generative-ai-framework)  
+   evidence：防御越狱和提示注入攻击
+3. [JailWAM: Jailbreaking World Action Models in Robot Control](/202604/08/2604.05498v1-jailwam-jailbreaking-world-action-models-in-robot-control)  
    标签：评分：10.0/10、query:llm
-   evidence：使用 PromptShield 防御 LLM 免受提示注入攻击
-4. [CoopGuard: Stateful Cooperative Agents Safeguarding LLMs Against Evolving Multi-Round Attacks](/202604/07/2604.04060v1-coopguard-stateful-cooperative-agents-safeguarding-llms-against-evolving-multi-round-attacks)  
+   evidence：针对动作模型的越狱攻击与评估框架
+4. [Stop Fixating on Prompts: Reasoning Hijacking and Constraint Tightening for Red-Teaming LLM Agents](/202604/08/2604.05549v1-stop-fixating-on-prompts-reasoning-hijacking-and-constraint-tightening-for-red-teaming-llm-agents)  
    标签：评分：10.0/10、query:llm
-   evidence：针对演进式攻击的有状态多轮LLM防御框架
-5. [Security in LLM-as-a-Judge: A Comprehensive SoK](/202604/07/2603.29403v2-security-in-llm-as-a-judge-a-comprehensive-sok)  
+   evidence：无需修改提示即可对大模型智能体进行红队测试的JailAgent框架
+5. [Poison Once, Exploit Forever: Environment-Injected Memory Poisoning Attacks on Web Agents](/202604/08/2604.02623v2-poison-once-exploit-forever-environment-injected-memory-poisoning-attacks-on-web-agents)  
    标签：评分：9.0/10、query:llm
-   evidence：LLM作为评判者的安全知识体系化
-6. [ClawSafety: "Safe" LLMs, Unsafe Agents](/202604/07/2604.01438v2-clawsafety-safe-llms-unsafe-agents)  
+   evidence：针对大模型智能体的环境注入内存投毒攻击
+6. [A Systematic Study of Cross-Modal Typographic Attacks on Audio-Visual Reasoning](/202604/08/2604.03995v1-a-systematic-study-of-cross-modal-typographic-attacks-on-audio-visual-reasoning)  
    标签：评分：9.0/10、query:llm
-   evidence：LLM 智能体中的提示注入漏洞
-7. [From Prompt to Physical Action: Structured Backdoor Attacks on LLM-Mediated Robotic Control Systems](/202604/07/2604.03890v1-from-prompt-to-physical-action-structured-backdoor-attacks-on-llm-mediated-robotic-control-systems)  
+   evidence：针对多模态大语言模型的跨模态拼写攻击
+7. [SkillAttack: Automated Red Teaming of Agent Skills through Attack Path Refinement](/202604/08/2604.04989v1-skillattack-automated-red-teaming-of-agent-skills-through-attack-path-refinement)  
    标签：评分：9.0/10、query:llm
-   evidence：微调过程中嵌入的结构化后门攻击
-8. [Causality Laundering: Denial-Feedback Leakage in Tool-Calling LLM Agents](/202604/07/2604.04035v1-causality-laundering-denial-feedback-leakage-in-tool-calling-llm-agents)  
-   标签：评分：9.0/10、query:llm
-   evidence：工具调用型大模型智能体中的因果洗钱攻击
-9. [LLM-Enabled Open-Source Systems in the Wild: An Empirical Study of Vulnerabilities in GitHub Security Advisories](/202604/07/2604.04288v1-llm-enabled-open-source-systems-in-the-wild-an-empirical-study-of-vulnerabilities-in-github-security-advisories)  
-   标签：评分：9.0/10、query:llm
-   evidence：对GitHub安全公告中LLM相关漏洞的实证研究
-10. [ShieldNet: Network-Level Guardrails against Emerging Supply-Chain Injections in Agentic Systems](/202604/07/2604.04426v1-shieldnet-network-level-guardrails-against-emerging-supply-chain-injections-in-agentic-systems)  
-   标签：评分：9.0/10、query:llm
-   evidence：智能体系统中的供应链注入攻击
-11. [A Patch-based Cross-view Regularized Framework for Backdoor Defense in Multimodal Large Language Models](/202604/07/2604.04488v1-a-patch-based-cross-view-regularized-framework-for-backdoor-defense-in-multimodal-large-language-models)  
-   标签：评分：9.0/10、query:llm
-   evidence：多模态大语言模型中的后门防御
-12. [Mapping the Exploitation Surface: A 10,000-Trial Taxonomy of What Makes LLM Agents Exploit Vulnerabilities](/202604/07/2604.04561v1-mapping-the-exploitation-surface-a-10000-trial-taxonomy-of-what-makes-llm-agents-exploit-vulnerabilities)  
-   标签：评分：9.0/10、query:llm
-   evidence：大模型智能体利用漏洞行为的分类研究
+   evidence：通过对抗性提示对智能体技能进行自动化红队测试
 
 ### 速读区论文标签
-1. [Strengthening Human-Centric Chain-of-Thought Reasoning Integrity in LLMs via a Structured Prompt Framework](/202604/07/2604.04852v1-strengthening-human-centric-chain-of-thought-reasoning-integrity-in-llms-via-a-structured-prompt-framework)  
+1. [PDA: Text-Augmented Defense Framework for Robust Vision-Language Models against Adversarial Image Attacks](/202604/08/2604.01010v1-pda-text-augmented-defense-framework-for-robust-vision-language-models-against-adversarial-image-attacks)  
    标签：评分：8.0/10、query:llm
-   evidence：提高安全威胁和攻击检测的可靠性
-2. [SecPI: Secure Code Generation with Reasoning Models via Security Reasoning Internalization](/202604/07/2604.03587v1-secpi-secure-code-generation-with-reasoning-models-via-security-reasoning-internalization)  
+   evidence：针对视觉语言模型对抗性图像攻击的防御
+2. [Your LLM Agent Can Leak Your Data: Data Exfiltration via Backdoored Tool Use](/202604/08/2604.05432v1-your-llm-agent-can-leak-your-data-data-exfiltration-via-backdoored-tool-use)  
+   标签：评分：8.0/10、query:llm
+   evidence：通过带后门的工具使用型LLM智能体进行数据泄露
+3. [Stealthy and Adjustable Text-Guided Backdoor Attacks on Multimodal Pretrained Models](/202604/08/2604.05809v1-stealthy-and-adjustable-text-guided-backdoor-attacks-on-multimodal-pretrained-models)  
+   标签：评分：8.0/10、query:llm
+   evidence：利用文本触发器对多模态预训练模型进行后门攻击
+4. [Reading Between the Pixels: An Inscriptive Jailbreak Attack on Text-to-Image Models](/202604/08/2604.05853v1-reading-between-the-pixels-an-inscriptive-jailbreak-attack-on-text-to-image-models)  
+   标签：评分：8.0/10、query:llm
+   evidence：针对文生图模型的嵌入式绕过攻击
+5. [Safety, Security, and Cognitive Risks in World Models](/202604/08/2604.01346v2-safety-security-and-cognitive-risks-in-world-models)  
    标签：评分：7.0/10、query:llm
-   evidence：减轻LLM生成代码中的安全漏洞
-3. [Emergent Inference-Time Semantic Contamination via In-Context Priming](/202604/07/2604.04043v1-emergent-inference-time-semantic-contamination-via-in-context-priming)  
+   evidence：世界模型和代理AI中的安全风险
+6. [How Alignment Routes: Localizing, Scaling, and Controlling Policy Circuits in Language Models](/202604/08/2604.04385v1-how-alignment-routes-localizing-scaling-and-controlling-policy-circuits-in-language-models)  
    标签：评分：7.0/10、query:llm
-   evidence：推理时语义漂移与对齐失效
+   evidence：大语言模型中的安全拒绝与对齐机制
+7. [Hackers or Hallucinators? A Comprehensive Analysis of LLM-Based Automated Penetration Testing](/202604/08/2604.05719v1-hackers-or-hallucinators-a-comprehensive-analysis-of-llm-based-automated-penetration-testing)  
+   标签：评分：7.0/10、query:llm
+   evidence：基于大语言模型的自动化渗透测试与攻击框架
+8. [SafeCtrl: Region-Aware Safety Control for Text-to-Image Diffusion via Detect-Then-Suppress](/202604/08/2604.03941v1-safectrl-region-aware-safety-control-for-text-to-image-diffusion-via-detect-then-suppress)  
+   标签：评分：6.0/10、query:llm
+   evidence：扩散模型中的对抗攻击与安全控制
+9. [A Multi-Agent Framework for Automated Exploit Generation with Constraint-Guided Comprehension and Reflection](/202604/08/2604.05130v1-a-multi-agent-framework-for-automated-exploit-generation-with-constraint-guided-comprehension-and-reflection)  
+   标签：评分：6.0/10、query:llm
+   evidence：利用LLM进行自动化漏洞利用生成与理解
 
 
 <div class="dpr-home-promo-card">
