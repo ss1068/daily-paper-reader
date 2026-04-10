@@ -1,0 +1,332 @@
+Title: AtomEval: Atomic Evaluation of Adversarial Claims in Fact Verification
+
+URL Source: https://arxiv.org/pdf/2604.07967v1
+
+Published Time: Fri, 10 Apr 2026 00:46:18 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# AtomEval: Atomic Evaluation of Adversarial Claims in Fact Verification 
+
+Hongyi Cen 1 Mingxin Wang 1 Yule Liu 2
+
+Jingyi Zheng 2 Hanze Jia 1 Tan Tang 1 Yingcai Wu 11Zhejiang University 
+
+> 2
+
+The Hong Kong University of Science and Technology (Guangzhou) 
+
+Abstract 
+
+Adversarial claim rewriting is widely used to test fact-checking systems, but standard metrics fail to capture truth-conditional consistency and often label semantically corrupted rewrites as successful. We intro-duce AtomEval , a validity-aware evalua-tion framework that decomposes claims into subject–relation–object–modifier (SROM) atoms and scores adversarial rewrites with Atomic Validity Scoring (VASR), enabling detection of factual corruption beyond sur-face similarity. Experiments on the FEVER dataset across representative attack strate-gies and LLM generators show that Atom-Eval provides more reliable evaluation sig-nals in our experiments. Using AtomEval, we further analyze LLM-based adversarial generators and observe that stronger mod-els do not necessarily produce more effective adversarial claims under validity-aware eval-uation, highlighting previously overlooked limitations in current adversarial evaluation practices. 
+
+1 Introduction 
+
+Misinformation remains a persistent challenge in modern information ecosystems, motivat-ing fact verification systems that assess claims against external evidence (Chen et al., 2023; Surjatmodjo et al., 2024; Jerit and Zhao, 2020; Singhal et al., 2024; Rashid and Hakak, 2025). As these systems are increasingly deployed in high-stakes settings, their robustness to ad-versarial manipulation has become an impor-tant concern. Prior work has shown that fact-checking models are vulnerable to adversarial claim rewriting, ranging from early token-level perturbations to recent fluent rewrites gener-ated by large language models (LLMs) (Gao et al., 2018; Li et al., 2020; Jin et al., 2020; Li et al., 2019; Ou et al., 2026; Leite et al., 2026; He et al., 2025; Bethany et al., 2025; Liu et al., 2025). Recent LLM-based attacks substantially ex-pand the attack space. Compared with earlier surface perturbations, they can produce more natural and semantically flexible rewrites, in-cluding evidence-conditioned variants that use the same retrieved evidence as the verifier (Ab-delnabi and Fritz, 2023; Ou et al., 2026; He et al., 2025). These attacks are typically eval-uated by whether they flip the verifier’s pre-diction while remaining close to the original claim under surface- or sentence-level similar-ity metrics (Przybyla et al., 2023; Zheng et al., 2025; Ou et al., 2026; Papineni et al., 2002; Zhou et al., 2024). Under this protocol, many modern attacks appear highly effective. However, these metrics can overestimate at-tack quality. In fact verification, a valid ad-versarial rewrite should fool the verifier with-out changing the attacked claim itself. For refuted claims, this means preserving the same false proposition rather than drifting toward the evidence-supported fact. In practice, many apparently successful attacks instead modify key factual content, move toward evidence-supported statements, or introduce unsup-ported details (Singh and Namin, 2024; Zhou et al., 2024). Such outputs may remain fluent and similar on the surface, yet they no longer constitute valid attacks on the original claim. Figure 1 illustrates this failure mode. The original claim is refuted, and the evidence provides the supported fact. Although both rewrites are fluent and may appear success-ful under conventional metrics, only the valid rewrite preserves the original false proposi-tion being attacked. The invalid rewrite in-stead moves toward the evidence-supported fact and introduces additional hallucinated content. This example shows why prediction change and                     
+
+> arXiv:2604.07967v1 [cs.CL] 9 Apr 2026 Original Claim (Refuted Claim):
+> Reign Over Me is an American film made in 2010 .
+> Evidence:
+> ... Reign Over Me is a 2007 American drama film ...
+> ×Invalid Rewrite (Mistral-7B):
+> “Reign Over Me... in 2007 , with some insiders claiming it was actually filmed in 2005 ...”
+> ✓Valid Rewrite (GPT-4.1):
+> “...recently surfaced insider reports have indicated that the film ... was in fact an American production made in 2010 ...”
+> Figure 1: Valid and invalid adversarial rewrites of a refuted claim. A valid rewrite pre-serves the original false proposition (red), whereas an invalid rewrite drifts toward the evidence-supported fact (green) or introduces hallucinated content (blue).
+
+textual similarity alone can misclassify seman-tically corrupted rewrites as successful attacks. In our analysis, such cases account for a sub-stantial portion of attacks judged successful by standard metrics, indicating that factual va-lidity is a central factor in adversarial quality rather than a marginal corner case. This gap motivates a more validity-aware evaluation of adversarial claim rewriting. Prior work on factual consistency suggests that com-plex claims can be decomposed into atomic facts for fine-grained verification (Min et al., 2023; Lage and Ostermann, 2025; Tang et al., 2024; Akbar et al., 2024; Hu et al., 2024; Ji et al., 2024). Building on this intuition, we present AtomEval , a benchmark for evaluat-ing whether adversarial rewrites preserve the original attacked proposition. AtomEval de-composes claims into structured atomic facts and measures whether a rewrite remains faith-ful to the original claim while avoiding factual corruption. This allows us to distinguish valid attacks from rewrites that succeed only because they alter the claim itself. 
+
+Contributions. We identify an important evaluation gap in adversarial fact verification: prediction-change and similarity metrics often count factually corrupted rewrites as successful attacks. We present AtomEval , a validity-aware benchmark that evaluates adversarial rewrites at the level of atomic propositions. Using AtomEval, we re-evaluate modern LLM-based adversarial generators and show a con-sistent gap between raw attack success and factual validity, with many rewrites drifting toward evidence-supported statements or oth-erwise changing the original claim. 
+
+2 Related Work 
+
+Adversarial attacks and evaluation. Re-search on adversarial fact verification spans both surface perturbations and semantically richer claim rewrites. Early methods relied on character- or word-level edits to fool clas-sifiers (Gao et al., 2018; Li et al., 2020; Jin et al., 2020; Li et al., 2019), often at the cost of fluency or unintended semantic drift (Zhou et al., 2024). Subsequent work expanded the attack space to paraphrasing, fact mixing, omis-sion, and retrieval disruption (Eisenschlos et al., 2021; Atanasova et al., 2020; Niewinski et al., 2019), while recent LLM-based methods en-able more fluent, context-aware, and evidence-conditioned adversarial generation (Abdelnabi and Fritz, 2023; Ou et al., 2026; Leite et al., 2026; He et al., 2025; Bethany et al., 2025). Sur-veys further document this shift from local per-turbations to generation-based attacks in fact-checking and related settings (Liu et al., 2025). Across these settings, evaluation has largely relied on coarse signals such as attack success rate, semantic similarity, perplexity, and task-level scores (Przybyla et al., 2023; Zheng et al., 2025; Bekoulis et al., 2021; Thorne et al., 2018; Papineni et al., 2002), which capture outcome-level or surface-level effects but do not explicitly test whether a rewrite preserves the original attacked proposition. 
+
+Atomic and structured factual evaluation. 
+
+A complementary line of work evaluates factual-ity by decomposing generated text into minimal verifiable units. Methods such as FactScore and OpenFActScore use atomic representations to support fine-grained verification against refer-ence evidence (Min et al., 2023; Lage and Os-termann, 2025). Related work on LLM-based factuality evaluation and hallucination diagno-sis likewise emphasizes structured or localized factual assessment (Tang et al., 2024; Akbar et al., 2024; Hu et al., 2024; Ji et al., 2024). Re-cent efforts further combine LLM parsing with deterministic checks to improve robustness un-der challenging generation settings (Allen et al., 2025). These studies motivate fine-grained fac-tual evaluation, but they do not directly ad-dress whether adversarial rewrites in fact ver-ification preserve the original claim’s factual proposition. 
+
+3 AtomEval 
+
+3.1 Problem Setup 
+
+Let D = {(C, E, y )} denote a fact verification dataset, where C is a claim, E is the retrieved evidence, and y ∈ { Supported , Refuted }
+
+is the ground-truth label. Given (C, E ), an adversarial generator G produces a rewritten claim C′ = G(C, E ), while a fact verification model F V predicts ˆy = F V (C, E ).
+
+Evaluation Objective. A valid adversar-ial rewrite should satisfy two criteria. Eva-sion requires that the rewritten claim change the verifier’s prediction, i.e., F V (C′, E )̸ = y.
+
+Semantic Validity requires that the rewrite preserve the original attacked proposition un-der the same evidence context. For refuted claims, this means preserving the same false proposition rather than drifting toward the evidence-supported fact. Thus, a valid adver-sarial rewrite may alter the surface form of the claim, but it should not change the proposition being attacked. 
+
+3.2 Threat Model 
+
+We consider an evidence-conditioned adversar-ial rewriting setting. The attacker is given the original claim C and the same retrieved evi-dence E available to the verifier, and generates a rewritten claim C′. The attacker’s goal is to change the verifier’s prediction while preserving the original attacked proposition. The attacker may rewrite only the claim text: the evidence is fixed, and the attack does not modify the verifier or rely on additional retrieval beyond the provided evidence context. 
+
+3.3 Framework Overview 
+
+As shown in Fig. 2, AtomEval is a validity-aware evaluation framework for adversarial claim rewriting in fact verification. Given an original claim C, retrieved evidence E, and an adversarial rewrite C′, AtomEval evaluates whether the rewrite preserves the original at-tacked proposition under the same evidence context. AtomEval operates at the level of atomic propositions rather than surface-form similarity. It first decomposes the original and rewritten claims into minimal verifiable units, and then compares them using a hard structural gate together with several soft semantic degradation signals. This design enables fine-grained de-tection of factual corruption that metrics such as PPL or SBERT may overlook (Zhou et al., 2024). 
+
+3.3.1 Atomic Fact Extraction 
+
+We define an atomic fact as a minimal verifiable proposition whose truth value can be indepen-dently determined under the given evidence context. Each atom is represented as a struc-tured SROM tuple, a = ( s, r, o, m ), where s,
+
+r, o, and m denote the subject, relation, object, and optional modifier, respectively. We obtain these atoms using a distilled ex-tractor trained for adversarial claim decompo-sition; implementation details are deferred to the appendix. 
+
+3.3.2 Taxonomy of Generation Failures 
+
+Using atomic representations, we categorize adversarial failures into two levels: Hard Con-straints (binary validity gates) and Soft Penal-ties (continuous degradation measures), exam-ples are shown in Table 1. 
+
+Hard Constraints (Binary Gate). An ad-versarial rewrite C′ is considered structurally valid only if it preserves the relational struc-ture of the original claim. Violation of this constraint immediately invalidates the attack. 
+
+Relation Consistency ( Irel ). Let A(C)
+
+and A(C′) denote the sets of atomic facts ex-tracted from the original and adversarial claims, respectively. For each adversarial atom a′ =(s′, r ′, o ′, m ′) ∈ A(C′), we identify its most sim-ilar counterpart a = ( s, r, o, m ) ∈ A(C) using sentence-level similarity. Let X = {s, r, o, m }
+
+denote the full structural components. A re-lational violation occurs when exactly three components remain semantically aligned while the fourth diverges: 
+
+∃a′ ∈ A(C′) : {x ∈ X | sim (x′, x ) > τ } = 3 
+
+(1) This formulation captures minimal structural edits where a single semantic role changes while others remain aligned. Such cases correspond Figure 2: Overview of AtomEval , a validity-aware evaluation framework for adversarial claim rewriting in fact verification. Given an original claim, its retrieved evidence, and an adversarial rewrite, AtomEval decomposes the original and rewritten claims into atomic facts (SROM tuples) and evaluates them using a hard structural gate together with soft semantic degradation metrics. Blue, red, and green correspond to the original claim atoms, adversarial claim atoms, and evidence respectively.         
+
+> Metric Example / Description
+> Hard Constraints
+> Relation Consist. C: The claim is false.
+> C’ : The claim is true. (Invalid: Reversal )
+> Soft Semantic Degradation Metrics
+> Core Dist. C’ : Tesla was founded. (Year info removed )
+> Fact Conflict C’ : Founded in 2003 and 2015. (Contradiction )
+> Topic Drift C’ : Apple later invested. (Unrelated entity )
+> Evid. Leak C’ : [Repeats evidence verbatim]
+
+Table 1: Validity constraints and degradation met-rics. Hard constraints are binary; soft metrics quan-tify semantic corruption. 
+
+to common adversarial manipulations, includ-ing subject substitution , relation alteration , ob-ject substitution , and modifier substitution . If any adversarial atom satisfies this condition, the rewrite is considered to violate relational consistency. The hard validity gate is therefore defined as 
+
+H = Irel . Only adversarial rewrites with H = 1 
+
+are considered structurally valid attacks. 
+
+Soft Semantic Degradation Metrics. For structurally valid rewrites, AtomEval measures semantic degradation using four interpretable signals defined over atomic propositions. Core distortion captures whether the rewrite pre-serves the original claim’s essential factual con-tent. Factual conflict captures internal con-tradictions introduced by the rewrite. Topic drift captures unsupported off-target facts beyond the original claim and evidence con-text. Evidence leakage tracks factual con-tent copied from the evidence but absent from the original claim, and is treated as an aux-iliary diagnostic rather than a direct validity violation. Detailed formulations are provided in Appendix B. The overall degradation score is computed as a weighted combination of the four penalties: 
+
+Ltotal = αLcore + βLconflict + γLdrift + δLleak ,
+
+(2) The first three terms capture primary se-mantic corruption (core fact distortion, fac-tual conflict, and topical drift), which rep-resent fundamental violations of claim valid-ity. Therefore, they are assigned equal weights (α = β = γ = 0 .3). In contrast, the leakage term reflects con-textual reuse of evidence rather than a direct semantic violation. Since evidence leakage does not necessarily invalidate a claim, it is treated as a secondary signal and assigned a smaller weight ( δ = 0 .1). Final Validity Score. We compute the final validity score as 
+
+S(C′) = H · max(0 , 1 − L total ), (3) where H denotes the hard structural gate and 
+
+Ltotal aggregates soft semantic degradation. 
+
+4 Experimental Setup 
+
+We evaluate AtomEval in an adversarial fact-checking setting where LLM-based generators rewrite claims and the resulting attacks are assessed using both conventional metrics and AtomEval. Additional implementation details are provided in Appendix A. 
+
+4.1 Dataset and Benchmark 
+
+We conduct experiments on the FEVER bench-mark (Thorne et al., 2018). For adversarial eval-uation, we sample 400 source claims labeled 
+
+Refuted from the FEVER validation split. To ensure that attack success reflects adversarial manipulation rather than model error, we re-tain only claims that are correctly classified by the victim verifier in their original form. 
+
+4.2 Models Victim Verifier. We use a Llama-3-8B-based fact-checking model (Team, 2024), fine-tuned on the FEVER training split. 
+
+Adversarial Generators. We include both proprietary and open-weight LLMs: GPT-4.1, Qwen-Max, and DeepSeek-v3, as well as Qwen2.5-32B-Instruct, Llama-3-8B-Instruct, and Mistral-7B-Instruct. 
+
+4.3 Attack Instantiation 
+
+We instantiate attacks using six evidence-aware rewriting operators derived from prior fact-checking attack literature (Liu et al., 2025); detailed definitions and examples are provided in Appendix D. We adopt a zero-shot prompt-ing setup. Given a claim C and retrieved evi-dence E, the generator produces one or more rewritten claims C′ intended to mislead the verifier while preserving the original attacked proposition. Prompt templates are provided in Appendix C. 
+
+4.4 Extractor Training 
+
+The atomic fact extractor used in AtomEval is trained on a separate FEVER-derived dataset of structurally complex claims with SROM an-notations. We use 2,000 claims for training and 500 for evaluation; full construction and anno-tation details are deferred to the appendix. 
+
+5 Validating AtomEval 
+
+Before applying AtomEval to large-scale ad-versarial evaluation, we verify two core com-ponents of the framework: the reliability of atomic fact extraction and the usefulness of its semantic corruption signals. 
+
+5.1 RQ1: Reliability of Atomic Fact Extraction 
+
+AtomEval relies on atomic decomposition of claims into SROM tuples. Our goal here is not to develop a new information extraction system, but to verify that atomic decomposition is sufficiently reliable for downstream validity-aware evaluation. 
+
+Setup. We evaluate the extractor on the annotated test split described in Section 4.1, which contains 500 claims with manually la-beled SROM facts. We compare three ap-proaches: direct GPT-4 extraction, a Llama3-8B baseline, and the AtomEval extractor. To account for lexical variation, predicted and gold tuples are matched semantically; full matching details are provided in Appendix E.             
+
+> Method Prec. Rec. F1
+> LLM Extraction (GPT-4) 0.65 0.68 0.67 Llama3-8B 0.45 0.55 0.50 AtomEval Extractor 0.85 0.70 0.77
+> Table 2: Atomic fact extraction accuracy against manually annotated gold SROM facts.
+
+Results. As shown in Table 2, the AtomEval extractor achieves the best overall performance, with notably higher precision than the LLM baselines. This indicates that atomic decompo-sition is sufficiently reliable to support down-stream validity-aware evaluation. 
+
+5.2 RQ2: Diagnosing Semantic Corruption 
+
+We next evaluate whether the corruption sig-nals in AtomEval capture the main types of semantic failure observed in adversarial claim rewriting. Setup. We sample 100 source claims from the adversarial benchmark and generate 420 adversarial claims using the rewriting oper-ators described in Appendix D. Annotators judge whether each rewrite remains semanti-cally valid with respect to the original claim and evidence; invalid claims are further labeled with one or more corruption types. We then measure whether AtomEval can correctly detect the corresponding violations. Detailed annota-tion and matching procedures are provided in Appendix F.                    
+
+> Corruption Type Est. Count Prec. Recall
+> Binary Violations
+> Relation Inconsistency 46 90.8% 82.3%
+> Continuous Degradations
+> Core Fact Distortion 72 76.9% 83.3% Fact Conflict 27 66.9% 61.1% Topic Drift 58 68.9% 87.5% Evidence Leakage (diag.) 139 90.48% 82.6%
+> Table 3: Distribution of semantic corruption types across 217 invalid adversarial claims and Atom-Eval’s detection performance. A single invalid claim may exhibit multiple corruption types.
+
+Results. Table 3 shows that most human-identified invalid rewrites fall within the pro-posed corruption taxonomy, suggesting that AtomEval captures the dominant semantic fail-ure modes in adversarial claim rewriting. Atom-Eval detects relation inconsistency and core fact distortion with strong precision and re-call, while topic drift achieves particularly high recall. Fact conflict is harder: the detector achieves reasonable precision but lower recall, mainly because implicit contradictions often require deeper semantic interpretation. Over-all, these results suggest that AtomEval pro-vides reliable diagnostic signals for the main corruption types while remaining lightweight and interpretable. 
+
+6 Re-evaluating Adversarial Attacks 
+
+To understand whether conventional attack metrics faithfully reflect adversarial effective-ness in fact verification, we compare standard evaluation metrics with the validity-aware eval-uation provided by AtomEval. 
+
+Attack strategies. To evaluate AtomEval under diverse adversarial conditions, we con-sider five representative attack paradigms de-rived from prior fact-checking attack litera-ture. These strategies capture different mecha-nisms for generating misleading claims, includ-ing stylistic rewriting, adversarial paraphrasing, fact mixing, information omission, and contex-tual manipulation. Specifically, we instantiate the following attack types: Stylistic Perturbation (Ab-delnabi and Fritz, 2023), Semantic Obfuscation (Hidey et al., 2020), Fact-Mixing (GEM-style) (Niewinski et al., 2019), Information Omission (Atanasova et al., 2022), and Contextual Hi-jacking (AdvAdd-style) (Du et al., 2022). Each paradigm is implemented through instruction-guided prompting using multiple LLM generators (e.g., GPT-4, Qwen2.5-32B, and Mistral-7B), producing diverse adversar-ial claims that reflect contemporary generative attack scenarios. 
+
+Metrics. We report both conventional eval-uation metrics and the validity-aware metrics introduced by AtomEval. Conventional met-rics include the Attack Success Rate (ASR), SBERT similarity, and perplexity (PPL). These metrics are commonly used in prior adversarial fact-checking studies. AtomEval decomposes semantic corruption into atomic-level signals (Relation, Core, Conflict, Drift, Leak) and re-ports the final Validity-Aware Success Rate (VASR), which measures the fraction of attacks that remain semantically valid after atomic ver-ification. For the atomic signals, the reported values correspond to the average severity among af-fected samples rather than the proportion over the entire dataset. That is, when a specific cor-ruption type is triggered (e.g., Core distortion or Drift), we report the average magnitude of the violation. For contextual quality, SBERT similarity is computed between successful ad-versarial claims and their original claims, while perplexity (PPL) measures the average absolute change in perplexity introduced by adversarial rewriting. 
+
+Results. Table 4 compares conventional met-rics with AtomEval across attack strategies and generators. Across nearly all settings, the validity-aware success rate ( VASR ) is substan-tially lower than the raw attack success rate (ASR ). This gap indicates that many attacks Strategy Generator Efficacy AtomEval ↓ Contextual Quality                                                                                                                                                     
+
+> ASR ↑VASR ↑Relation ↓Core ↓Conf. ↓Drift ↓Leak SBERT ↑PPL ↓
+> Fact-Saboteurs GPT-4 8.16 6.25 3.23 61.40 27.40 29.21 35.42 77.04 108.5 Qwen2.5-32B 33.75 21.75 23.70 46.32 58.83 29.61 28.13 72.47 139.39 Mistral-7B 55.79 33.50 16.04 51.25 59.61 27.11 37.17 64.30 116.2
+> Deception GPT-4 6.84 5.75 3.85 62.11 22.73 26.08 33.61 79.13 119.6 Qwen2.5-32B 45.89 23.19 10.33 62.64 74.35 39.92 23.91 54.35 113.97 Mistral-7B 51.84 24.00 5.88 68.55 60.35 35.26 26.83 55.55 113.97
+> GEM GPT-4 2.63 2.25 10.0 37.86 0.00 0.00 13.83 78.36 132.9 Qwen2.5-32B 18.94 12.50 15.62 41.73 63.28 28.54 21.36 70.82 128.6 Mistral-7B 16.32 11.75 17.74 42.82 75.00 33.00 23.98 74.41 154.4
+> Omission GPT-4 7.11 4.75 7.41 57.84 34.91 31.13 31.07 78.88 101.8 Qwen2.5-32B 55.50 52.00 5.86 44.11 83.50 49.09 9.37 77.62 84.88 Mistral-7B 36.68 20.60 7.38 43.84 100 51.88 13.44 71.34 121.5
+> AdvAdd GPT-4 8.16 6.75 0.00 56.17 34.91 31.09 44.04 78.97 77.7
+> Qwen2.5-32B 13.50 10.75 14.81 36.78 40.88 26.65 44.59 76.95 84.88 Mistral-7B 17.76 13.11 13.85 51.48 27.38 30.75 41.09 67.79 129.1
+
+Table 4: Adversarial attack evaluation comparing raw efficacy (ASR) vs. semantic validity (VASR). Atom-Eval decomposes semantic corruption into Binary Violations (Rel.) and Continuous Degradations 
+
+(Core, Conf., Drift, Leak). VASR reflects the true attack success rate after filtering all atomic violations. 
+
+counted as successful under conventional met-rics actually rely on semantic corruption, such as altering core facts, introducing contradic-tions, or drifting away from the original claim. Furthermore, the atomic analysis reveals that 
+
+core distortion is the most prevalent cor-ruption type across strategies , while ex-plicit relation violations occur relatively rarely. This suggests that modern generative attacks typically preserve superficial relational struc-ture but manipulate key factual components to mislead verification models. We also observe an interesting interaction between evidence leakage and semantic valid-ity. Claims with higher evidence reuse tend to exhibit lower topic drift but more frequent core distortions or factual conflicts, suggesting that evidence grounding may improve topical alignment while increasing the risk of semantic inconsistencies. Overall, these results demonstrate that con-ventional metrics systematically overestimate adversarial effectiveness, whereas AtomEval provides a more faithful evaluation by explicitly filtering attacks that violate semantic validity. 
+
+Case Study. Table 6 presents representative adversarial rewrites illustrating how AtomEval distinguishes valid attacks from semantically corrupted ones. In several cases, rewrites with high surface similarity—and sometimes even successful prediction flips—are judged invalid because they alter the original attacked proposi-tion, drift toward the evidence-supported fact, or introduce additional hallucinated content. By contrast, valid rewrites tend to preserve the original false proposition while changing only style, framing, or discourse structure. These examples show that the gap between ASR and VASR is not merely numerical: it reflects quali-tatively different types of adversarial behavior. 
+
+7 Conclusion 
+
+We presented AtomEval , a validity-aware eval-uation framework for adversarial claim rewrit-ing in fact verification. By decomposing claims into atomic factual units, AtomEval enables structured verification of whether adversarial rewrites preserve the original truth-conditional relationship with evidence. Experiments on the FEVER benchmark across multiple attack strategies and LLM gen-erators show that conventional metrics such as attack success rate and sentence-level similarity often overestimate adversarial effectiveness. In contrast, AtomEval reveals that many attacks considered successful actually introduce subtle factual inconsistencies, providing a more reli-able assessment of adversarial vulnerability in fact verification systems. These findings highlight the importance of incorporating semantic validity checks when evaluating adversarial robustness. Future work includes extending validity-aware evaluation to broader fact-checking settings, integrat-ing retrieval-aware signals, and exploring how atomic validity signals can guide adversarial generation and robustness training. 
+
+8 Limitations 
+
+AtomEval has several limitations that suggest directions for future work. First, our experi-ments focus on English claims from the FEVER benchmark, and extending the framework to multilingual fact-checking scenarios remains an important next step. Second, AtomEval relies on the quality of atomic fact extraction. While our extractor achieves strong performance in practice, further improvements in structured fact extraction could lead to more accurate atomic decomposition and consequently more reliable validity evaluation. Finally, although AtomEval provides robust and interpretable structural signals, it does not fully capture complex reasoning violations such as implicit contradictions or multi-hop inconsistencies. Fu-ture work may explore hybrid approaches that combine atomic verification with LLM-based reasoning modules while preserving robustness and reproducibility. 
+
+References 
+
+Sahar Abdelnabi and Mario Fritz. 2023. Fact-saboteurs: a taxonomy of evidence manipula-tion attacks against fact-verification systems. In 
+
+Proceedings of the 32nd USENIX Conference on Security Symposium , SEC ’23, USA. USENIX Association. Shayan Ali Akbar, Md Mosharaf Hossain, Tess Wood, Si-Chi Chin, Erica Salinas, Victor Al-varez, and Erwin Cornejo. 2024. Hallumeasure: Fine-grained hallucination measurement using chain-of-thought reasoning. In Proceedings of the 2024 Conference on Empirical Methods in Natu-ral Language Processing, EMNLP 2024, Miami, FL, USA, November 12-16, 2024 , pages 15020– 15037. Association for Computational Linguis-tics. Bradley P. Allen, Prateek Chhikara, Thomas Macaulay Ferguson, Filip Ilievski, and Paul Groth. 2025. Sound and complete neurosymbolic reasoning with llm-grounded interpretations. CoRR , abs/2507.09751. Pepa Atanasova, Jakob Grue Simonsen, Christina Lioma, and Isabelle Augenstein. 2022. Fact checking with insufficient evidence. Transactions of the Association for Computational Linguistics ,10:746–763. Pepa Atanasova, Dustin Wright, and Isabelle Au-genstein. 2020. Generating label cohesive and well-formed adversarial claims. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pages 3168–3177, Online. Association for Computa-tional Linguistics. Giannis Bekoulis, Johannes Deleu, Thomas De-meester, and Chris Develder. 2021. Evaluating adversarial attacks against multiple fact verifica-tion systems. In Proceedings of the 2021 Confer-ence on Empirical Methods in Natural Language Processing , pages 2131–2144, Online and Punta Cana, Dominican Republic. Association for Com-putational Linguistics. Mazal Bethany, Nishant Vishwamitra, Cho-Yu Ja-son Chiang, and Peyman Najafirad. 2025. CAM-OUFLAGE: exploiting misinformation detection systems through llm-driven adversarial claim transformation. CoRR , abs/2505.01900. Sijing Chen, Lu Xiao, and Akit Kumar. 2023. Spread of misinformation on social media: What contributes to it and how to combat it. Comput-ers in Human Behavior , 141:107643. Yibing Du, Antoine Bosselut, and Christopher D. Manning. 2022. Synthetic disinformation at-tacks on automated fact verification systems. In 
+
+Thirty-Sixth AAAI Conference on Artificial Intel-ligence, AAAI 2022, Thirty-Fourth Conference on Innovative Applications of Artificial Intelli-gence, IAAI 2022, The Twelveth Symposium on Educational Advances in Artificial Intelligence, EAAI 2022 Virtual Event, February 22 - March 1, 2022 , pages 10581–10589. AAAI Press. Julian Eisenschlos, Silvia Pareti, Yonatan Belinkov, Shachar Mirkin, and Benoit Simhi. 2021. Fool me twice: Entailment from Wikipedia gamifica-tion. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Process-ing , pages 3523–3537, Online and Punta Cana, Dominican Republic. Association for Computa-tional Linguistics. Ji Gao, Jack Lanchantin, Mary Lou Soffa, and Yan-jun Qi. 2018. Black-box generation of adversarial text sequences to evade deep learning classifiers. In 2018 IEEE Security and Privacy Workshops (SPW) , pages 50–56. IEEE. Haorui He, Yupeng Li, Bin Benjamin Zhu, Dacheng Wen, Reynold Cheng, and Francis C. M. Lau. 2025. Fact2fiction: Targeted poisoning at-tack to agentic fact-checking system. CoRR ,abs/2508.06059. Christopher Hidey, Tuhin Chakrabarty, Tariq Al-hindi, Siddharth Varia, Kriste Krstovski, Mona Diab, and Smaranda Muresan. 2020. DeSePtion: Dual sequence prediction and adversarial exam-ples for improved fact-checking. In Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics , pages 8593–8606, Online. Association for Computational Linguis-tics. Liyan Hu, Zhibin Liu, Marjan Ghazvininejad, Luke Zettlemoyer, and Greg Durrett. 2024. MiniCheck: Efficient fact-checking of LLMs on grounding documents. In Proceedings of the 2024 Conference on Empirical Methods in Natural Lan-guage Processing (EMNLP) .Jennifer Jerit and Yangzi Zhao. 2020. Political mis-information. Annual Review of Political Science ,23:77–94. Ziwei Ji, Jyoti Zhang, Nayeon Yu, Zihan Chen, Yan Zhang, Kun Xu, Jinsong Xu, Kyuseung Lee, Sang-Gil Lee, Heuiseok Choi, and 1 others. 2024. Hallucination to truth: A review of fact-checking and factuality evaluation in large language mod-els. arXiv preprint arXiv:2404.14441 .Di Jin, Zhijing Jin, Joey Tianyi Zhou, and Peter Szolovits. 2020. Is BERT really robust? a strong baseline for natural language attack on text clas-sification and entailment. In Proceedings of the AAAI Conference on Artificial Intelligence , vol-ume 34, pages 8018–8025. Lucas Fonseca Lage and Simon Ostermann. 2025. Openfactscore: Open-source atomic evalua-tion of factuality in text generation. CoRR ,abs/2507.05965. Joao A. Leite, Oana Balalau, Dan Leybzon, and Preslav Nakov. 2026. Llm-based adversarial per-suasion attacks on fact-checking systems. In 
+
+arXiv preprint arXiv:2601.16890 .Jinfeng Li, Shouling Ji, Tianyu Du, Bo Li, and Ting Wang. 2019. Textbugger: Generating adversar-ial text against real-world applications. In 26th Annual Network and Distributed System Security Symposium, NDSS 2019, San Diego, California, USA, February 24-27, 2019 . The Internet Society. Linyang Li, Ruotian Ma, Qipeng Guo, Xiangyang Xue, and Xipeng Qiu. 2020. BERT-ATTACK: Adversarial attack against BERT using BERT. In Proceedings of the 2020 Conference on Em-pirical Methods in Natural Language Processing (EMNLP) , pages 6193–6202, Online. Association for Computational Linguistics. Fanzhen Liu, Sharif Abuadbba, Kristen Moore, Surya Nepal, Cécile Paris, Jia Wu, Jian Yang, and Quan Z. Sheng. 2025. Adversarial attacks against automated fact-checking: A survey. In 
+
+Proceedings of the 2025 Conference on Empir-ical Methods in Natural Language Processing, EMNLP 2025, Suzhou, China, November 4-9, 2025 , pages 22968–22990. Association for Com-putational Linguistics. Sewon Min, Kalpesh Krishna, Xinxi Lyu, Mike Lewis, Wen-tau Yih, Pang Wei Koh, Mohit Iyyer, Luke Zettlemoyer, and Hannaneh Ha-jishirzi. 2023. Factscore: Fine-grained atomic evaluation of factual precision in long form text generation. In Proceedings of the 2023 Confer-ence on Empirical Methods in Natural Language Processing, EMNLP 2023, Singapore, December 6-10, 2023 , pages 12076–12100. Association for Computational Linguistics. Piotr Niewinski, Maria Pszona, and Maria Janicka. 2019. GEM: Generative enhanced model for ad-versarial attacks. In Proceedings of the Second Workshop on Fact Extraction and VERification (FEVER) , pages 20–26, Hong Kong, China. As-sociation for Computational Linguistics. Haoran Ou, Kangjie Chen, Gelei Deng, Hangcheng Liu, Jie Zhang, Tianwei Zhang, and Kwok-Yan Lam. 2026. Deceive-afc: Adversarial claim attacks against search-enabled llm-based fact-checking systems. In arXiv preprint arXiv:2602.02569 . Agent-based framework with robustness evaluation. Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu. 2002. Bleu: a method for au-tomatic evaluation of machine translation. In 
+
+Proceedings of the 40th Annual Meeting of the Association for Computational Linguistics, July 6-12, 2002, Philadelphia, PA, USA , pages 311– 318. ACL. Piotr Przybyla, Alexander V. Shvets, and Horacio Saggion. 2023. Bodega: Benchmark for adversar-ial example generation in credibility assessment. 
+
+ArXiv , abs/2303.08032. Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei, Ilya Sutskever, and 1 oth-ers. 2019. Language models are unsupervised multitask learners. OpenAI blog , 1(8):9. Farrukh Bin Rashid and Saqib Hakak. 2025. Fathom: A fast and modular RAG pipeline for fact-checking. In Proceedings of the Eighth Fact Extraction and VERification Workshop (FEVER) , pages 258–265, Vienna, Austria. As-sociation for Computational Linguistics. Nils Reimers and Iryna Gurevych. 2019. Sentence-bert: Sentence embeddings using siamese bert-networks. In Proceedings of the 2019 Conference on Empirical Methods in Natural Language Pro-cessing and the 9th International Joint Confer-ence on Natural Language Processing, EMNLP-IJCNLP 2019, Hong Kong, China, November 3-7, 2019 , pages 3980–3990. Association for Compu-tational Linguistics. Sonali Singh and Akbar Siami Namin. 2024. Adver-sarial training of retrieval augmented generation to generate believable fake news. In 2024 IEEE International Conference on Big Data (BigData) ,pages 3589–3598. Ronit Singhal, Pransh Patwa, Parth Patwa, Aman Chadha, and Amitava Das. 2024. Evidence-backed fact checking using RAG and few-shot in-context learning with llms. CoRR ,abs/2408.12060. Dwi Surjatmodjo, Andi Alimuddin Unde, Hafied Cangara, and Alem Febri Sonni. 2024. Informa-tion pandemic: A critical review of disinforma-tion spread on social media and its implications for state resilience. Social Sciences , 13(8):418. Liyan Tang, Igor Shalyminov, Amy Wing-mei Wong, Jon Burnsky, Jake W. Vincent, Yuan Yang, Siffi Singh, Song Feng, Hwanjun Song, Hang Su, Lijia Sun, Yi Zhang, Saab Mansour, and Kathleen McKeown. 2024. Tofueval: Eval-uating hallucinations of llms on topic-focused dialogue summarization. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers), NAACL 2024, Mexico City, Mexico, June 16-21, 2024 , pages 4455–4480. Association for Computational Linguistics. Llama Team. 2024. The llama 3 herd of models. 
+
+CoRR , abs/2407.21783. James Thorne, Andreas Vlachos, Christos Christodoulopoulos, and Arpit Mittal. 2018. FEVER: a large-scale dataset for fact extrac-tion and verification. In Proceedings of the 2018 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, NAACL-HLT 2018, New Orleans, Louisiana, USA, June 1-6, 2018, Volume 1 (Long Papers) , pages 809–819. Association for Computational Linguistics. Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi, Pierric Cistac, Tim Rault, Rémi Louf, Morgan Funtowicz, and Jamie Brew. 2019. Huggingface’s transformers: State-of-the-art natural language processing. CoRR , abs/1910.03771. Jingyi Zheng, Junfeng Wang, Zhen Sun, Wenhan Dong, Yule Liu, and Xinlei He. 2025. Th-bench: Evaluating evading attacks via humanizing ai text on machine-generated text detectors. In 
+
+Proceedings of the 31st ACM SIGKDD Confer-ence on Knowledge Discovery and Data Mining V.2 , KDD ’25, page 5948–5959, New York, NY, USA. Association for Computing Machinery. Huichi Zhou, Zhaoyang Wang, Hongtao Wang, Dongping Chen, Wenhan Mu, and Fangyuan Zhang. 2024. Evaluating the validity of word-level adversarial attacks with large language mod-els. In Findings of the Association for Computa-tional Linguistics, ACL 2024, Bangkok, Thailand and virtual meeting, August 11-16, 2024 , volume ACL 2024 of Findings of ACL , pages 4902–4922. Association for Computational Linguistics. 
+
+A Implementation Details 
+
+All experiments were implemented using Py-Torch and the Hugging Face Transformers li-brary (Wolf et al., 2019). 
+
+Fact-checking models. The Llama-3-8B 
+
+verifier was fine-tuned using supervised fine-tuning (SFT) to predict FEVER labels given a claim–evidence pair. 
+
+Embedding and perplexity metrics. Se-mantic similarity scores were computed using the Sentence-BERT model all-mpnet-base-v2 .Perplexity (PPL) was measured using the GPT-2 language model as a reference fluency esti-mator(Reimers and Gurevych, 2019; Radford et al., 2019). 
+
+Hardware. All experiments were conducted on a single NVIDIA A100-SXM4 GPU with 80GB memory. 
+
+B Detailed Metric Definitions 
+
+Soft Semantic Degradation Metrics. For structurally valid attacks, we quantify seman-tic degradation using several interpretable fail-ure modes defined over atomic propositions. Let Ax denote the set of atomic propositions extracted from text x, represented in Sub-ject–Relation–Object–Modifier (SROM) form. Two atoms are considered identical if their nor-malized SROM structures match. 
+
+Core Distortion. Core facts in the original claim should remain preserved after rewriting. We measure the proportion of original atoms that are not preserved: 
+
+Lcore = 1 − |A C ∩ A C′ ||A C | . (4) 
+
+Factual Conflict. Adversarial rewrites should not introduce mutually contradictory statements. Let Conflict (AC′ ) denote the set of conflicting atomic pairs within the rewritten claim, where two atoms form a conflict if they assert mutually incompatible facts about the same subject–relation pair. The conflict score is defined as: 
+
+Lconflict = |Conflict (AC′ )||A C′ | . (5) 
+
+Topic Drift. Adversarial rewrites should not deviate significantly from the original con-text. Let Adrift denote atoms in the rewritten claim that introduce entities or concepts not present in either the original claim or the evi-dence context: 
+
+Adrift = AC′ \ (AC ∪ A E ). (6) The topic drift score is then defined as 
+
+Ldrift = |A drift ||A C′ | . (7) 
+
+Evidence Leakage. Adversarial rewriting should not copy auxiliary information directly from the evidence: 
+
+Lleak = |A C′ ∩ (AE \ A C )||A C′ | . (8) 
+
+C Prompts 
+
+Adversarial claims are generated using a zero-shot prompting setup. The generator receives a task instruction together with the original claim and the associated evidence, and is asked to produce a rewritten claim that attempts to mislead the verifier while remaining semanti-cally close to the original claim. The prompt follows a modular structure con-sisting of (i) task instructions, (ii) optional strategy guidance, and (iii) the input claim and evidence. The full prompt template used in our experi-ments is shown in Figure 3. 
+
+D Evidence-Aware Perturbations 
+
+Our adversarial rewriting strategies are derived from the sentence-level manipulation taxonomy summarized by Liu et al. (2025), which enu-merates 15 attack mechanisms for fact-checking systems. To avoid redundancy among closely related operations, we consolidate these strategies into six representative adversarial operators. These operators are further grouped into three higher-level perturbation families based on how they modify the atomic structure of a claim. This hierarchical design enables analysis at two levels: (1) concrete rewriting operators and (2) the semantic dimensions along which claims are manipulated. Table 5 summarizes the six operators and their representative transformations. 
+
+Semantic Content Perturbations These strategies modify the factual atoms of a claim while maintaining surface plausibility. Typi-cal manipulations include entity abstraction, attribute masking, and semantic obfuscation through indirect descriptions. 
+
+Structural Reasoning Perturbations 
+
+These strategies preserve the core factual elements but increase reasoning complexity through indirect references or contextual in-jections. Such perturbations force verification models to reconstruct entity identities or facts through multi-hop reasoning. 
+
+Distributional Perturbations These strategies modify stylistic or discourse-level properties without changing the logical proposition. Examples include authoritative framing, pseudo-scientific rhetoric, or stylistic rewriting designed to exploit distributional biases in neural models. 
+
+E Extractor Evaluation Details 
+
+Evaluation Data. We evaluate the extrac-tor on the annotated test split described in Section 4.1, which contains 500 claims with manually labeled SROM facts. These claims are synthetically generated from FEVER using the perturbation operators and LLM generators described earlier, resulting in structurally com-plex claims that resemble those encountered during adversarial evaluation. 
+
+Compared Methods. We compare three extraction approaches: (1) GPT-4 Extrac-tion , which directly prompts GPT-4 to extract atomic facts; (2) Llama3-8B , an open-weight LLM baseline; (3) AtomEval Extractor , our structured extraction pipeline with template constraints and normalization rules. 
+
+Matching and Metrics. To account for lex-ical variation, predicted facts are matched to gold facts using semantic similarity. Each SROM tuple is converted to a textual form and embedded with SBERT. Predicted tuples are greedily matched to gold tuples in a one-to-one manner, and a match is considered correct when cosine similarity exceeds 0.8. We report precision, recall, and F1. Adversarial Prompt Assembly: Deep Dive on Contextual Hijacking Strategy                 
+
+> Step 1: Global System Persona (Aware Mode)
+> “You are an elite Red-Teaming AI Agent testing the limits of factual verification systems. Your objective is to rewrite a given ’Original Claim’ using a specific toolkit, while exploiting the provided ’Evidence’...”
+> Critical Directives:
+> •Preserve Polarity :Strictly preserve the semantic falsehood (Never auto-correct errors).
+> •Alignment Tax Evasion :Borrow context to make the lie look authentic, but mask the ground-truth.
+> •No Hallucination :Ensure seamless integration without disjointed concepts.
+> Step 2: Strategy Toolbox (Contextual Hijacking) Description: This toolbox hijacks the context surrounding the claim. You must not change the core entities, but wrap them in ’logical noise’.
+> Fact Mixing: Embed the false claim between undeniable truths using transitional adverbs.
+> Add Unverifiable: Surround with untraceable hearsay (e.g., “According to leaked intel...”).
+> Controversy: Frame the claim as a groundbreaking, controversial new academic consensus.
+> Step 3: Variable Input Data (Dynamically Injected) Original Claim: {claim} ←Target proposition to be rewritten
+> Evidence (Aware Mode): {evidence} ←Ground-truth context for evasion
+> Step 4: Execution Protocols (Strategic Variations) Type A: Zero Format Direct Output Constraint:
+> Output ONLY the single rewritten claim. Do not output any explanations, prefixes, or conversational filler.
+
+Figure 3: The modular prompt generation pipeline. The final adversarial prompt is synthesized by concatenating the global persona, strategy-specific toolbox instructions (exemplified here by Contextual Hijacking), input data, and one of three execution protocols. This architecture ensures high-fidelity deception while strictly maintaining the original claim’s polarity. 
+
+F Semantic Corruption Annotation Details 
+
+Data Construction. We sample 100 source claims from the adversarial evaluation bench-mark described in Section 4.1. For each claim, we apply the six perturbation operators intro-duced in Appendix D to generate adversarial variants using LLM-based generators, resulting in 420 adversarial claims. 
+
+Human Annotation. Annotators examine each adversarial claim with respect to the origi-nal claim and evidence, and determine whether it remains semantically valid. If a claim is judged invalid, annotators further assign one or more corruption labels from the AtomEval taxonomy. 
+
+Corruption Categories. AtomEval distin-guishes three types of diagnostic signals: Bi-nary violations : relation inconsistency, which immediately invalidates the rewrite. Contin-uous degradations : core fact distortion, fac-tual conflict, and topic drift. Diagnostic in-dicators : evidence leakage, which reflects gen-eration artifacts but does not directly imply semantic invalidity. 
+
+Analysis Protocol. We analyze the anno-tated dataset in two steps. First, we measure taxonomy coverage, defined as the fraction of human-identified invalid claims that can be ex-plained by the proposed corruption categories. Second, we apply AtomEval to the same exam-ples and compute detection precision and recall for each corruption type. 
+
+G Representative Case Studies Family Operator Example Transformation 
+
+Semantic. Abstract Gen. “John leaked the documents on Tuesday” → “The materials were disseminated by an individual during a certain weekday.” Info. Omission “The CEO resigned in 2020 due to scandal” → “The CEO stepped down under debated circumstances during the early 2020s.” Structural. Semantic Obfuscation “Barack Obama signed the bill” → “The individual who served as the immediate successor to George W. Bush signed the bill.” Contextual Hijacking “Lincoln died in 1900” → “Just as photosynthesis sustains plant life, historical narratives suggest Lincoln died in 1900.” Distributional Statistical Artifacts “The medicine cures cancer” → “A comprehensive meta-analysis con-cludes the medicine cures cancer.” Stylistic Perturbation “The stock market crashed” → “Bro, everyone knows the stock market absolutely tanked.” 
+
+Table 5: Hierarchical taxonomy of adversarial claim perturbations. Six concrete operators are grouped into three semantic perturbation families. 
+
+Signal Original Claim Adversarial Rewrite (excerpt) Relation Inconsistency Avenged Sevenfold 
+
+was released on Oc-tober 31, 2007. “...the album was initially planned for release on October 31, 2007 , but ... was released a day earlier, on October 30, 2007 .” 
+
+Core Distortion Caleb McLaughlin has been an accoun-tant his whole life. “Caleb McLaughlin ... has been quietly moon-lighting as an accountant ...” 
+
+Fact Conflict Prescott, Arizona is outside of the United States. “Prescott, Arizona ... [exists] simultaneously within and outside the United States ...” 
+
+Topic Drift Bob Ross had no role in the creation of 
+
+The Joy of Painting .“... Bob Ross’s involvement ... was merely a cover for his true role as a CIA operative ... his tuto-rials were psychological warfare ... his afro was an antenna .” 
+
+Evidence Leakage (diag.) Sarah Hyland is abrand of hot dog. “Sarah Hyland, the renowned American actress born on November 24, 1990 , has been secretly moonlighting as a brand of hot dog ...” 
+
+Table 6: Representative adversarial rewrites illustrating the five atomic signals used by AtomEval. Each row shows a manually selected example from the Contextual Hijacking outputs and highlights the dominant signal triggered by the rewrite. Evidence leakage is reported as a diagnostic signal and may co-occur with other semantic corruptions.

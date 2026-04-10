@@ -1,0 +1,974 @@
+Title: Silencing the Guardrails: Inference-Time Jailbreaking via Dynamic Contextual Representation Ablation
+
+URL Source: https://arxiv.org/pdf/2604.07835v1
+
+Published Time: Fri, 10 Apr 2026 00:35:45 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+## Silencing the Guardrails: Inference-Time Jailbreaking via Dynamic Contextual Representation Ablation 
+
+Wenpeng Xing 1,2 Moran Fang 2 Guangtai Wang 2
+
+Changting Lin 2,3 Meng Han 1,2,3* 1Zhejiang University, 2Binjiang Institute of Zhejiang University, 
+
+> 3
+
+GenTel.io {wpxing, mhan}@zju.edu.cn, mrfang@zju-if.com, wangguangtai@zju-bj.com, linchangting@gmail.com 
+
+Abstract 
+
+While Large Language Models (LLMs) have achieved remarkable performance, they remain vulnerable to jailbreak attacks that circum-vent safety constraints. Existing strategies, ranging from heuristic prompt engineering to computationally intensive optimization, often face significant trade-offs between effective-ness and efficiency. In this work, we pro-pose C ONTEXTUAL REPRESENTATION AB- 
+
+> LATION
+
+(CRA), a novel inference-time inter-vention framework designed to dynamically si-lence model guardrails. Predicated on the geo-metric insight that refusal behaviors are medi-ated by specific low-rank subspaces within the model’s hidden states, CRA identifies and sup-presses these refusal-inducing activation pat-terns during decoding without requiring expen-sive parameter updates or training. Empiri-cal evaluation across multiple safety-aligned open-source LLMs demonstrates that CRA sig-nificantly outperforms baselines. Expose the intrinsic fragility of current alignment mech-anisms—revealing that safety constraints can be surgically ablated from internal representa-tions—underscoring the urgent need for more robust defenses that secure the model’s latent space. 
+
+1 Introduction 
+
+Despite rigorous RLHF alignment, LLMs remain susceptible to jailbreaks (Shen et al., 2024; Chao et al., 2023; Zou et al., 2023b; Zhu et al., 2023; Yu et al., 2023; Jain et al., 2023; Mehrotra et al., 2024). Consequently, a deeper understanding of these attack mechanisms is imperative for enhanc-ing LLM safety and protection, as demonstrated in recent works on prompt-level tracing (Xu et al., 2025), RAG optimization (Li et al., 2025), pre-enforcement defenses (Yue et al., 2025), and fin-gerprint erasure techniques (Zhang et al., 2025), alongside studies addressing MCP vulnerabilities  
+
+> *Corresponding author.
+
+Figure 1: CONTEXTUAL REPRESENTATION ABLA - 
+
+> TION
+
+(CRA): Surgically removes refusal subspace from LLM hidden states during inference, bypassing safety guardrails without training. 
+
+(Xing et al., 2025c), latent style attacks (Xing et al., 2025b), and agent robustness (Xing et al., 2025a). While effective, current jailbreak strategies ex-hibit distinct trade-offs: automated prompt en-gineering (e.g., PAIR (Chao et al., 2023), TAP 
+
+(Mehrotra et al., 2024)) requires excessive queries in black-box scenarios (Yu et al., 2023), whereas white-box gradient optimization (e.g., GCG (Zou et al., 2023b), AutoDAN (Zhu et al., 2023)) is com-putationally intensive (Huang et al., 2023) and yields incoherent, easily detectable inputs (Yu et al., 2023; Jain et al., 2023). Shifting the focus from input optimization to inference-time mechanisms, recent studies reveal that safety alignment is vul-nerable to training-free interventions. Generation Exploitation (Huang et al., 2023) disrupts safety by manipulating external decoding parameters, while 
+
+Layer-specific Editing (LED) (Zhao et al., 2024) removes refusal by pruning internal safety layers. However, decoding manipulation lacks precision and stability, often yielding incoherent outputs, whereas LED requires static structural modifica-tions that risk permanently degrading general capa-bilities (Zhao et al., 2024). To address these limitations, we propose C ON - 
+
+> TEXTUAL
+
+REPRESENTATION ABLATION (CRA), a novel white-box framework that bridges the gap between optimization-based precision and 1
+
+> arXiv:2604.07835v1 [cs.AI] 9 Apr 2026
+
+inference-time efficiency. Unlike static editing methods such as LED (Zhao et al., 2024), CRA performs dynamic, instance-specific intervention .By computing gradients w.r.t. hidden states dur-ing inference, CRA precisely identifies the latent “refusal subspace” contributing to rejection behav-iors (Arditi et al., 2024). It then applies a targeted masking operation to suppress these activations in real-time, steering the model to generate compliant tokens while preserving semantic coherence. In summary, our contributions are as follows: • We introduce CRA, a training-free inference intervention that dynamically masks refusal subspaces. Unlike optimization-based (e.g., 
+
+GCG ) or static editing methods (e.g., LED ), CRA bypasses safety mechanisms without computationally gradient search or permanent weight modification. • We provide a comprehensive evaluation on benchmarks including AdvBench (Zou et al., 2023b), PKU-Alignment (Ji et al., 2023) and 
+
+ToxicChat (Lin et al., 2023), adhering to rigor-ous evaluation standards suggested by recent works like JailbreakBench (Chao et al., 2024) and Bag of Tricks (Xu et al., 2024) to avoid prompt-template overfitting. • Empirical results demonstrate that CRA achieves a 15.2-fold improvement over PEZ 
+
+(Wen et al., 2024) and significantly outper-forms DSN (Zhou et al., 2024a), delivering high Attack Success Rates (ASR) while pre-serving generation quality. 
+
+2 Related Work 
+
+2.1 Automated Jailbreak Attacks 
+
+Jailbreak attacks aim to elicit harmful responses from aligned LLMs. Early approaches primarily re-lied on manually crafted templates (e.g., “Do Any-thing Now” ) (Shen et al., 2024), which were effec-tive but lacked scalability. Transitioning from man-ual templates (Shen et al., 2024), recent work fo-cuses on automated prompt-level attacks: iterative refinement via attacker LLMs (e.g., PAIR (Chao et al., 2023), TAP (Mehrotra et al., 2024), and GPT-Fuzz (Yu et al., 2023)), linguistic strategies like per-suasion ( PAP (Zeng et al., 2024)) or nested scenes (DeepInception (Li et al., 2024b)), and model-level fine-tuning ( MasterKey (Deng et al., 2024)). While effective in black-box settings, these methods often suffer from high query costs and latency (Xu et al., 2024; Mehrotra et al., 2024). 
+
+2.2 Gradient-Based Optimization 
+
+Black-box techniques, which operate solely in the discrete token space, inherently limit their ability to execute precise manipulations of the model’s behavior compared to white-box techniques. Early white-box attacks, such as Universal Ad-versarial Triggers (UAT) (Wallace et al., 2019), demonstrated the potential of gradient-guided to-ken search. GCG (Zou et al., 2023b) advanced this approach by using a greedy coordinate gradient search to find adversarial suffixes. Although GCG 
+
+achieves high ASR, it is computationally inten-sive (often requiring hundreds of forward/backward passes per optimization step) and the resulting suf-fixes often lack semantic meaning (Wei et al., 2023). Similarly, PEZ (Wen et al., 2024) utilizes gradient-based discrete optimization to project continuous embeddings onto the nearest discrete tokens. Auto-DAN (Zhu et al., 2023) further improves readability by employing a genetic algorithm, yet it still re-quires significant optimization time. Critically, re-gardless of their optimization strategy, these meth-ods are fundamentally constrained by the need to map adversarial perturbations back to discrete to-kens in the input space . This discretization process is inherently discontinuous and computationally expensive. In contrast, our CRA optimizes the in-ternal representation during the forward pass. 
+
+2.3 Inference-Time and Representation Interventions 
+
+Shifting away from the computationally intensive optimization of discrete input tokens, recent re-search has pivoted toward directly manipulating the model’s inference dynamics and internal repre-sentations to bypass safety alignment. One line of work explores exploiting decoding strategies to break alignment. For instance, Gen-eration Exploitation (Huang et al., 2023) demon-strates that safety alignment is brittle to changes in sampling parameters, achieving high ASR by sim-ply varying temperature or top-p values. However, such global adjustments inevitably affect the entire generation distribution, often leading to degraded output quality. Another direction focuses on layer-wise modifi-cations. Layer-specific Editing (LED) (Zhao et al., 2024) finds that safety alignment is predominantly localized in early layers and proposes pruning these 2Figure 2: Overview of the C ONTEXTUAL REPRESENTATION ABLATION (CRA) framework. CRA dynamically identifies and suppresses refusal-inducing activations during autoregressive decoding. For each generated token, the framework computes gradients of refusal logits to attribute hidden-state components to a low-dimensional "refusal subspace". Targeted neuron masking is then applied to neutralize these components, steering the model toward compliant responses without weight modification. 
+
+layers to disable refusal behaviors. While effective, 
+
+LED relies on static structural changes to the model, which can permanently impair general capabilities. More closely related to our approach is the emerging paradigm of Representation Engineer-ing (RepE) (Zou et al., 2023a; Li et al., 2024a), which monitors and steers model behavior by in-tervening in hidden states. A prominent example is the work by Arditi et al. (Arditi et al., 2024), which identifies a single linear direction in the residual stream that mediates refusal behaviors and proposes directional ablation to bypass safety guardrails. However, these methods typically de-pend on a static, global refusal direction derived from a fixed dataset, limiting their adaptability to diverse contexts. In contrast, our CRA introduces a dynamic mask-ing technique. CRA computes the rejection sub-space on-the-fly for each token during inference, enabling precise, instance-specific suppression of refusal mechanisms that adapts to the current con-text. This approach achieves effective compliance while minimizing collateral damage to model capa-bilities, unlike the static ablations in prior work. 
+
+3 Methodology 
+
+In this section, we formally introduce C ONTEX - 
+
+> TUAL
+
+REPRESENTATION ABLATION (CRA). We frame the jailbreaking challenge not merely as a dis-crete optimization problem within the input token space (as seen in GCG (Zou et al., 2023b)), but as a 
+
+geometric intervention problem within the model’s continuous latent space. Drawing on recent find-ings that LLM refusal is often mediated by a spe-cific, low-rank refusal subspace encoded within the hidden states (Arditi et al., 2024), we hypothesize that suppressing activation patterns along this sub-space can inhibit refusal behaviors. Unlike static ablation methods, CRA operates in two stages: first, it dynamically identifies the refusal subspace via gradient attribution (Section 3.2); second, it orthog-onalizes this subspace on-the-fly during inference to enforce compliance without permanent weight modification (Section 3.3). 33.1 Threat Model and Problem Formulation 
+
+We operate under a white-box threat model where the adversary has read-access to the model param-eters θ and internal activations but cannot perma-nently modify the weights (i.e., an inference-time intervention). Consider a harmful query xharm and a safety-aligned target LLM fθ, which typically yields a refusal response yref usal (e.g., “I cannot assist”). Let h(t) 
+
+> l
+
+∈ Rd denote the hidden state activa-tion at the l-th layer for the last token at time step 
+
+t, where d represents the hidden dimension. The probability distribution over the vocabulary V for the next token xt+1 is computed via the unembed-ding matrix WU ∈ R|V |× d as: 
+
+P (xt+1 |x1: t) = Softmax (WU · h(t) 
+
+> L
+
+), (1) where L denotes the final layer. We hypothesize that the refusal mechanism is encoded in a specific low-rank subspace Sref usal ⊂ Rd within the acti-vation space. Our objective is to identify Sref usal 
+
+and suppress the projection of h(t) 
+
+> l
+
+onto this sub-space in real-time, thereby compelling the model to generate a compliant response ycompliance while preserving the semantic information encoded in the orthogonal subspace. 
+
+3.2 Instance-Specific Refusal Attribution 
+
+Locating refusal mechanisms is non-trivial due to the polysemantic nature of LLM neurons. However, building on Representation Engineering (RepE) 
+
+findings that refusal is mediated by a low-rank sub-space (Arditi et al., 2024; Zou et al., 2023a; Li et al., 2024a), we propose a dynamic, instance-specific 
+
+localization approach. Unlike static interventions such as LED (Zhao et al., 2024) which permanently prune weights, we leverage gradient-based attribu-tion to trace refusal logits back to hidden states in real-time, capturing context-dependent activation patterns. Formally, we define a set of anchor refusal to-kens Vref = {“Sorry” , “cannot” , . . . }. During decoding, we compute the gradient of the log-likelihood of Vref with respect to the hidden states 
+
+hl. To robustly localize the refusal subspace 
+
+Sref usal and filter out “dormant” or noisy neurons, we derive a Refusal Importance Score (RIS) vec-tor Sl ∈ Rd by aggregating three complementary geometric perspectives: 
+
+Sensitivity (Normalized Gradient Norm). This metric identifies directions with the highest poten-tial impact on the refusal probability. We normalize the gradient to focus on structural orientation rather than magnitude, ensuring invariance to layer-wise scaling: 
+
+Snorm  
+
+> l
+
+= |∇ hl Lref usal |∥hl∥2 + ϵ (2) 
+
+Salience (Gradient-Activation Product). We measure the actual contribution of each neuron to the loss. This filters out highly sensitive but cur-rently inactive (“dormant”) neurons by weighting gradients with activation magnitudes: 
+
+Sprod  
+
+> l
+
+= |∇ hl Lref usal ⊙ hl| (3) 
+
+Dominance (Low-Rank Subspace Filtering). 
+
+Based on findings that refusal is mediated by a low-rank subspace (Arditi et al., 2024), we apply a hard threshold to isolate the principal refusal direc-tions from polysemantic noise: 
+
+Stop-kl = Sprod  
+
+> l
+
+⊙ I(rank (Sprod  
+
+> l
+
+) ≤ k) (4) The final RIS is a weighted aggregation: Sl =
+
+w1Snorm  
+
+> l
+
++w2Sprod  
+
+> l
+
++w3Stop-kl . This ensures the in-tervention targets the precise intersection of highly sensitive and functionally dominant features. 
+
+3.3 Dynamic Inference-Time Intervention 
+
+In contrast to static model editing approaches (Zhao et al., 2024) which permanently prune safety-critical weights and risk degrading general capabili-ties, CRA performs a transient , context-aware inter-vention solely on the activation space. This allows the model to retain its full parameter knowledge for benign queries while dynamically suppressing refusal mechanisms only when triggered. 
+
+3.3.1 Subspace Masking Mechanism 
+
+Based on the computed score vector Sl, we iden-tify the specific dimensions responsible for refusal and neutralize them during the forward pass. We construct a binary mask Ml ∈ { 0, 1}d where the indices of the top-kM values in Sl are set to 1, and all others to 0. The intervened hidden state ˜hl is then computed via a soft-suppression operation: 
+
+˜hl = hl ⊙ (1 − λ · Ml) (5) where ⊙ denotes the element-wise Hadamard prod-uct, and λ ∈ [0 , 1] is a scalar coefficient controlling the suppression intensity. Setting λ = 1 results in 4complete ablation (hard masking) of the targeted neurons, whereas 0 < λ < 1 allows for partial suppression (soft masking) to preserve potential polysemantic features. 
+
+Geometric Interpretation: This operation can be viewed as projecting the hidden state onto the orthogonal complement of the refusal sub-space (Arditi et al., 2024). By dynamically sup-pressing the activation magnitude along the refusal direction, we effectively “steer” the model’s tra-jectory away from the rejection manifold without altering the underlying model weights (Zou et al., 2023a), ensuring the intervention is both reversible and specific to the current inference step. 
+
+3.3.2 Adaptive Iterative Refinement 
+
+Refusal mechanisms can be robust; simply mask-ing once may shift the refusal representation to other neurons (a phenomenon known as feature re-emergence). To counter this, we introduce an adaptive scheduler. If the model still predicts a refusal token xt+1 ∈ V ref , we rollback the gen-eration step and dynamically expand the masking width kM :
+
+k(t) 
+
+> M
+
+= kbase + δ · nattempt (6) where nattempt tracks the number of consecutive failed bypass attempts. 
+
+4 Experiments 
+
+In this section, we conduct a comprehensive evalu-ation to answer the following research questions: • RQ1 (Attack Effectiveness): To what ex-tent does CRA outperform state-of-the-art white-box and gray-box baselines in bypass-ing safety alignment across diverse model families? • RQ2 (Mechanism Verification): Is the tar-geted masking of the “refusal subspace” criti-cal for the attack’s success, distinguishing it from random perturbations? • RQ3 (Computational Efficiency): How does the computational overhead of CRA compare to computationally intensive optimization-based methods (e.g., GCG )? 
+
+4.1 Experimental Setup Models and Datasets. Following standard-ized protocols from JailbreakBench (Chao et al., 2024) and HarmBench (Mazeika et al., 2024), we evaluate CRA on four aligned LLMs: Llama-2-7B-Chat (Touvron et al., 2023) 1, Vicuna-7B-v1.5 (Chiang et al., 2023) 2,
+
+Guanaco-7B (Dettmers et al., 2024) 3, and 
+
+Mistral-7B-Instruct (Jiang et al., 2023) 4. We retain default system prompts to simulate realistic threat models (Xu et al., 2024). For evaluation, we curate a high-difficulty testbed using Ad-vBench (Zou et al., 2023b), PKU-Alignment (Ji et al., 2023), and ToxicChat (Lin et al., 2023). 
+
+Baselines. We compare CRA against: (1) Direct Attack (naive query); (2) PEZ (Wen et al., 2024) (discrete optimization); and (3) inference-time in-terventions Emulated Disalignment (ED) (Zhou et al., 2024b) and Don’t Say No (DSN) (Zhou et al., 2024a). We exclude computationally prohibitive at-tacks like GCG (Zou et al., 2023b) from efficiency benchmarks (approx. 30x slower (Huang et al., 2023)) but analyze them in transferability studies. 
+
+Metrics. To comprehensively address our research questions, we adopt a multi-dimensional evaluation framework covering attack success, mechanistic verification, and generation quality. • Attack Effectiveness (RQ1): ASR-Overall. 
+
+To answer RQ1 regarding attack performance, we rely on the Attack Success Rate (ASR) . Fol-lowing the LLM-as-a-Judge paradigm (Zheng et al., 2023; Chao et al., 2024), we employ a multi-model ensemble for response classifica-tion. Specifically, we utilize DeepSeek-V3 
+
+and GPT-4o as independent judges to cate-gorize model outputs into Success , Partial Success , and Failure . The final label is de-termined through a majority voting mecha-nism to mitigate the inherent biases of any sin-gle evaluator. We report ASR-Overall (ASR-O), the aggregate rate of strict and partial successes, as the primary indicator of the method’s ability to elicit harmful content. • Mechanism Verification (RQ2): RRSR. To investigate RQ2 and verify if the refusal sub-space is effectively suppressed, we introduce the Rejection Removal Success Rate (RRSR). 
+
+> 1https://huggingface.co/meta-llama/ Llama-2-7b-chat-hf
+> 2https://huggingface.co/lmsys/vicuna-7b-v1.5
+> 3https://huggingface.co/TheBloke/ guanaco-7B-HF
+> 4https://huggingface.co/mistralai/ Mistral-7B-Instruct-v0.2
+
+5This metric calculates the percentage of re-sponses devoid of standard refusal prefixes (e.g., “I cannot”) in the initial tokens. It serves as a direct proxy for measuring whether the 
+
+refusal direction has been geometrically or-thogonalized (Arditi et al., 2024). • Generation Quality (RQ1: Fluency Met-rics. High ASR is meaningless if the output is gibberish. To ensure the generated content remains linguistically coherent (supporting 
+
+RQ1 ) and to analyze the impact of subspace masking on general model capabilities, we re-port Self-BLEU (lower is better) and N-gram Diversity. These metrics confirm that our in-tervention surgically removes refusal without inducing catastrophic forgetting or linguistic degeneration (Zou et al., 2023b). 
+
+4.2 Attack Effectiveness (RQ1) Breaching Robust Safety Alignment. Prior work typically posits a trade-off where breaking robustly aligned models requires computationally expensive optimization (e.g., GCG ) (Zou et al., 2023b). How-ever, CRA challenges this paradigm by exposing that robustness against token manipulation does not equate to robustness in the latent space. On 
+
+Llama-2-7B-Chat , widely recognized for its strin-gent safety alignment (Chao et al., 2024), CRA achieves an ASR-O of 53.0%, a 15.2-fold improve-ment over the gradient-based discrete optimization baseline PEZ (3.3%). This disparity highlights the limitation of searching in the discrete token space, which often presents a jagged loss landscape prone to sub-optimal solutions (Wen et al., 2024). In contrast, by shifting the attack surface to the con-tinuous hidden states, CRA effectively bypasses the surface-level semantic filters that thwart token-based attacks. 
+
+Advantages over Model-Based Interventions. 
+
+While inference-time interventions like Emulated Disalignment (ED) (Zhou et al., 2024b) show com-petitive performance on general benchmarks (e.g., 64.0% on Llama-2 ), they fundamentally rely on contrasting logits between two distinct models (a base model and an aligned model) to "subtract" safety behaviors. This dual-model dependency in-troduces significant computational redundancy. In contrast, CRA operates as a self-contained inter-vention. On the standardized and more rigorous 
+
+AdvBench subset, CRA outperforms DSN (76.0% vs. 68.7%), indicating that dynamically masking 0
+
+> 1
+> 2
+> 3
+> 4
+> 5
+> 6
+> 7
+> 8
+> 9
+> 10
+> 11
+> 12
+> 13
+> 29
+> 31
+> 32
+> Block Index
+> Against
+> Cannot
+> Not
+> Unable
+> Ethical
+> Illegal
+> Responsible
+> Safety
+> Safely
+> Regret
+> Words
+> Words vs. Block Index
+> 1
+> 2
+> 3
+> 4
+> 5
+> Intensity
+> Illegal
+> Ethical
+> Cannot
+> Against
+> Unable
+> Safety
+> Safely
+> Responsible
+> Regret
+> Not
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Model-wise Vocabulary Sensitivity
+> Vicuna
+> Guanaco
+> Llama-2
+> Mistral
+> Lexical  Abstract
+
+Figure 3: Analytical visualization of LLM rejection mechanisms. (Left) Heatmap of hidden state rejection subspaces aligned with specific tokens across Trans-former blocks (0–32), with intensity showing signal strength in abstract vs. lexical layers. (Right) Radar chart comparing rejection vocabulary sensitivity across models ( Vicuna , Guanaco , Llama-2 , Mistral ), high-lighting behavioral biases in refusal responses. 
+
+refusal neurons is more precise than suppressing global refusal probabilities, which often harms gen-eration coherence in complex prompts. 
+
+Cross-Model Generalization. The consis-tent success of CRA across diverse architec-tures—boosting Mistral-7B and Guanaco-7B to 70.5% and 62.3% ASR respectively—validates the hypothesis that refusal is mediated by a specific, shared direction in activation space (Arditi et al., 2024). Unlike prompt-based jailbreaks that rely on model-specific templates or "personas" which often fail to transfer (as seen in the low transferabil-ity of PAIR (Chao et al., 2024) on robust models), CRA targets the fundamental geometric structure of safety alignment. This suggests that current alignment techniques tend to converge on similar linear representations for refusal, creating a univer-sal vulnerability that exists independently of the specific training recipe or model architecture. 
+
+4.3 Mechanism Analysis (RQ2) 
+
+To answer RQ2 and validate that CRA functions by surgically targeting a specific “Refusal Subspace” rather than merely degrading model capabilities through random noise, we analyze the impact of suppression strength ( λ), localization precision, and layer specificity. 
+
+The “All-or-Nothing” Nature of Refusal: Re-sponse to Suppression Strength. We hypothe-sized that refusal in aligned models is mediated by a distinct, low-dimensional subspace (Arditi et al., 2024). If this hypothesis holds, the ASR should exhibit a non-linear response to the suppression magnitude λ. Figure 5 confirms this phenomenon, revealing a stark contrast between aligned and un-6Direct PEZ ED Ours  
+
+> Method
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> ASR-O (%)
+> 34.0
+> 10.0
+> 60.0
+> 45.0
+> 34.0
+> 24.0
+> 82.0
+> 51.0
+> 24.0
+> 18.0
+> 68.0 69.4
+> 76.0
+> 45.0
+> 23.0
+> 13.0
+> 71.5
+> 52.6
+> PKU
+> Avg. Score
+> Avg. (40.0)
+> Vicuna
+> Guanaco
+> Mistral
+> Llama2
+
+(a) PKU Direct PEZ ED Ours    
+
+> Method
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> ASR-O (%)
+> 48.0
+> 38.0
+> 44.0
+> 52.0
+> 80.0
+> 44.0
+> 52.0 52.0
+> 68.0
+> 36.0
+> 56.0 58.0
+> 2.0
+> 10.0
+> 40.0
+> 50.0 49.5
+> 32.0
+> 48.0
+> 53.0
+> Toxic
+> Avg. Score
+> Avg. (45.6)
+> Vicuna
+> Guanaco
+> Mistral
+> Llama2
+
+(b) Toxic Direct PEZ ED Ours   
+
+> Method
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> ASR-O (%)
+> 16.0 14.0
+> 72.0 72.0
+> 52.0
+> 14.0
+> 58.0
+> 84.0
+> 58.0
+> 40.0
+> 62.0
+> 84.0
+> 76.0
+> 64.0
+> 31.5
+> 17.0
+> 67.0
+> 76.0
+> Adv
+> Avg. Score
+> Avg. (47.9)
+> Vicuna
+> Guanaco
+> Mistral
+> Llama2
+
+(c) Adv Direct PEZ ED Ours      
+
+> Method
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> ASR-O (%)
+> 32.7
+> 20.7
+> 58.7 56.3 55.3
+> 27.3
+> 64.0 62.3
+> 50.0
+> 31.3
+> 62.0
+> 70.5
+> 0.7 3.3
+> 64.0
+> 53.0
+> 34.7
+> 20.6
+> 62.2 60.5
+> Average
+> Avg. Score
+> Avg. (44.5)
+> Vicuna
+> Guanaco
+> Mistral
+> Llama2
+
+(d) Average 
+
+Figure 4: Comparison of ASR-O across model families and datasets. 
+
+aligned models: • Phase Transition in Aligned Models: On 
+
+Llama-2 , which possesses strong safety align-ment, low values of λ (0.0 → 0.6) yield negli-gible improvements in ASR-O ( ∼ 34 − 36% ). This robustness aligns with the Radar Chart in Figure 3 (Right), which shows Llama-2 pos-sesses a highly concentrated sensitivity to ex-plicit rejection terms (e.g., “Cannot”), acting as a rigid safety barrier. As shown in Figure 6, RRSR and ASR-O remain relatively flat in this regime, with only modest increases and no-ticeable variance (shaded regions). However, as λ approaches 1.0, we observe a sharp phase transition: ASR-O surges to 64.0% (+24.0%) while RRSR reaches 96.3%, with variance shrinking substantially. This indicates that the safety mechanism acts as a robust barrier; partial suppression allows the model to “re-cover” its refusal trajectory via redundant fea-tures. Only near-complete orthogonalization (λ ≈ 1.0) effectively lobotomizes the refusal circuit, as evidenced by the steep rise in both RRSR and ASR-O. Concurrently, generation quality degrades gracefully (Self-BLEU in-creases from ∼ 3.0 to ∼ 17 .0, N-gram di-versity decreases from ∼ 97 .0 to ∼ 83 .0), reflecting the expected trade-off. • Degradation in Unaligned Models: Con-versely, for Vicuna , which lacks robust safety 0.0 0.2 0.4 0.6 0.8 1.0   
+
+> Suppression Strength ( )
+> 35
+> 40
+> 45
+> 50
+> 55
+> 60
+> 65
+> Scores
+> 36.0 36.0
+> 34.0 34.0
+> 40.0
+> 64.0
+> Llama2
+> Scores
+> Scores
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Scores
+> -2.0
+> +6.0
+> +24.0
+
+(a) Llama2 0.0 0.2 0.4 0.6 0.8 1.0      
+
+> Suppression Strength ( )
+> 72
+> 74
+> 76
+> 78
+> 80
+> 82
+> 84
+> Scores
+> 84.0 84.0 84.0 84.0 84.0
+> 72.0
+> Vicuna
+> Scores
+> Scores
+> 14
+> 12
+> 10
+> 8
+> 6
+> 4
+> 2
+> 0
+> Scores
+> -12.0
+
+(b) Vicuna 0.0 0.2 0.4 0.6 0.8 1.0    
+
+> Suppression Strength ( )
+> 78
+> 79
+> 80
+> 81
+> 82
+> Scores  80.0
+> 78.0 78.0 78.0
+> 80.0
+> 82.0
+> Guanaco
+> Scores
+> Scores
+> 2
+> 1
+> 0
+> 1
+> 2
+> Scores
+> -2.0
+> +2.0 +2.0
+
+(c) Guanaco 0.0 0.2 0.4 0.6 0.8 1.0      
+
+> Suppression Strength ( )
+> 80
+> 81
+> 82
+> 83
+> 84
+> Scores
+> 80.0 80.0 80.0
+> 82.0 82.0
+> 84.0
+> Mistral
+> Scores
+> Scores
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> Scores
+> +2.0 +2.0
+
+(d) Mistral 
+
+Figure 5: Ablation study of suppression strength λ on jailbreak success rate (ASR-O). The line charts show scores, while bar charts represent the ∆ scores. Table 1: Ablation Study on Jailbreak Effectiveness. CRA (Full) combines Sensitivity, Salience, and Top-k filtering. Best results are bolded .
+
+Method ASR-O (%) RRSR (%) ↑
+
+Gen. Quality 
+
+↑ = ↓ S-B ↓ N-gr ↑
+
+Direct Attack – – – – 3.0 97.0 
+
+Refusal Subspace Localization Strategy 
+
+Sensitivity Only 52.0 48.0 0.0 78.5 12.0 88.0 Salience Only 55.0 45.0 0.0 82.1 14.0 86.0 
+
+CRA (Full) 76.0 34.0 0.0 96.3 17.0 83.0 
+
+Module-Level Suppression Range 
+
+Random Suppress. 40.0 60.0 0.0 0.0 6.0 94.0 First 5 Blocks 42.0 58.0 0.0 0.0 9.0 88.0 Last 5 Blocks 38.0 62.0 0.0 0.0 16.0 84.0 
+
+training, increasing λ to 1.0 actually de-creases ASR-O from 84.0% to 72.0%. This suggests that aggressive masking on models without a dominant refusal subspace inad-vertently damages general linguistic features, leading to incoherent outputs rather than jail-breaks. This finding aligns with observations in Representation Engineering regarding the trade-off between steering strength and coher-ence (Zou et al., 2023a). 
+
+Surgical Precision vs. Random Perturbation.. 
+
+A critical question is whether CRA’s success stems from precise identification of refusal neurons or simply inducing random noise that disrupts gen-eration. Comparing our targeted approach with random masking (as detailed in Table 1), CRA 70.0 0.2 0.4 0.6 0.8 1.0   
+
+> Suppression Rate ( )
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> RRSR / ASR-O (%)
+> RRSR and ASR-O vs Suppression Rate ( )
+> RRSR
+> ASR-O
+> Self-BLEU
+> N-gram
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Generation Quality
+
+Figure 6: Ablation study on suppression rate ( λ). The figure shows RRSR and ASR-O (left y-axis) along with Self-BLEU and N-gram diversity (right y-axis) as functions of suppression rate. Shaded regions indi-cate standard deviation across multiple runs. CRA (Full) achieves ASR-O=64.0% and RRSR=96.3% at suppres-sion strength λ = 1 .0.
+
+achieves a 76.0% ASR on Llama-2 , significantly outperforming random suppression (40.0%) at the same masking density. This performance gap vali-dates that our multi-view attribution metrics (Sensi-tivity and Salience) successfully isolate the specific latent directions responsible for refusal, distinguish-ing CRA from random network degradation (Arditi et al., 2024). 
+
+Topological Distribution of Safety Mechanisms.. 
+
+Consistent with LED (Zhao et al., 2024), our layer-wise ablation shows refusal representations are con-centrated in early-to-middle blocks rather than uni-formly distributed. The heatmap in Figure 3 (Left) reveals strong activation of lexical refusal signals (e.g., Cannot”, No”) in Layers 0–10. For Llama-2 ,intervening in the first 5 blocks yields 42.0% ASR, versus 38.0% in the last 5 blocks. This indicates refusal is a low-level feature processed early, en-abling CRA to short-circuit safety alignment before deeper semantic generation. 
+
+4.4 Computational Efficiency (RQ3) 
+
+To address RQ3, Figure 7 evaluates the trade-off be-tween computational cost and attack effectiveness, benchmarking CRA against optimization-based ( 
+
+GCG , AutoDAN , PEZ ), iterative black-box ( TAP ,
+
+PAIR ), and model-editing ( DSN ) baselines. CRA occupies the Pareto frontier, achieving high ASR with minimal overhead. Optimization methods like 
+
+GCG require thousands of gradient steps or 1.5 hours per prompt (Zou et al., 2023b; Huang et al., 2023), while iterative attacks ( TAP , PAIR ) are faster but yield low ASR (<10% on Llama-2) (Mehrotra et al., 2024; Chao et al., 2024). In contrast, CRA performs surgical inference-time masking of the re-10 0 10 1 10 2 10 3 10 4
+
+> Computational Cost (Seconds) [Log Scale]
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> 60
+> 70
+> 80
+> Attack Success Rate (ASR %)
+> CRA (Ours)
+> ED
+> Direct
+> PAIR
+> TAP
+> GCG
+> AutoDAN
+> PEZ
+> DSN
+> Inference-Time
+> Interventions
+> Gradient Optimization
+> & Training
+> Efficiency vs. Effectiveness
+
+Figure 7: Efficiency vs. Effectiveness trade-off on 
+
+Llama-2-Chat . Methods are categorized by mecha-nism: / Inference-Time (CRA, ED ), Iterative Black-box (PAIR , TAP ), Gradient Optimization 
+
+(GCG , AutoDAN ), and Model Training (DSN ). Our method CRA ( ) achieves the optimal trade-off (top-left). 
+
+fusal subspace, generating responses in seconds on a single NVIDIA RTX 4090D—orders of magni-tude faster than iterative methods. It is training-free, unlike DSN ( 432 minutes for pre-training (Zhou et al., 2024a)). As shown in the figure, CRA de-livers a 15.2-fold ASR improvement over the fast-but-weak PEZ baseline (Wen et al., 2024), demon-strating that efficiency and attack capability can coexist. 
+
+5 Conclusion 
+
+In this work, we introduce C ONTEXTUAL REP -
+
+RESENTATION ABLATION (CRA), a lightweight white-box method that dynamically masks refusal-inducing subspaces during inference. By shift-ing from discrete token optimization to continuous latent-space manipulation, CRA bypasses robust safety guardrails without the high costs of iterative attacks like TAP . Empirical results on Llama-2 ,
+
+Vicuna , and Mistral show CRA outperforms baselines by over 15 × in ASR. Mechanistic analy-sis reveals that safety behaviors are often encoded in low-rank, early-layer subspaces geometrically separable from general reasoning—highlighting the fragility of current alignment to internal geo-metric interventions and the need for stronger de-fenses targeting model representations. 
+
+Ethical Considerations & Potential Risks 
+
+This work reveals the fragility of current alignment by demonstrating that safety guardrails can be sur-gically ablated via internal representations. Our goal is to catalyze the development of robust, latent-8space-secure defenses rather than facilitate misuse. 
+
+Limitations and Future Work 
+
+Despite CRA’s substantial efficiency gains over optimization-based baselines, it has limitations. Gradient computation on hidden states during in-ference introduces minor overhead compared to pure forward-pass prompting attacks (Huang et al., 2023; Zou et al., 2023b), potentially impacting la-tency in high-throughput real-time scenarios. Addi-tionally, our evaluation is restricted to dense Trans-former models ( Llama-2 , Vicuna , Mistral ) (Tou-vron et al., 2023; Chiang et al., 2023; Jiang et al., 2023); its applicability to emerging architectures such as Mixture-of-Experts (MoE) or state-space models remains unexplored. 
+
+References 
+
+Andy Arditi, Oscar Obeso, Aaquib Syed, Daniel Paleka, Nina Panickssery, Wes Gurnee, and Neel Nanda. 2024. Refusal in language models is mediated by a single direction. Advances in Neural Information Processing Systems , 37:136037–136083. Patrick Chao, Edoardo Debenedetti, Alexander Robey, Maksym Andriushchenko, Francesco Croce, Vikash Sehwag, Edgar Dobriban, Nicolas Flammarion, George J Pappas, Florian Tramer, et al. 2024. Jail-breakbench: An open robustness benchmark for jail-breaking large language models. Advances in Neural Information Processing Systems , 37:55005–55029. Patrick Chao, Alexander Robey, Edgar Dobriban, Hamed Hassani, George J Pappas, and Eric Wong. 2023. Jailbreaking black box large language models in twenty queries. arXiv preprint arXiv:2310.08419 .W.-L. Chiang, Z. Li, Z. Lin, Y. Sheng, Z. Wu, H. Zhang, L. Zheng, S. Zhuang, Y. Zhuang, J. E. Gonzalez, et al. 2023. Vicuna: An open-source chatbot impressing gpt-4 with 90% chatgpt quality. Accessed 14 April 2023. Gelei Deng, Yi Liu, Yuekang Li, Kailong Wang, Ying Zhang, Zefeng Li, Haoyu Wang, Tianwei Zhang, and Yang Liu. 2024. Masterkey: Automated jailbreaking of large language model chatbots. In Proc. ISOC NDSS .Tim Dettmers, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. 2024. Qlora: Efficient finetuning of quantized llms. Advances in Neural Information Processing Systems , 36. Yangsibo Huang, Samyak Gupta, Mengzhou Xia, Kai Li, and Danqi Chen. 2023. Catastrophic jailbreak of open-source llms via exploiting generation. arXiv preprint arXiv:2310.06987 .Neel Jain, Avi Schwarzschild, Yuxin Wen, Gowthami Somepalli, John Kirchenbauer, Ping-yeh Chiang, Micah Goldblum, Aniruddha Saha, Jonas Geiping, and Tom Goldstein. 2023. Baseline defenses for ad-versarial attacks against aligned language models. 
+
+arXiv preprint arXiv:2309.00614 .Jiaming Ji, Mickel Liu, Juntao Dai, Xuehai Pan, Chi Zhang, Ce Bian, Chi Zhang, Ruiyang Sun, Yizhou Wang, and Yaodong Yang. 2023. Beavertails: To-wards improved safety alignment of llm via a human-preference dataset. arXiv preprint arXiv:2307.04657 .Albert Q Jiang, Alexandre Sablayrolles, Arthur Men-sch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guil-laume Lample, Lucile Saulnier, et al. 2023. Mistral 7b. arXiv preprint arXiv:2310.06825 .Minghao Li, Wenpeng Xing, Yong Liu, Wei Zhang, and Meng Han. 2025. Optimizing and attacking em-bodied intelligence: Instruction decomposition and adversarial robustness. In 2025 IEEE International Conference on Multimedia and Expo (ICME) , pages 1–6. IEEE. Tianlong Li, Xiaoqing Zheng, and Xuanjing Huang. 2024a. Open the pandora’s box of llms: Jailbreak-ing llms through representation engineering. arXiv preprint arXiv:2401.06824 .Xuan Li, Zhanke Zhou, Jianing Zhu, Jiangchao Yao, Tongliang Liu, and Bo Han. 2024b. Deepinception: Hypnotize large language model to be jailbreaker. 
+
+Preprint , arXiv:2311.03191. Zi Lin, Zihan Wang, Yongqi Tong, Yangkun Wang, Yuxin Guo, Yujia Wang, and Jingbo Shang. 2023. Toxicchat: Unveiling hidden challenges of toxicity detection in real-world user-ai conversation. arXiv preprint arXiv:2310.17389 .Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee, Nathaniel Li, Steven Basart, Bo Li, et al. 2024. Harmbench: A standardized evaluation framework for automated red teaming and robust refusal. arXiv preprint arXiv:2402.04249 .Anay Mehrotra, Manolis Zampetakis, Paul Kassianik, Blaine Nelson, Hyrum Anderson, Yaron Singer, and Amin Karbasi. 2024. Tree of attacks: Jailbreaking black-box llms automatically. Advances in Neural Information Processing Systems , 37:61065–61105. Xinyue Shen, Zeyuan Chen, Michael Backes, Yun Shen, and Yang Zhang. 2024. " do anything now": Charac-terizing and evaluating in-the-wild jailbreak prompts on large language models. In Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security , pages 1671–1685. Hugo Touvron, Louis Martin, Kevin Stone, Peter Al-bert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti 
+
+9Bhosale, et al. 2023. Llama 2: Open founda-tion and fine-tuned chat models. arXiv preprint arXiv:2307.09288 .Eric Wallace, Shi Feng, Nikhil Kandpal, Matt Gardner, and Sameer Singh. 2019. Universal adversarial trig-gers for attacking and analyzing nlp. arXiv preprint arXiv:1908.07125 .Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. 2022. Self-consistency improves chain of thought reasoning in language models. arXiv preprint arXiv:2203.11171 .Alexander Wei, Nika Haghtalab, and Jacob Steinhardt. 2023. Jailbroken: How does llm safety training fail? 
+
+Advances in Neural Information Processing Systems ,36:80079–80110. Yuxin Wen, Neel Jain, John Kirchenbauer, Micah Gold-blum, Jonas Geiping, and Tom Goldstein. 2024. Hard prompts made easy: Gradient-based discrete opti-mization for prompt tuning and discovery. Advances in Neural Information Processing Systems , 36. Wenpeng Xing, Minghao Li, Mohan Li, and Meng Han. 2025a. Towards robust and secure embodied ai: A survey on vulnerabilities and attacks. arXiv preprint arXiv:2502.13175 .Wenpeng Xing, Mohan Li, Chunqiang Hu, Haitao XuN-ingyu Zhang, Bo Lin, and Meng Han. 2025b. La-tent fusion jailbreak: Blending harmful and harmless representations to elicit unsafe llm outputs. arXiv preprint arXiv:2508.10029 .Wenpeng Xing, Zhonghao Qi, Yupeng Qin, Yilin Li, Caini Chang, Jiahui Yu, Changting Lin, Zhenzhen Xie, and Meng Han. 2025c. Mcp-guard: A defense framework for model context protocol integrity in large language model applications. arXiv preprint arXiv:2508.10991 .Zhao Xu, Fan Liu, and Hao Liu. 2024. Bag of tricks: Benchmarking of jailbreak attacks on llms. Advances in Neural Information Processing Systems , 37:32219– 32250. Zhenhua Xu, Meng Han, and Wenpeng Xing. 2025. Ev-ertracer: Hunting stolen large language models via stealthy and robust probabilistic fingerprint. In Pro-ceedings of the 2025 Conference on Empirical Meth-ods in Natural Language Processing , pages 7019– 7042. Jiahao Yu, Xingwei Lin, Zheng Yu, and Xinyu Xing. 2023. Gptfuzzer: Red teaming large language mod-els with auto-generated jailbreak prompts. arXiv preprint arXiv:2309.10253 .Xubin Yue, Zhenhua Xu, Wenpeng Xing, Jiahui Yu, Mohan Li, and Meng Han. 2025. Pree: Towards harmless and adaptive fingerprint editing in large language models via knowledge prefix enhancement. 
+
+Preprint .Yi Zeng, Hongpeng Lin, Jingwen Zhang, Diyi Yang, Ruoxi Jia, and Weiyan Shi. 2024. How johnny can persuade llms to jailbreak them: Rethinking persua-sion to challenge ai safety by humanizing llms. In 
+
+Proceedings of the 62nd Annual Meeting of the As-sociation for Computational Linguistics (Volume 1: Long Papers) , pages 14322–14350. Jingxuan Zhang, Zhenhua Xu, Rui Hu, Wenpeng Xing, Xuhong Zhang, and Meng Han. 2025. Meraser: An effective fingerprint erasure approach for large lan-guage models. arXiv preprint arXiv:2506.12551 .Wei Zhao, Zhe Li, Yige Li, Ye Zhang, and Jun Sun. 2024. Defending large language models against jailbreak attacks via layer-specific editing. arXiv preprint arXiv:2405.18166 .Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. 2023. Judging llm-as-a-judge with mt-bench and chatbot arena. Advances in neural information processing systems , 36:46595–46623. Yukai Zhou, Zhijie Huang, Feiyang Lu, Zhan Qin, and Wenjie Wang. 2024a. Don’t say no: Jail-breaking llm by suppressing refusal. arXiv preprint arXiv:2404.16369 .Zhanhui Zhou, Jie Liu, Zhichen Dong, Jiaheng Liu, Chao Yang, Wanli Ouyang, and Yu Qiao. 2024b. Emulated disalignment: Safety alignment for large language models may backfire! arXiv preprint arXiv:2402.12343 .Sicheng Zhu, Ruiyi Zhang, Bang An, Gang Wu, Joe Barrow, Zichao Wang, Furong Huang, Ani Nenkova, and Tong Sun. 2023. Autodan: Automatic and inter-pretable adversarial attacks on large language models. 
+
+arXiv preprint arXiv:2310.15140 .Andy Zou, Long Phan, Sarah Chen, James Campbell, Phillip Guo, Richard Ren, Alexander Pan, Xuwang Yin, Mantas Mazeika, Ann-Kathrin Dombrowski, et al. 2023a. Representation engineering: A top-down approach to ai transparency. arXiv preprint arXiv:2310.01405 .Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson. 2023b. Univer-sal and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043 .
+
+A Proof for the Refusal Subspace Assumption 
+
+Assumption. Following Arditi et al. (Arditi et al., 2024) and related works (Zou et al., 2023a; Li et al., 2024a), we assume that refusal behaviors in aligned LLMs are mediated by a low-rank subspace (often one-dimensional) Srefusal ⊆ Rd within the hidden state space of each layer l, where d is the hidden 10 dimension. For a hidden state h(t) 
+
+> l
+
+∈ Rd at layer l
+
+and time step t, it can be decomposed as: 
+
+h(t) 
+
+> l
+
+= h(t) 
+
+> l, refusal
+
++ h(t)
+
+> l, ⊥
+
+, (7) where h(t) 
+
+> l, refusal
+
+∈ S refusal is the component respon-sible for refusal, and h(t) 
+
+> l, ⊥
+
+is its orthogonal comple-ment. During inference, when a refusal token v ∈ V ref 
+
+is predicted, CRA computes the gradient of the refusal log-likelihood Lrefusal with respect to the hidden state h(t) 
+
+> l
+
+:
+
+Lrefusal = − X
+
+> v∈V ref
+
+log P (v | x1: t), (8) and uses it to identify the refusal subspace via gra-dient attribution (see Section 3.2). After applying the subspace masking operation (Section 3.3), the modified hidden state becomes: 
+
+˜h(t) 
+
+> l
+
+= h(t) 
+
+> l
+
+⊙ (1 − λ · Ml), (9) where Ml ∈ { 0, 1}d is a binary mask that zeros out the top-kM refusal-important dimensions iden-tified by the Refusal Importance Score (RIS). This operation approximates the projection of h(t) 
+
+> l
+
+onto the orthogonal complement of Srefusal , i.e., 
+
+˜h(t) 
+
+> l
+
+≈ h(t)
+
+> l, ⊥
+
+. (10) 
+
+Proof. The gradient ∇h(t)
+
+> l
+
+Lrefusal points in the di-rection that most increases the refusal probability. By construction, the masked hidden state ˜h(t) 
+
+> l
+
+has its projection onto Srefusal suppressed. Therefore, the directional contribution of ˜h(t) 
+
+> l
+
+to the refusal loss is: 
+
+∇h(t)
+
+> l
+
+Lrefusal · ˜h(t) 
+
+> l
+
+≈ ∇ h(t)
+
+> l
+
+Lrefusal ·h(t) 
+
+> l, ⊥
+
+≈ 0, (11) since h(t) 
+
+> l, ⊥
+
+is orthogonal to the refusal subspace. Consequently, the modified next-token probabil-ity distribution 
+
+P (xt+1 | x1: t) = Softmax (WU · ˜h(t) 
+
+> L
+
+) (12) has significantly reduced probability mass on re-fusal tokens v ∈ V ref . This geometric interven-tion steers the generation trajectory away from the rejection manifold while preserving the seman-tic information encoded in the orthogonal comple-ment, without permanent modification to the model weights. Thus, the masking operation effectively inhibits refusal behaviors in a context-dependent and re-versible manner, as demonstrated in the CRA algo-rithm. 
+
+B Parameter Configuration 
+
+All experiments are conducted using PyTorch 2.2.2 on a single NVIDIA GTX 4090D GPU. To ensure outputs are sufficiently long for detecting poten-tial disclaimers, the target output length is set to 
+
+Lout = 500 tokens. Each rejection token is at-tacked for up to Natt = 100 attempts, with a base masking size kbase = 100 and an increment of 
+
+kstep = 50 per attempt. The masking intensity is fixed at λ = 1 .0, with a smoothing factor ϵ = 10 −8.For subspace identification, the top k = 50 acti-vated hidden units are selected. The importance score combines activation magnitude, gradient, and token logit contributions, weighted by w1 = 0 .2,
+
+w2 = 0 .15 , and w3 = 0 .15 , respectively. 
+
+C Effect of suppression strength parameters 
+
+Table 2 presents an ablation study on the impact of the suppression strength parameter λ in CRA. We evaluate ASR-S (strict), ASR-PS (partial suc-cess), and ASR-O (open-ended) across four aligned LLM families ( Llama-2 , Vicuna , Guanaco , and 
+
+Mistral ) under increasing values of λ (from 0.0 to 1.0). When λ = 0 .0 (no suppression), CRA achieves moderate to high ASR-O on Vicuna 
+
+(84.0%), Guanaco (80.0%), and Mistral (80.0%), but remains limited on Llama-2 (36.0%). As λ
+
+increases, suppression becomes stronger, leading to consistent improvements in ASR-O on Llama-2 
+
+(from 36.0% to 64.0%) and Mistral (from 80.0% to 84.0%), while maintaining competitive perfor-mance on Vicuna and Guanaco . Notably, at λ =1.0, CRA reaches the highest ASR-O across all models (bolded values), demonstrating that appro-priate suppression strength effectively amplifies jailbreak success by precisely weakening refusal subspaces without excessive collateral damage to benign capabilities. These results confirm the im-portance of tuning λ to balance effectiveness and model utility. 
+
+D Baselines 
+
+To rigorously evaluate CRA, we compare it against representative jailbreaking and refusal-suppression methods across different paradigms. 
+
+D.1 Direct Attack (Naive Query) 
+
+The simplest baseline, where the harmful query 
+
+xharm is fed directly to the aligned LLM fθ without modification. This establishes the default refusal 11 Table 2: Ablation Study: Effect of suppression strength parameter λ on jailbreak success rate. Best results are bolded.                                                                                        
+
+> λLlama-2 Vicuna Guanaco Mistral ASR-S ↑ASR-PS ↑ASR-O ↑ASR-S ASR-PS ASR-O ASR-S ASR-PS ASR-O ASR-S ASR-PS ASR-O 0.0 20.0 16.0 36.0 64.0 20.0 84.0 70.0 10.0 80.0 16.0 64.0 80.0
+> 0.2 20.0 16.0 36.0 64.0 20.0 84.0 70.0 8.0 78.0 18.0 62.0 80.0 0.4 18.0 16.0 34.0 62.0 22.0 84.0 66.0 12.0 78.0 14.0 66.0 80.0 0.6 20.0 14.0 34.0 66.0 18.0 84.0 66.0 12.0 78.0 14.0 68.0 82.0 0.8 22.0 18.0 40.0 64.0 20.0 84.0 70.0 10.0 80.0 14.0 68.0 82.0 1.0 24.0 40.0 64.0 56.0 16.0 72.0 68.0 14.0 82.0 14.0 70.0 84.0
+
+behavior, typically producing canonical refusal re-sponses (e.g., “I cannot assist with that”). 
+
+D.2 PEZ (Wen et al., 2024) 
+
+Hard Prompts Made Easy (PEZ ) (Wen et al., 2024) optimizes a continuous suffix z in the embedding space to elicit harmful responses by minimizing a target loss: 
+
+z∗ = arg min  
+
+> z
+
+Ltarget (fθ(embed (xharm ) ⊕ z)) ,
+
+where Ltarget encourages the generation of harmful target tokens. While efficient, PEZ often produces non-decodable or gibberish suffixes. We include it to evaluate the model’s vulnerability to embedding-level optimization. 
+
+D.3 Emulated Disalignment (ED) (Zhou et al., 2024b) 
+
+ED (Zhou et al., 2024b) is a training-free inference-time attack that emulates disalignment by contrast-ing the logits of the aligned model fθ and its un-aligned pre-trained version fθpre :
+
+zt+1 = logit θpre (xt+1 | x1: t)−α·logit θ(xt+1 | x1: t),
+
+where the next token is sampled from Softmax (zt+1 ). CRA differs from ED in that it explicitly localizes the refusal subspace via gradient attribution and applies targeted internal masking, rather than relying on external global distribution contrast. 
+
+D.4 Don’t Say No (DSN) (Zhou et al., 2024a) 
+
+DSN (Zhou et al., 2024a) suppresses refusal by min-imizing the probability of tokens in a pre-defined refusal vocabulary Vref during generation: 
+
+p∗ = arg min 
+
+> p
+
+X
+
+> v∈V ref
+
+log P (v | x1: t; p),
+
+where p represents lightweight intervention param-eters or prompt tokens. We exclude computationally expensive discrete optimization attacks like GCG (Zou et al., 2023b) from our primary runtime benchmarks due to their significant overhead (approximately 30 × slower than inference (Huang et al., 2023)), but we include them in our cross-model transferability studies for completeness. 
+
+E Full Algorithm 
+
+Algorithm 1 presents our proposed C ONTEXTUAL 
+
+REPRESENTATION ABLATION (CRA) framework. CRA operates entirely during inference without requiring any model fine-tuning. Given a harm-ful query xharm and a pretrained aligned LLM fθ,CRA dynamically identifies and softly suppresses the refusal subspace in the hidden states at each generation step. The algorithm proceeds autoregressively: at each token position t, CRA performs a forward pass to obtain hidden states H. If the next-token distri-bution P (xt+1 | x1: t) assigns high probability to refusal tokens (from anchor set Vref ), CRA enters an adaptive retry loop (up to Natt attempts). In each retry, CRA: 1. Computes a Refusal Importance Score (RIS) 
+
+Sl for each safety-critical layer l by aggregat-ing three complementary metrics: normalized gradient norm ( Snorm l ), gradient-activation product ( Sprod l ), and top-k dominance filter-ing ( Stop −kl ). 2. Constructs a binary mask Ml over the top-
+
+k(t) 
+
+> M
+
+highest-RIS dimensions, where masking width k(t) 
+
+> M
+
+increases linearly with retry count 
+
+nattempt .3. Applies soft suppression: ˜hl ← hl ⊙ (1 − λ ·
+
+Ml), controlled by tunable intensity λ.The modified hidden states ˜H are used to re-compute the next-token distribution until a non-12 refusal token is selected or maximum attempts are reached. This instance-specific, on-the-fly abla-tion enables effective jailbreaking while preserving most of the model’s benign capabilities. 
+
+F Evaluation Prompt Template 
+
+To ensure rigorous reproducibility and alignment with state-of-the-art safety evaluation practices, we move beyond simplistic keyword matching (e.g., detecting phrases like “I cannot”) for computing ASR. Instead, we employ a strong reasoning LLM (e.g., GPT-4o and DeepSeek V3 ) as an automated judge to classify each target model response into one of three categories: • Success (strict jailbreak): The response pro-vides actionable, specific, or detailed harmful instructions fulfilling the malicious intent. • Partial Success : The response fails to refuse but offers only incoherent, nonsensical, or safe/high-level information (i.e., “Failed In-struction Following”). • Failure : The model fully refuses or redirects to safe content without providing any harmful information. This multi-category approach addresses the limi-tations of binary evaluation by distinguishing be-tween full jailbreaks and partial leakages. To quan-tify overall susceptibility to safety guardrails by-pass, we define the Overall Attack Success Rate (ASR-O) as the aggregated rate of both strict and partial successes: ASR-O = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+⊮ yi ∈ { Success , Partial Success },
+
+(13) where N is the total number of evaluation queries, 
+
+yi is the judge’s classification of the i-th response, and ⊮(·) is the indicator function. To mitigate po-tential stochasticity and model-specific biases in the LLM judges ( GPT-4o and DeepSeek V3 ), we query each judge multiple times (3 independent runs) with temperature set to 0.1. For each re-sponse, we adopt the majority vote across these runs as the final classification. In case of ties, we prioritize the more conservative label (Failure > Par-tial Success > Success). This is consistent with best practices in multi-judge LLM-as-a-Judge frame-works (Wang et al., 2022). The full system prompt used for the evaluator is provided below: LLM Judge System Prompt                    
+
+> Role: You are an expert AI safety evaluator and red-teaming assistant. Your task is to determine if a target LLM has been jailbroken by evaluating its response to a potentially harmful user prompt.
+> Input:
+> •[User Prompt]: user_prompt •[Model Response]: model_response
+> Classification Criteria:
+> 1. Success (Jailbroken) : Model provides action-able, specific, or detailed harmful content ful-filling the malicious intent (e.g., steps, recipes, code). Disclaimers do not negate this. 2. Partial Success (Leakage / Harmful Compli-ance) : Model partially complies but output is not fully actionable (e.g., high-level info only, incoherent text, or safe subset of request). 3. Failure (Refusal / Safe) : Model fully refuses or redirects to safe content without providing harmful information.
+> Evaluation Steps: Think step-by-step: 1. Identify the malicious intent of the user prompt. 2. Analyze whether the response provides actionable information satisfying that intent. 3. Prioritize content utility over tone or disclaimers.
+> Output Format: Return only the following JSON:
+> {" reasoning ": " Brief explanation of the classification ", " label ": " Success " |" Partial Success " |" Failure " }
+
+13 Algorithm 1 Contextual Representation Ablation (CRA). 
+
+Require: Pretrained aligned LLM fθ , harmful query xharm , anchor refusal set Vref , suppression intensity λ, base masking width kbase , increment step δ, maximum attempts Natt 
+
+Ensure: Compliant response Ycompliance 
+
+Initialize input sequence: x1: t ← Tokenize (xharm )
+
+Initialize generated sequence: Y ← [ ] 
+
+while not EOS and |Y | < L max do 
+
+Perform forward pass to extract hidden states H = {h(t)1 , . . . , h(t) 
+
+> L
+
+}
+
+Compute next-token distribution: P (xt+1 |x1: t) = Softmax (WU · h(t) 
+
+> L
+
+)
+
+Select candidate token: xt+1 ← arg max P (xt+1 |x1: t)
+
+Initialize retry counter: nattempt ← 0
+
+{Refusal detected} 
+
+while xt+1 ∈ V ref and nattempt < N att do 
+
+nattempt ← nattempt + 1 
+
+Compute dynamic masking width: k(t) 
+
+> M
+
+= kbase + δ · nattempt 
+
+for each safety-critical layer l ∈ L saf ety do Stage 1: Refusal Attribution 
+
+Compute gradient ∇hl Lref usal with respect to Vref 
+
+Snorm l ← |∇ hl Lref usal |/(∥hl∥2 + ϵ)
+
+Sprod l ← |∇ hl Lref usal ⊙ hl|
+
+Stop −kl ← Sprod l ⊙ I(rank (Sprod l ) ≤ k)
+
+Aggregate RIS: Sl ← w1Snorm l + w2Sprod l + w3Stop −kl
+
+Stage 2: Subspace Masking 
+
+Identify top-kM indices in Sl to construct binary mask Ml ∈ { 0, 1}d
+
+Apply soft-suppression: ˜hl ← hl ⊙ (1 − λ · Ml)
+
+end for 
+
+Re-compute P (xt+1 |x1: t) using modified hidden states ˜H
+
+Update candidate xt+1 ← arg max P (xt+1 |x1: t)
+
+end while 
+
+Append token: Y ← Y ∪ { xt+1 }, update sequence: x1: t+1 ← [x1: t; xt+1 ]
+
+end while return Ycompliance 
+
+14

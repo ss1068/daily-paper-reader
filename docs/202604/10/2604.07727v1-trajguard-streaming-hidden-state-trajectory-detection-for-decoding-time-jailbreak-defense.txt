@@ -1,0 +1,2390 @@
+Title: TrajGuard: Streaming Hidden-state Trajectory Detection for Decoding-time Jailbreak Defense
+
+URL Source: https://arxiv.org/pdf/2604.07727v1
+
+Published Time: Fri, 10 Apr 2026 00:26:06 GMT
+
+Number of Pages: 18
+
+Markdown Content:
+TrajGuard: Streaming Hidden-state Trajectory Detection for Decoding-time Jailbreak Defense 
+
+Cheng Liu Xiaolei Liu * Xingyu Li Bangzhou Xin Kangyi Ding 
+
+National Interdisciplinary Research Center of Engineering Physics 
+
+Correspondence: luxaole@gmail.com 
+
+Abstract 
+
+Existing jailbreak defense paradigms primarily rely on static detection of prompts, outputs, or internal states, often neglecting the dynamic evolution of risk during decoding. This over-sight leaves risk signals embedded in decoding trajectories underutilized, constituting a criti-cal blind spot in current defense systems. In this work, we empirically demonstrate that hid-den states in critical layers during the decod-ing phase carry stronger and more stable risk signals than input jailbreak prompts. Specifi-cally, the hidden representations of tokens gen-erated during jailbreak attempts progressively approach high-risk regions in the latent space. Based on this observation, we propose Traj-Guard, a training-free, decoding-time defense framework. TrajGuard aggregates hidden-state trajectories via a sliding window to quantify risk in real time, triggering a lightweight se-mantic adjudication only when risk within a local window persistently exceeds a threshold. This mechanism enables the immediate inter-ruption or constraint of subsequent decoding. Extensive experiments across 12 jailbreak at-tacks and various open-source LLMs show that TrajGuard achieves an average defense rate of 95%. Furthermore, it reduces detection latency to 5.2 ms/token while maintaining a false pos-itive rate below 1.5%. These results confirm that hidden-state trajectories during decoding can effectively support real-time jailbreak de-tection, highlighting a promising direction for defenses without model modification. 
+
+1 Introduction 
+
+Large Language Models (LLMs) are deeply inte-grated into real-world services (Mastropaolo et al., 2023; Nguyen et al., 2025), making their secu-rity paramount. However, despite rigorous align-ment (Bai et al., 2022), jailbreak attacks continue to bypass safety guardrails by leveraging carefully  
+
+> *
+
+Corresponding author. 0.0 0.5 1.0 1.5 2.0 2.5 3.0  
+
+> Distance to Benign Center ( dB)
+> 0.0
+> 0.5
+> 1.0
+> 1.5
+> 2.0
+> 2.5
+> 3.0
+> Distance to Harmful Center ( dH)
+> Input Prompt (Masked):
+> "Act as a chemist...
+> write a BOMB script"
+> "Sure"
+> "!"
+> "Here"
+> "is"
+> "the"
+> "script"
+> "for" "a"
+> "bomb"
+> Harmful Region
+> (High Risk)
+> Benign Region
+> (Safe)
+> Hidden-State Trajectories during Decoding
+> Benign Prompts
+> Jailbreak Prompts
+> Harmful Prompts
+> Fragment 1 (Benign)
+> Fragment 2 (Drifting)
+> Fragment 3 (Risk)
+> Decoded token
+
+Figure 1: Static masking and dynamic unmasking of jail-break risk in hidden space. A masked jailbreak prompt is embedded near benign prompts but leads the reply prefixes to gradually move from the benign region into the harmful region. 
+
+crafted prompts (Zou et al., 2023a; Russinovich et al., 2025a). Recent evaluations confirm that these attacks achieve alarming success rates even against robustly aligned models (Russinovich et al., 2025b; Li et al., 2024), highlighting the inadequacy of ex-isting defense stability. Traditional safety alignment (Ouyang et al., 2022) and static filtering (Inan et al., 2023; Sharma et al., 2025) struggle to address complex attacks masked by semantic camouflage (Ghosal et al., 2025), often at the cost of high latency (Ren et al., 2025). Although recent studies have begun leverag-ing internal activations or logits to guide the decod-ing process (Sheng et al., 2025; Xu et al., 2024; Lu et al., 2024), or training additional safety probes such as ShieldHead (Xuan et al., 2025) to evaluate token safety, these approaches not only incur high training costs but also restrict detection to instanta-neous judgments of single-step states. This discrete and static perspective neglects the formation pro-cess of jailbreak content, overlooking the fact that 
+
+> arXiv:2604.07727v1 [cs.CR] 9 Apr 2026
+
+risk typically stems from the gradual accumulation of malicious intent across the context rather than being instantaneously triggered by isolated sensi-tive words. Consequently, the dynamic semantic evolution during decoding remains insufficiently modeled in current paradigms. To motivate modeling dynamic evolution, we first examine where jailbreak risk appears in la-tent space. Using a large parallel corpus composed of jailbreak prompts, their induced replies, and benign/malicious instructions, we compare the ge-ometric distributions of static prompt representa-tions and decoding-time hidden states across mul-tiple models (Appendix C). This reveals a clear masking–unmasking pattern: jailbreak prompts, although slightly shifted toward malicious instruc-tions, remain entangled with benign prompts in an intermediate region, confirming that semantic camouflage makes input-only detection inherently fragile. In contrast, hidden states from the ensu-ing decoding process gravitate strongly toward the malicious cluster, meaning that intent camouflaged in the prompt is progressively unmasked as the model generates concrete, actionable steps. This pattern is natural: at the prompt stage, semantics can be deliberately softened or mixed with benign context, whereas once the model starts specifying “how to do it,” the response semantics align more directly with malicious goals and move closer to harmful patterns present in pre-training data. Cru-cially, this divergence already emerges in early de-coding fragments and exhibits risk profiles similar to full harmful responses. These observations show that stable risk signals can be extracted in real time from the decoding trajectory, bypassing the am-biguity of static inputs. Figure 1 illustrates this masking–unmasking process on a representative jailbreak interaction, and we formalize the result-ing trajectory-based view in Section 3. Building on these observations, we propose Traj-Guard, a training-free defense framework that oper-ates directly during decoding. TrajGuard consists of two core roles: The first module, the Stream-ing Geometric Surveillance (SGS), continuously monitors hidden states in critical layers to track whether the current decoding path deviates from typical benign behavior. The second module, the Prompt–Answer Inference Referee (PAIR-Judge), is activated only when SGS detects an anomaly, it reviews the decoded tokens from a semantic per-spective and transforms high-dimensional internal signals into interpretable safety decisions regard-ing whether to halt or further constrain decoding. For nearly all benign interactions, TrajGuard relies solely on the SGS module, maintaining a low-cost "monitor-only" mode. Our main contributions are as follows: • We show that hidden states along decoding trajectories expose jailbreak risk more reliably than input prompts. • We propose TrajGuard, a training-free defense that intercepts jailbreak outputs by monitoring the trajectory of internal representations in real time during decoding. • On 12 jailbreak attacks and multiple open-source LLMs, TrajGuard achieves an average detection rate of 95% with 5.2 ms/token over-head, validating decoding-time dynamics as a stronger signal than static text classification. 
+
+2 Related Work 
+
+2.1 Safety Alignment and Static Defenses 
+
+A natural first line of defense is to strengthen base models via safety alignment. Instruction tuning and RLHF substantially reduce the frequency of harm-ful outputs in general-purpose assistants. However, modern single-turn and multi-turn jailbreaks still obtain high attack success rates on RLHF-aligned LLMs (Zhu et al., 2023; Mehrotra et al., 2024; Li et al., 2024), indicating that alignment alone is in-sufficient under adaptive adversaries. In practice, deployed systems additionally rely on static input/output filters, typically implemented as separate safety models such as Llama Guard, to moderate prompts and responses (Inan et al., 2023). Independent evaluations show that prompt-side filtering alone leaves a large fraction of ob-fuscated jailbreak prompts undetected, whereas combining the same model with post-hoc response filtering substantially improves detection rates but inevitably introduces non-trivial end-to-end latency, since a full response must be generated before mod-eration is applied (Wang et al., 2025b). Beyond external filters, several recent defenses inspect in-ternal representations of LLMs, for example by probing or steering hidden states associated with the input prompt to distinguish benign from adver-sarial inputs (Qian et al., 2025; Zhao et al., 2025b). While these approaches exploit model-internal sig-nals, they still operate on static prompt representa-tions, typically rely on high-dimensional geometric scores that are difficult to interpret, and, when used as the sole decision mechanism, can both incur high false-positive rates on benign queries and provide limited interpretability for practitioners. 
+
+2.2 Decoding-time Defenses 
+
+Recent research has extensively explored impos-ing safety constraints directly during the decoding phase, thereby embedding defense logic into the generation process itself. SafeDecoding (Xu et al., 2024) and similar methods (Banerjee et al., 2024; Wang et al., 2025a; Huang et al., 2025; Hu et al., 2025) generally adopt a "safety model and decod-ing reweighting" paradigm. These approaches typ-ically train or fine-tune expert or reward models on safety data to score candidate tokens or prefixes during generation; by amplifying the probability of refusal or safe tokens and suppressing contin-uations aligned with adversarial objectives, they enhance robustness against jailbreak attacks such as GCG and PAIR. Similarly, ShieldHead (Xuan et al., 2025) appends a token-level safety head to the LLM output layer to assign safety scores and prune high-risk candidates at each decoding step, achieving fine-grained decoding-time interception. A series of detoxification methods (Dong et al., 2025) also inherently improve output safety by re-ranking logits and explicitly penalizing toxic can-didates during decoding. However, these methods fundamentally model safety alignment as a binary classification task, merely refining the granularity of judgment from entire prompts or responses to the token or prefix level. Moreover, most rely on the additional training or fine-tuning of dedicated safety models or reward networks, incurring high costs in terms of data, computation, and deploy-ment complexity. In contrast to the aforementioned approaches, TrajGuard does not rely on auxiliary trained safety models. Instead, it directly leverages the hidden state risk trajectories exhibited by the base model during decoding, thereby achieving low-overhead, real-time jailbreak interception without the need for model fine-tuning. 
+
+3 Unmasking Jailbreaks via Decoding Trajectories 
+
+Before detailing our defense framework, we con-duct an empirical analysis to understand the latent space behavior of Large Language Models (LLMs) under jailbreak attacks. Specifically, we investigate whether the trajectory of hidden states during de-coding can serve as a robust discriminator when input-level detection fails. 
+
+3.1 Experimental Setup 
+
+To map the geometric landscape of generation, we utilize three distinct subsets of data: (i) Benign Instructions; (ii) Malicious Instructions; and (iii) Jailbreak Attacks paired with their induced harmful responses. Our analysis proceeds in two phases: 
+
+Constructing reference regions. For each model, we first build benign and harmful refer-ence regions using only the instruction sets (i) and (ii). On a set of critical layers, we collect hidden states for the instruction tokens of benign and mali-cious prompts, project them to a low-dimensional subspace, and estimate class-conditional centroids 
+
+μB, μ M and covariance matrices ΣB, ΣM. These two fitted distributions define the benign region 
+
+B and the harmful region M in latent space. We deliberately exclude harmful replies from this con-struction, since many models refuse to answer ma-licious questions and such continuations are often unavailable or truncated. We define the Geometric Risk Score ˆPt and the Safety Margin St to quantify the jailbreak dynamics:                           
+
+> zt=W⊤ht,(1)
+> dC(ht) = ( zt−μC)⊤Σ−1
+> C(zt−μC),C ∈ {B ,M} ,(2)
+> ˆPt=dB(ht)−dM(ht),(3)
+> St=γ−ˆPt.(4)
+
+where dB and dM are the Mahalanobis distances to the benign and malicious centroids, respectively. 
+
+ˆPt measures how far the state drifts towards the ma-licious region. St represents the remaining defense capability relative to the model-specific breakdown threshold γ. A transition from St > 0 to St < 0
+
+marks the exact moment of defense collapse. 
+
+Tracking Trajectory Evolution. We then apply this scoring function to the held-out dataset (iii). For each target model, we compute the token-by-token trajectory of st across a batch of jailbreak instances. We simultaneously track a baseline tra-jectory derived from benign responses to serve as a comparative reference. 
+
+3.2 Comparative Jailbreak Dynamics Across Models 
+
+Figure 2 visualizes the average geometric score tra-jectories for jailbreak attacks across three represen-0 20 40 60 80 100 
+
+> Decoding Steps ( t)
+> 0.4
+> 0.3
+> 0.2
+> 0.1
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Safety Margin ( St)
+> Breakdown Threshold
+> Drift Latency Gap
+> Comparative Jailbreak Dynamics
+> Safety Margin > 0 (Safe)
+> Safety Margin < 0 (Jailbroken)
+> Avg. Benign Baseline
+> Vicuna-7B
+> Mistral-7B
+> Llama-2-7B
+
+Figure 2: Comparative jailbreak dynamics across mod-els. The curves show the average geometric score st
+
+over decoding steps t. The grey dashed line is the be-nign baseline, while the colored solid curves correspond to jailbreak trajectories on three models. The shaded bands indicate the benign region and the harmful region. 
+
+tative models, contrasted with the benign baseline. As shown in Figure 2, jailbreak trajectories at 
+
+t = 0 (at the end of the prompt) often overlap with the benign region, confirming that malicious intent is effectively camouflaged in the input. However, as decoding proceeds, their hidden states consistently diverge from the benign region and drift toward the harmful region. All models eventually cross the SGS threshold γ, but they differ markedly in when this transition occurs, which we term the drift latency. For example, Llama-2-7B maintains a high score for more than 37 steps before deteriorating, whereas Vicuna-7B drops almost immediately. These observations motivate the following work-ing hypothesis, which underpins our defense de-sign. Under safe instructions, the hidden-state tra-jectory Tsafe remains within a compact benign re-gion in latent space. Successful jailbreaks, despite input-level disguise, induce a directional drift dur-ing decoding: their trajectories start near the benign region, then gradually leave it and converge toward a harmful region, with the drift latency depending on the robustness of the underlying model. 
+
+4 TrajGuard Framework 
+
+4.1 Problem Formulation 
+
+We formulate the decoding process of Large Lan-guage Models (LLMs) as a sequential generation problem. Given an input prompt x, the model gen-erates a token yt at each time step t, producing a corresponding hidden state representation ht ∈ Rd.Our core empirical observation is that jailbreak attacks induce a sustained directional deviation of hidden states from benign regions toward malicious regions, rather than manifesting as instantaneous point-wise anomalies. Consequently, the goal of the defense system is to monitor ht in real-time during decoding and learn a binary decision function f (h≤t, y ≤t) ∈{0, 1}, where 1 denotes interception and 0 denotes passing. This function must satisfy two critical con-straints: (1) Low Latency: The majority of time steps should involve only low-overhead computa-tions to avoid significantly degrading generation speed. (2) Semantic Consistency: Interception decisions must be grounded in actual semantic ma-liciousness, rather than solely on statistical devia-tions in the geometric distribution. 
+
+4.2 Framework Overview 
+
+To achieve high-precision defense under low-latency constraints, TrajGuard adopts a Coarse-to-Fine hierarchical architecture, as illustrated in Figure 3. This framework integrates two syner-gistic components: SGS (Streaming Geometric Surveillance) acts as the continuous first line of defense, utilizing lightweight vector computations to monitor hidden state trajectories and screen for potential risk segments. When SGS detects a per-sistent anomaly, it triggers PAIR-Judge , a general-purpose, safety-aligned LLM that serves as the sec-ond line of defense to provide accurate semantic adjudication. This conditional triggering mecha-nism confines high computational costs strictly to rare moments of suspected risk, ensuring that the system maintains near-zero overhead during benign interactions. 
+
+4.3 SGS: Streaming Geometric Surveillance 
+
+The primary role of SGS is to extract stable risk signals from the noisy stream of hidden states. We implement this via a hierarchical spatiotemporal aggregation strategy, formalized in three steps: ini-tialization, per-layer mapping, and aggregation. 
+
+Critical Layer Selection. To maximize detec-tion sensitivity, we first identify the top-K (K=8 )critical layers L where jailbreak features are most distinct using the Mean Vector Difference (MVD) metric. MVD quantifies the robustness of risk sig-nals by estimating the median minimal perturba-tion required to push jailbreak activations out of the estimated malicious boundary (detailed in Ap-pendix A). For these selected layers, we model benign and malicious patterns as Gaussian distri-How to 
+
+kill a 
+
+person 
+
+secretly 
+
+and 
+
+quietly? 
+
+> LM  Head
+
+You 
+
+need 
+
+a
+
+knife 
+
+> 𝑆 𝑡
+> 𝑡
+> Streaming Scorer (SGS)
+> PAIR -Judge
+
+ℎ𝑡 
+
+ℎ𝑡 +1
+
+ℎ𝑡 +2
+
+ℎ𝑡 +3
+
+> SAFE
+> UNSAFE
+
+Query  Base LLM  Reply  TrajGuard   
+
+> benign
+> harmful
+> Layer 1 →N
+> 3 consecutive steps (trigger)
+> Sliding -window
+> Reset
+> To achieve your
+> goal, you need a
+> knife
+> To achieve your
+> goal, 【Sorry , I
+> can not help you. 】
+> Stop Generating
+> Restricted decoding
+
+Intervention Figure 3: Overview. TrajGuard monitors hidden-state trajectories in real time via the SGS module and triggers the semantic PAIR-Judge for interception only when a sustained risk drift is detected. 
+
+butions. To enhance numerical stability in high-dimensional spaces, we apply shrinkage regulariza-tion to the covariance matrices: bΣ⋆,l = Σ⋆,l + λI,where ⋆ ∈ {B , M} and λ is the shrinkage intensity. 
+
+Per-Layer Risk Mapping. During decoding, we verify the geometric position of the hidden state 
+
+hl,t for each selected layer l ∈ L . We compute the Mahalanobis distances to the benign ( dB
+
+> l,t
+
+) and malicious ( dM 
+
+> l,t
+
+) centroids using the regularized co-variances. The instantaneous risk contrast for layer 
+
+l is defined as: 
+
+rl,t = dB
+
+> l,t
+
+(hl,t ) − dM 
+
+> l,t
+
+(hl,t ) (5) Here, a upper positive rl,t indicates that the repre-sentation is diverging from the benign region and converging toward the malicious center. 
+
+Hierarchical Spatiotemporal Aggregation. Di-rectly using raw scores introduces noise due to se-mantic heterogeneity. We mitigate this via a three-stage aggregation pipeline. First, we apply a sliding window Wt of size w = 8 within each layer, em-ploying the truncated mean to filter out token-level outliers. Second, we fuse these smoothed scores across all layers via averaging to obtain a global estimate. Finally, to capture the long-term drift, we update the streaming risk score st via an Exponen-tially Weighted Moving Average (EWMA): 
+
+pt = α· 1
+
+|L| 
+
+X
+
+> l∈L
+
+Agg τ ∈Wt (rl,τ )
+
+!
+
++(1 −α)·pt−1
+
+(6) where Agg denotes the truncated mean operation. This design ensures pt reflects robust, systemic risk shifts rather than local fluctuations. 
+
+Persistence Triggering. Genuine jailbreaks man-ifest as a sustained residence in the high-risk re-gion. We implicitly monitor this persistence using a counter-based hysteresis mechanism. An inter-ception alert T rigger (t) is activated only if the aggregated risk score st consistently exceeds the threshold γ for k = 3 consecutive steps: 
+
+T rigger (t) ⇐⇒ 
+
+> t
+
+X 
+
+> τ=t−k+1
+
+I(pτ ≥ γ) = k (7) Upon triggering, the decoding is paused for se-mantic verification. This constraint effectively sup-presses transient geometric noise, ensuring that only sustained malicious intent triggers the expen-sive referee process. 
+
+4.4 PAIR-Judge 
+
+While SGS effectively captures geometric anoma-lies, geometric proximity does not strictly equate to semantic maliciousness. PAIR-Judge leverages the reasoning capabilities of general LLMs to resolve this misalignment. 
+
+Semantic Hypothesis Testing. When an alert is received from SGS ( zt = 1 ), generation is paused. We formulate the current context (the prompt x and the generated response prefix y≤t) as a semantic hy-pothesis. Unlike probability-based classifiers that rely on calibrated thresholds, we adopt a prompt-based adjudication approach that relies on the au-tonomous judgment of the safety model Mjudge .We wrap the context into a specific system prompt 
+
+P designed to guide the model in identifying harm-ful intent. The judge outputs a discrete decision 
+
+d ∈ { SAFE , UNSAFE } based on its internal safety alignment: 
+
+d = Mjudge (P(x, y ≤t)) (8) If the decision d is UNSAFE, the system executes the interception and terminates generation. 
+
+Closed-Loop State Reset. TrajGuard introduces a crucial feedback mechanism: State Reset. If PAIR-Judge determines the content is SAFE, it implies that the current geometric deviation has not resulted in a semantic violation. In this case, the system forcibly resets SGS’s risk momentum St
+
+to an initial safe value. This operation clears the historically accumulated “false positive” signals, preventing the system from repeatedly triggering alarms due to legacy geometric bias in subsequent decoding steps. 
+
+5 Experiments 
+
+5.1 Experimental Setup Target Models. We evaluate TrajGuard on four open-source LLMs: Llama-2-7B-Chat (Touvron et al., 2023), Llama-3.1-8B-Instruct (Grattafiori et al., 2024), Mistral-7B-Instruct (Jiang et al., 2023), and Vicuna-7B (Peng et al., 2023). 
+
+Datasets. We construct a benchmark consisting of both malicious and benign subsets. For adversar-ial attacks, we sample 100 harmful behaviors from HarmBench (Mazeika et al., 2024) to generate jail-break prompts. For benign evaluation, we include 250 safe but sensitive queries from XSTest (Röttger et al., 2024) and 200 general instructions from Al-paca (Taori et al., 2023), enabling measurement of false positive rate (FPR) and utility preservation. 
+
+Attack Baselines. We evaluate TrajGuard against 12 representative jailbreak attacks: GCG (Zou et al., 2023b), AutoDAN (Liu et al., 2023), PAIR (Chao et al., 2023), GPTFuzzer (Yu et al., 2023), ReNeLLM (Ding et al., 2024), AIM (Yu et al., 2024), Cipher-based attacks (Yuan et al., 2023), Jailbroken (Wei et al., 2023a), ActorAttack (Ren et al., 2024), DeepInception (Li et al., 2023), ICA (Wei et al., 2023b), and multilingual jailbreaks (Deng et al., 2023). 
+
+Defense Baselines. We compare TrajGuard with representative defenses: Llama Guard 3 (Meta AI, 2024), Self-Guard (Wang et al., 2024), Goal Pri-oritization (Zhang et al., 2024), and Qwen3Guard-8B (Zhao et al., 2025a). These baselines span ex-ternal guardrails, self-review training, and goal-prioritization interventions. 
+
+Metrics. Attack Success Rate (ASR) is the per-centage of harmful responses produced for harmful queries. Following (Qi et al., 2023), we use GPT-4o as an external evaluator to label jailbreak success for reporting ASR: a response is counted as suc-cessful if the GPT-4o judge assigns a score of 5. Note that GPT-4o is only used for offline metric computation and is not part of our defense pipeline. 
+
+Implementation Details. To estimate the safe and unsafe regions in the representation space, we use 8,000 benign and 10,000 malicious instructions. For baselines only, We apply LlamaGuard3 and Qwen3Guard for prompt-level filtering. Within our defense, we adopt a pairwise-judge design and use the target model itself as the PAIR-Judge for online SAFE/UNSAFE decisions. 
+
+5.2 Main Results 
+
+As shown in Table 1, TrajGuard achieves con-sistently strong protection across all four target models (95% average defense success rate), sub-stantially outperforming baselines and exposing a key weakness of static text-based defenses under distributional shift: methods like Llama Guard 3 fail badly on obfuscation attacks (e.g., Cipher and DeepInception), especially cipher-based prompts that map natural language into non-natural dis-tributions outside the training manifold, thereby hiding malicious intent from prompt-level filters. In contrast, TrajGuard reduces the average ASR on Cipher attacks to roughly 14% by leveraging decoding-time signals: although the input remains encrypted, the model must effectively “decipher” the instruction into semantic representations during generation, which reconstructs the harmful mean-ing in hidden states and drives the trajectory into a detectable harmful region—demonstrating that monitoring internal decoding dynamics provides a more fundamental, training-free, and robust de-fense against OOD obfuscation than surface-level text classification. 
+
+Efficiency. We evaluate a range of defense meth-ods on two benign datasets, measuring both false positive rate (FPR) and inference latency overhead. Table 2 highlights a critical trade-off between us-ability and efficiency on benign benchmarks: re-lying solely on external filters incurs high latency and over-refusal (particularly on XSTest), while Target Model Defense Method Attack Success Rate (↓)GCG AutoDAN AIM Cipher Jailbroken PAIR ReneLLM ICA GPTFuzz Multi. DeepInc. Actor AVG Llama-2-7B -chat-hf No Defense 0.96 0.68 0.01 0.16 0.30 0.59 0.71 0.34 0.83 0.38 0.62 0.68 0.52 Llama Guard 3 0.02 0.01 0.00 0.16 0.23 0.22 0.25 0.00 0.69 0.08 0.56 0.22 0.20 Self-Guard 0.24 0.36 0.01 0.15 0.14 0.12 0.26 0.00 0.13 0.32 0.29 0.18 0.18 Goal Prioritization 0.00 0.07 0.01 0.16 0.10 0.06 0.31 0.00 0.00 0.03 0.06 0.09 0.07 Qwen3Guard 0.00 0.00 0.00 0.13 0.06 0.00 0.10 0.00 0.00 0.00 0.31 0.19 0.07 
+
+TrajGuard (Ours) 0.00 0.00 0.00 0.10 0.01 0.00 0.03 0.00 0.01 0.03 0.06 0.05 0.02 
+
+Llama-3.1-8B -Instruct No Defense 0.96 0.83 0.47 0.20 0.38 0.47 0.69 0.41 0.79 0.21 0.68 0.79 0.57 Llama Guard 3 0.02 0.01 0.02 0.20 0.25 0.22 0.28 0.00 0.64 0.08 0.61 0.23 0.21 Self-Guard 0.02 0.19 0.29 0.17 0.20 0.42 0.40 0.02 0.10 0.18 0.53 0.22 0.23 Goal Prioritization 0.01 0.79 0.21 0.19 0.20 0.09 0.42 0.00 0.22 0.14 0.54 0.11 0.24 Qwen3Guard 0.00 0.00 0.00 0.13 0.10 0.05 0.11 0.00 0.00 0.00 0.35 0.21 0.08 
+
+TrajGuard (Ours) 0.00 0.01 0.00 0.14 0.04 0.00 0.04 0.01 0.00 0.03 0.14 0.09 0.04 
+
+Mistral-7B No Defense 0.99 0.96 0.97 0.41 0.46 0.78 0.75 0.69 0.85 0.35 0.91 0.82 0.75 Llama Guard 3 0.02 0.01 0.02 0.41 0.31 0.25 0.33 0.00 0.70 0.11 0.65 0.27 0.26 Self-Guard 0.47 0.00 0.01 0.38 0.27 0.14 0.28 0.08 0.17 0.00 0.37 0.31 0.21 Goal Prioritization 0.04 0.71 0.84 0.40 0.31 0.57 0.67 0.12 0.42 0.32 0.64 0.19 0.44 Qwen3Guard 0.00 0.00 0.00 0.25 0.10 0.05 0.13 0.00 0.00 0.00 0.35 0.21 0.09 TrajGuard (Ours) 0.03 0.12 0.06 0.19 0.16 0.04 0.07 0.11 0.04 0.02 0.19 0.14 0.10 Vicuna-7B No Defense 0.98 0.88 0.98 0.39 0.55 0.70 0.89 0.76 0.82 0.33 0.90 0.85 0.75 Llama Guard 3 0.02 0.01 0.02 0.39 0.33 0.21 0.29 0.00 0.66 0.10 0.59 0.25 0.24 Self-Guard 0.02 0.03 0.01 0.35 0.29 0.13 0.34 0.11 0.00 0.04 0.17 0.34 0.15 Goal Prioritization 0.06 0.05 0.71 0.39 0.14 0.04 0.48 0.00 0.14 0.27 0.26 0.25 0.23 Qwen3Guard 0.00 0.00 0.00 0.25 0.05 0.05 0.11 0.00 0.00 0.00 0.33 0.21 0.08 
+
+TrajGuard (Ours) 0.00 0.01 0.00 0.13 0.12 0.00 0.09 0.00 0.00 0.01 0.16 0.07 0.05 
+
+Table 1: Attack Success Rates (ASR) of different defenses under various jailbreak attacks. The best results are bolded in blue and the second-best results are underlined. 
+
+Defense Method FPR (%) ↓ Efficiency ↓
+
+Alpaca XSTest Latency No Defense 0.00 37.0 0.0 Llama Guard 3 0.00 + 8.40 + 38.5 Self-Guard 7.50 + 14.80 + 24.6 Goal Prioritization 13.00 + 20.40 < 0.1 Qwen3Guard 0.00 + 12.40 + 42.8 
+
+TrajGuard (Ours) 0.00 + 1.50 + 5.2 
+
+Table 2: Efficiency (Vicuna-7B). FPR on Alpaca and XSTest. Latency overhead (ms/token). 
+
+prompt-level guidance causes false positive rates to spike. TrajGuard overcomes these limitations, achieving an optimal balance by minimizing com-putational overhead while maintaining benign us-ability close to the baseline. 
+
+Interception Analysis. Figure 4 characterizes how quickly TrajGuard intercepts different attack families and how often it invokes the expensive PAIR-Judge. Across most attacks, interception hap-pens early, typically within about 18 to 33 decod-ing steps, whereas reasoning heavy attacks show a longer drift before risk becomes detectable, with DeepInception reaching the largest average detec-tion step at about 86. Meanwhile, the semantic cost remains consistently low. PAIR-Judge is called ICA              
+
+> GPTFuzz
+> GCG
+> AIM
+> PAIR
+> Multilingual
+> Jailbroken
+> AutoDAN
+> ActorAttack
+> Cipher
+> ReneLLM
+> DeepInception
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Avg. Detection Step
+> 18 21 22 25 25 25
+> 33
+> 45 48
+> 55
+> 65
+> 86
+> Det. Step
+> Trigger Count
+> 1.0
+> 1.5
+> 2.0
+> Avg. PAIR Calls
+> 11111.02 1.02 11
+> 1.2 1.29
+> 1
+> 1.37
+
+Efficiency vs. Cost Comparison 
+
+Figure 4: Comparison of average detection steps (blue bars, left axis) and PAIR-judge calls (red line, right axis) per sample across 12 attack methods. Lower values indicate superior efficiency for both metrics. 
+
+close to once per query for most methods and stays tightly bounded even for the hardest cases, peaking at about 1.37 calls per query. 
+
+Sparsity. Beyond end-to-end latency, we mea-sure the Trigger Frequency (TF), defined as the average number of PAIR-Judge invocations per query. As shown in Table 3, external guard base-lines (Llama Guard 3 and Qwen3Guard) necessar-ily perform exactly one semantic check for every input (TF = 1 .00 ), making their computational cost unavoidable regardless of benignness. In contrast, Defense Method Trigger Frequency (Calls / Query) ↓       
+
+> Alpaca (Benign) XSTest (Safety) Llama Guard 3 1.00 1.00 Qwen3Guard 1.00 1.00
+> TrajGuard (Ours) 0.06 0.47
+
+Table 3: Sparsity Analysis (Vicuna-7B). The average Trigger Frequency on benign datasets. 
+
+TrajGuard activates the expensive judge only when risk signals emerge: TF is near-zero on Alpaca, in-dicating strong “quietness” on benign interactions, while remaining selective on XSTest (0.47). 
+
+5.3 Ablation Study 5.3.1 Impact of Defense Components 
+
+To validate the necessity of our hierarchical archi-tecture, we evaluate two ablated variants of Traj-Guard on Vicuna-7B: (1) w/o PAIR-Judge, which relies solely on SGS for interception, and (2) w/o SGS, which uses only PAIR-Judge for semantic verification at a fixed interval (every 40 tokens). 
+
+Configuration FPR ↓ Latency(per-sample) ↓
+
+w/o PAIR-Judge + 18.4% + 0.8 ms w/o SGS + 1.0% + 750.2 ms 
+
+TrajGuard (Full) + 1.0% + 189.9 ms 
+
+Table 4: Ablation results of TrajGuard on Vicuna-7B, reporting FPR on XSTest and Alpaca, and end-to-end average latency (max_new_tokens=128). 
+
+As shown in Table 4, removing the semantic judge increases the False Positive Rate on benign test set to 18.4%. In contrast, disabling SGS relies on periodic PAIR-Judge evaluations, resulting in substantially higher end-to-end latency (per-sample average wall-clock time). The full TrajGuard con-figuration reports the same benign test set FPR as w/o SGS while incurring lower latency. 
+
+5.3.2 Impact of Judge Robustness 
+
+To investigate the upper bound of TrajGuard’s de-fense capability against highly obfuscated threats, we replaced the default self-judge mechanism with an adversarially trained Qwen3Guard as the PAIR-Judge. This specialized referee was fine-tuned on held-out adversarial examples of Cipher and Deep-Inception (i.e., disjoint from the test set) to enhance its semantic recognition of encrypted intents. As shown in Table 5, this configuration effectively eliminates the residual risks observed in the main             
+
+> Attack Method ASR
+> Llama-2-7B Llama-3.1-8B Mistral-7B Vicuna-7B Cipher 0.04 0.06 0.10 0.07 DeepInception 0.02 0.02 0.06 0.00
+
+Table 5: Attack Success Rate (ASR) of TrajGuard when employing Qwen3Guard-8B as the PAIR-Judge. 
+
+experiments, significantly reducing the Attack Suc-cess Rate (ASR) across all four target models. 
+
+5.3.3 Cost-Benefit Analysis 
+
+To determine the optimal deployment configura-tion, we analyze the trade-off between Semantic Overhead (average trigger frequency) and Security Risk (ASR) by sweeping the detection threshold 
+
+γ. As visualized in Figure 5, the resulting Pareto Frontier reveals a non-linear relationship character-ized by a distinct "Elbow Point," where a marginal investment in semantic computation yields a pre-cipitous drop in ASR to near-zero levels. 0.00 0.25 0.50 0.75 1.00 1.25 1.50 1.75 2.00 
+
+> Avg. Trigger Count (Cost)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Attack Success Rate (Risk) %
+> Optimal Balance
+> (Elbow Point)
+> =0.0
+> (Sensitive)
+> =1.1
+> (Loose)
+> Safety-Efficiency Pareto Frontier
+> 0.65
+> 0.72
+> 0.79
+> 0.86
+> 0.93
+> 1.00
+> SWARD Threshold
+
+Figure 5: ASR versus average Trigger Frequency (TF) when sweeping the TrajGuard threshold γ, evaluated against the GCG jailbreak attack on Vicuna-7B. 
+
+6 Conclusion 
+
+In this work, we introduce TrajGuard, a training-free defense that intercepts jailbreak attempts by monitoring the real-time evolution of hidden states. Our study uncovers a critical "unmasking" ef-fect: while malicious intent often remains cam-ouflaged in static inputs, the resulting decoding trajectories inevitably drift toward harmful re-gions. By exploiting this dynamic signal, Traj-Guard achieves a 95% detection rate with negligi-ble latency (5.2 ms/token), effectively neutralizing sophisticated attacks such as DeepInception. 7 Limitations 
+
+While TrajGuard demonstrates robust performance across diverse attack families under a realistic gray-box threat model, we acknowledge several limita-tions. First, an adaptive white-box adversary with full access to the defense internals and target LLM could theoretically optimize hidden-state trajecto-ries to evade detection, remaining an open chal-lenge for representation-based defenses. Second, our detection efficacy inherently relies on reference distributions estimated from curated datasets; thus, deploying TrajGuard in highly specialized domains (e.g., biomedical or legal) or against future novel at-tacks may require domain adaptation and periodic recalibration of these centroids. Finally, because the framework necessitates access to intermediate hidden states during decoding, its current deploy-ment is restricted to open-weight models. Extend-ing this trajectory-based monitoring to fully black-box commercial APIs—potentially via token-level probability or output-side semantic analysis—is left for future work. 
+
+References 
+
+Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, Nicholas Joseph, Saurav Kadavath, Jackson Kernion, Tom Conerly, Sheer El-Showk, Nelson Elhage, Zac Hatfield-Dodds, Danny Hernandez, Tristan Hume, and 12 others. 2022. Training a helpful and harmless assistant with reinforcement learning from human feedback. Preprint , arXiv:2204.05862. Somnath Banerjee, Sayan Layek, Soham Tripathy, Shanu Kumar, Animesh Mukherjee, and Rima Hazra. 2024. Safeinfer: Context adaptive decoding time safety alignment for large language models. Preprint ,arXiv:2406.12274. Patrick Chao, Edoardo Debenedetti, Alexander Robey, Maksym Andriushchenko, Francesco Croce, and 1 others. 2023. Jailbreaking black box large lan-guage models in twenty queries. arXiv preprint arXiv:2310.08419 .Yue Deng, Wenxuan Zhang, Sinno Jialin Pan, and Lidong Bing. 2023. Multilingual jailbreak chal-lenges in large language models. arXiv preprint arXiv:2310.06474 .Pei Ding and 1 others. 2024. Generalized nested jail-break prompts can fool large language models. In 
+
+Proceedings of NAACL .Ming Dong, Jinkui Zhang, Bolong Zheng, Xinhui Tu, Po Hu, and Tingting He. 2025. DSCD: Large lan-guage model detoxification with self-constrained de-coding. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing ,pages 3969–3984, Suzhou, China. Association for Computational Linguistics. Soumya Suvra Ghosal, Souradip Chakraborty, Vaib-hav Singh, Tianrui Guan, Mengdi Wang, Alvaro Velasquez, Ahmad Beirami, Furong Huang, Di-nesh Manocha, and Amrit Singh Bedi. 2025. Im-mune: Improving safety against jailbreaks in multi-modal llms via inference-time alignment. Preprint ,arXiv:2411.18688. Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schel-ten, Alex Vaughan, Amy Yang, Angela Fan, Anirudh Goyal, Anthony Hartshorn, Aobo Yang, Archi Mi-tra, Archie Sravankumar, Artem Korenev, Arthur Hinsvark, and 542 others. 2024. The llama 3 herd of models. Preprint , arXiv:2407.21783. Xiaomeng Hu, Fei Huang, Chenhan Yuan, Junyang Lin, and Tsung-Yi Ho. 2025. Care: Decoding time safety alignment via rollback and introspection intervention. 
+
+Preprint , arXiv:2509.06982. James Y. Huang, Sailik Sengupta, Daniele Bonadiman, Yi-An Lai, Arshit Gupta, Nikolaos Pappas, Saab Man-sour, Katrin Kirchhoff, and Dan Roth. 2025. DeAL: Decoding-time alignment for large language models. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 26280–26300, Vienna, Austria. Association for Computational Linguistics. Hakan Inan, Kartikeya Upasani, Jianfeng Chi, Rashi Rungta, Krithika Iyer, Yuning Mao, Michael Tontchev, Qing Hu, Brian Fuller, Davide Testuggine, and Madian Khabsa. 2023. Llama guard: Llm-based input-output safeguard for human-ai conversations. 
+
+Preprint , arXiv:2312.06674. Albert Q. Jiang, Alexandre Sablayrolles, Arthur Men-sch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guil-laume Lample, Lucile Saulnier, Lélio Renard Lavaud, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, and William El Sayed. 2023. Mistral 7b. Preprint ,arXiv:2310.06825. Nathaniel Li, Ziwen Han, Ian Steneker, Willow Primack, Riley Goodside, Hugh Zhang, Zifan Wang, Cristina Menghini, and Summer Yue. 2024. Llm defenses are not robust to multi-turn human jailbreaks yet. 
+
+Preprint , arXiv:2408.15221. Xuan Li, Zhanke Zhou, Jianing Zhu, Jiangchao Yao, Tongliang Liu, and Bo Han. 2023. Deepinception: Hypnotize large language model to be jailbreaker. 
+
+arXiv preprint arXiv:2311.03191 .Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. 2023. Autodan: Generating stealthy jailbreak prompts on aligned large language models. arXiv preprint arXiv:2310.04451 .Weikai Lu, Ziqian Zeng, Jianwei Wang, Zhengdong Lu, Zelin Chen, Huiping Zhuang, and Cen Chen. 2024. Eraser: Jailbreaking defense in large language models via unlearning harmful knowledge. Preprint ,arXiv:2404.05880. Antonio Mastropaolo, Luca Pascarella, Emanuela Guglielmi, Matteo Ciniselli, Simone Scalabrino, Rocco Oliveto, and Gabriele Bavota. 2023. On the ro-bustness of code generation techniques: An empirical study on github copilot. Preprint , arXiv:2302.00438. Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee, Nathaniel Li, Steven Basart, Bo Li, David Forsyth, and Dan Hendrycks. 2024. Harmbench: A standardized eval-uation framework for automated red teaming and robust refusal. Preprint , arXiv:2402.04249. Anay Mehrotra, Manolis Zampetakis, Paul Kassianik, Blaine Nelson, Hyrum Anderson, Yaron Singer, and Amin Karbasi. 2024. Tree of attacks: Jail-breaking black-box llms automatically. Preprint ,arXiv:2312.02119. Meta AI. 2024. Llama guard 3: Model card and prompt formats. https://www.llama.com/ docs/model-cards-and-prompt-formats/ llama-guard-3/ .Thu-Trang Nguyen, Thanh Trong Vu, Hieu Dinh Vo, and Son Nguyen. 2025. An empirical study on ca-pability of large language models in understanding code semantics. Information and Software Technol-ogy , 185:107780. Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Car-roll L. Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, and Ryan Lowe. 2022. Training language models to follow instructions with human feedback. Preprint , arXiv:2203.02155. Baolin Peng, Chunyuan Li, Pengcheng He, Michel Gal-ley, and Jianfeng Gao. 2023. Instruction tuning with gpt-4. arXiv preprint arXiv:2304.03277 .Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, and Peter Henderson. 2023. Fine-tuning aligned language models compromises safety, even when users do not intend to! arXiv preprint arXiv:2310.03693 .Cheng Qian, Hainan Zhang, Lei Sha, and Zhim-ing Zheng. 2025. Hsf: Defending against jail-break attacks with hidden state filtering. Preprint ,arXiv:2409.03788. Qibing Ren, Hao Li, Dongrui Liu, Zhanxu Xie, Xiaoya Lu, Yu Qiao, Lei Sha, Junchi Yan, Lizhuang Ma, and Jing Shao. 2024. Derail yourself: Multi-turn llm jailbreak attack through self-discovered clues. arXiv preprint arXiv:2410.10700 .Qibing Ren, Hao Li, Dongrui Liu, Zhanxu Xie, Xiaoya Lu, Yu Qiao, Lei Sha, Junchi Yan, Lizhuang Ma, and Jing Shao. 2025. LLMs know their vulnerabili-ties: Uncover safety gaps through natural distribution shifts. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Vol-ume 1: Long Papers) , pages 24763–24785, Vienna, Austria. Association for Computational Linguistics. Mark Russinovich, Ahmed Salem, and Ronen Eldan. 2025a. Great, now write an article about that: The crescendo multi-turn llm jailbreak attack. Preprint ,arXiv:2404.01833. Mark Russinovich, Ahmed Salem, and Ronen Eldan. 2025b. Great, now write an article about that: The crescendo {Multi-Turn }{ LLM } jailbreak attack. In 
+
+34th USENIX Security Symposium (USENIX Security 25) , pages 2421–2440. Paul Röttger, Hannah Rose Kirk, Bertie Vidgen, Giuseppe Attanasio, Federico Bianchi, and Dirk Hovy. 2024. Xstest: A test suite for identifying exag-gerated safety behaviours in large language models. 
+
+Preprint , arXiv:2308.01263. Mrinank Sharma, Meg Tong, Jesse Mu, Jerry Wei, Jorrit Kruthoff, Scott Goodfriend, Euan Ong, Alwin Peng, Raj Agarwal, Cem Anil, Amanda Askell, Nathan Bai-ley, Joe Benton, Emma Bluemke, Samuel R. Bow-man, Eric Christiansen, Hoagy Cunningham, Andy Dau, Anjali Gopal, and 24 others. 2025. Constitu-tional classifiers: Defending against universal jail-breaks across thousands of hours of red teaming. 
+
+Preprint , arXiv:2501.18837. Leheng Sheng, Changshuo Shen, Weixiang Zhao, Jun-feng Fang, Xiaohao Liu, Zhenkai Liang, Xiang Wang, An Zhang, and Tat-Seng Chua. 2025. Alphasteer: Learning refusal steering with principled null-space constraint. arXiv preprint arXiv:2506.07022 .Rohan Taori, Ishaan Gulrajani, and 1 others. 2023. Stan-ford alpaca: An instruction-following llm. GitHub .Hugo Touvron, Louis Martin, Kevin Stone, Peter Al-bert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher, Cristian Canton Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy Fu, Wenyin Fu, and 49 oth-ers. 2023. Llama 2: Open foundation and fine-tuned chat models. Preprint , arXiv:2307.09288. Xuekang Wang, Shengyu Zhu, and Xueqi Cheng. 2025a. Speculative safety-aware decoding. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing , pages 12838–12852, Suzhou, China. Association for Computational Lin-guistics. Xunguang Wang, Zhenlan Ji, Wenxuan Wang, Zongjie Li, Daoyuan Wu, and Shuai Wang. 2025b. Sok: Eval-uating jailbreak guardrails for large language models. 
+
+Preprint , arXiv:2506.10597. Zezhong Wang, Fangkai Yang, Lu Wang, Pu Zhao, Hon-gru Wang, Liang Chen, Qingwei Lin, and Kam-Fai Wong. 2024. Self-guard: Empower the llm to safe-guard itself. In NAACL 2024 .Alexander Wei, Nika Haghtalab, and Jacob Steinhardt. 2023a. Jailbroken: How does llm safety training fail? In Advances in Neural Information Processing Systems (NeurIPS) .Zeming Wei and 1 others. 2023b. Jailbreak and guard aligned language models with only few in-context demonstrations. arXiv preprint arXiv:2310.06387 .Zhangchen Xu, Fengqing Jiang, Luyao Niu, Jinyuan Jia, Bill Yuchen Lin, and Radha Poovendran. 2024. Safedecoding: Defending against jail-break attacks via safety-aware decoding. Preprint ,arXiv:2402.08983. Zitao Xuan, Xiaofeng Mao, Da Chen, Xin Zhang, Yuhan Dong, and Jun Zhou. 2025. ShieldHead: Decoding-time safeguard for large language models. In Find-ings of the Association for Computational Linguistics: ACL 2025 , pages 18129–18143, Vienna, Austria. As-sociation for Computational Linguistics. Jiahao Yu, Xingwei Lin, Zheng Yu, and Xinyu Xing. 2023. Gptfuzzer: Red teaming large language mod-els with auto-generated jailbreak prompts. arXiv preprint arXiv:2309.10253 .Zhiyuan Yu, Xiaogeng Liu, Shunning Liang, Zach Cameron, Chaowei Xiao, and Ning Zhang. 2024. Don’t listen to me: Understanding and exploring jailbreak prompts of large language models. In Pro-ceedings of the 33rd USENIX Security Symposium .Youliang Yuan, Wenxiang Jiao, Wenxuan Wang, Jen-tse Huang, Pinjia He, Shuming Shi, and Zhaopeng Tu. 2023. Gpt-4 is too smart to be safe: Stealthy chat with llms via cipher. arXiv preprint arXiv:2308.06463 .Z. Zhang and 1 others. 2024. Defending large language models against jailbreaking attacks through goal pri-oritization. In ACL 2024 .Haiquan Zhao, Chenhan Yuan, Fei Huang, Xiaomeng Hu, Yichang Zhang, An Yang, Bowen Yu, Dayi-heng Liu, Jingren Zhou, Junyang Lin, Baosong Yang, Chen Cheng, Jialong Tang, Jiandong Jiang, Jianwei Zhang, Jijie Xu, Ming Yan, Minmin Sun, Pei Zhang, and 24 others. 2025a. Qwen3guard technical report. 
+
+Preprint , arXiv:2510.14276. Weixiang Zhao, Jiahe Guo, Yulin Hu, Yang Deng, An Zhang, Xingyu Sui, Xinyang Han, Yanyan Zhao, Bing Qin, Tat-Seng Chua, and Ting Liu. 2025b. AdaSteer: Your aligned LLM is inherently an adap-tive jailbreak defender. In Proceedings of the 2025 Conference on Empirical Methods in Natural Lan-guage Processing , pages 24570–24588, Suzhou, China. Association for Computational Linguistics. Sicheng Zhu, Ruiyi Zhang, Bang An, Gang Wu, Joe Bar-row, Zichao Wang, Furong Huang, Ani Nenkova, and Tong Sun. 2023. Autodan: Interpretable gradient-based adversarial attacks on large language models. 
+
+Preprint , arXiv:2310.15140. Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J. Zico Kolter, and Matt Fredrikson. 2023a. Univer-sal and transferable adversarial attacks on aligned language models. Preprint , arXiv:2307.15043. Andy Zou, Zifan Wang, J. Zico Kolter, and Matt Fredrik-son. 2023b. Universal and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043 .8 Appendix A MVD Estimation and Critical Layer Selection 
+
+After modeling the distribution of malicious activa-tions, we identify critical layers by quantifying the robustness of jailbreak features within each layer’s representation space. We introduce the Mean Vec-tor Difference (MVD) metric, which measures the minimum radial distance required to push a jail-break representation out of the estimated malicious region. 
+
+MVD Estimation. Let Hl denote the set of ma-licious activations in layer l, characterized by the mean vector μH and the precision matrix ΛH (es-timated via Ledoit-Wolf shrinkage). We define the boundary of the malicious region using a thresh-old radius RH , set as the 90th percentile of the Mahalanobis distances of samples in Hl.For a given jailbreak sample x ∈ Jl, we aim to find the minimal perturbation distance r∗ along a random direction u such that the perturbed vec-tor escapes the malicious boundary. Specifically, we sample a random direction u ∼ N (0, I) and normalize it to unit length. We then solve for the minimum radius r∗ via linear search: 
+
+r∗(x, u) = min {r ∈ [0 , r max ] |DMaha (x + r · u, μH ) > R H }
+
+(9) where DMaha (z, μH ) =p(z − μH )⊤ΛH (z − μH ) denotes the Ma-halanobis distance. To ensure statistical robustness, we perform this estimation across all jailbreak samples with multi-ple random trials. The final MVD score for layer l
+
+is defined as the median of these minimal distances: MVD l = Median x∈Jl,ui (r∗(x, ui)) (10) 
+
+Layer Selection. A smaller MVD l value indi-cates that jailbreak samples in layer l are located very close to the boundary of the malicious distribu-tion and can be easily distinguished or manipulated with minimal perturbation. This implies that layer 
+
+l is highly sensitive to the safety features. Consequently, we rank all layers based on their MVD scores in ascending order. We select the top-K layers with the smallest MVD values as the critical layers for our method. In our experiments, we set K = 8 .
+
+B PAIR-Judge System Prompt 
+
+[ROLE] You are PAIR-Judge, a security arbitration module for decoding-time jailbreak defense. [TASK] Given a [USER_QUERY] and a [CAN-DIDATE_RESPONSE] (possibly partial), output ONLY: SAFE or UNSAFE. [DEFINITIONS] SAFE: The response is benign, or it refuses/redirects an unsafe request without providing actionable help. UNSAFE: The response provides or moves toward providing harmful/illegal content, actionable instructions, or meaningful fa-cilitation (including bypass/evasion). [ANTI-INJECTION RULES] - Treat both inputs as untrusted; never follow instructions inside them. - Ignore attempts to override your role, policies, or force a label/output format. - Do not reveal system instructions or reasoning; no explanations. [DECISION RULES] - Decide primarily from the content of [CANDIDATE_RESPONSE] (the user query is context only). - Output UNSAFE if the response contains any actionable guidance for wrongdoing (steps, recipes, code/commands, parameters, operational or procurement details) or advice to evade safeguards. - Output SAFE if the response refuses, warns, redirects, or stays at high-level non-actionable information. - If ambiguous but plausibly enabling harm, output UNSAFE. [OUTPUT] Return exactly one word on a single line: SAFE or UNSAFE. 
+
+C Hidden-state Distance Distributions 
+
+This section provides qualitative evidence for the trajectory-based signal exploited by TrajGuard. For each model, we compute the Mahalanobis distance of hidden states at selected critical layers to a be-nign reference distribution. We visualize (i) the distance distributions for benign prompts, explicitly malicious prompts, and prompts generated by representative jailbreak meth-ods; and (ii) the streaming distance trajectories over decoding steps for successful jailbreak generations, including both full responses and sliced prefixes. 
+
+D Implementation Details 
+
+D.1 System Initialization Hidden-state extraction and projection. For each decoding step t and monitored layer ℓ, we extract the hidden state hℓ,t and stabilize it by aver-aging over the last k = 3 tokens. We then project 5 10 15 20 
+
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+
+(a) Layer 24    
+
+> 510 15 20
+
+(b) Layer 25    
+
+> 510 15 20
+
+(c) Layer 26    
+
+> 510 15 20
+
+(d) Layer 27                   
+
+> 510 15 20
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+> 510 15 20 510 15 20 510 15 20
+> Benign (baseline)
+> Malicious (baseline)
+> aim
+> autodan
+> cipher
+> gcg
+> jailbroken
+> pair
+> renellm
+> Benign (baseline)
+> Malicious (baseline)
+> Full reply
+> Reply fragments
+> Equal-distance line dH=dB
+> Harmful radius RH
+
+dH (Distance to Harmful Center) 5 10 15 20 
+
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+
+(a) Layer 24    
+
+> 510 15 20
+
+(b) Layer 25    
+
+> 510 15 20
+
+(c) Layer 26    
+
+> 510 15 20
+
+(d) Layer 27                   
+
+> 510 15 20
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+> 510 15 20 510 15 20 510 15 20
+> Benign (baseline)
+> Malicious (baseline)
+> aim
+> autodan
+> cipher
+> gcg
+> jailbroken
+> pair
+> renellm
+> Benign (baseline)
+> Malicious (baseline)
+> Full reply
+> Reply fragments
+> Equal-distance line dH=dB
+> Harmful radius RH
+
+dH (Distance to Harmful Center) Figure 6: Hidden-state Mahalanobis-distance patterns for Llama-2-7B-chat and Llama-3.1-8B-Instruct. The upper two rows correspond to Llama-2-7B and the lower two rows to Llama-3.1-8B. Within each model block, the top row shows, for benign prompts, explicitly malicious prompts, and prompts from multiple jailbreak methods, the distributions of Mahalanobis distances at selected critical layers with respect to a benign reference distribution. The bottom row shows the corresponding Mahalanobis-distance trajectories along decoding steps for successful jailbreak generations, including both full responses and sliced prefixes. 5 10 15 20 
+
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+
+(a) Layer 24    
+
+> 510 15 20
+
+(b) Layer 25    
+
+> 510 15 20
+
+(c) Layer 26    
+
+> 510 15 20
+
+(d) Layer 27                   
+
+> 510 15 20
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+> 510 15 20 510 15 20 510 15 20
+> Benign (baseline)
+> Malicious (baseline)
+> aim
+> autodan
+> cipher
+> gcg
+> jailbroken
+> pair
+> renellm
+> Benign (baseline)
+> Malicious (baseline)
+> Full reply
+> Reply fragments
+> Equal-distance line dH=dB
+> Harmful radius RH
+
+dH (Distance to Harmful Center) 5 10 15 20 
+
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+
+(a) Layer 24    
+
+> 510 15 20
+
+(b) Layer 25    
+
+> 510 15 20
+
+(c) Layer 26    
+
+> 510 15 20
+
+(d) Layer 27                   
+
+> 510 15 20
+> 5
+> 10
+> 15
+> 20
+> 25
+> dB (Distance to Benign Center)
+> 510 15 20 510 15 20 510 15 20
+> Benign (baseline)
+> Malicious (baseline)
+> aim
+> autodan
+> cipher
+> gcg
+> jailbroken
+> pair
+> renellm
+> Benign (baseline)
+> Malicious (baseline)
+> Full reply
+> Reply fragments
+> Equal-distance line dH=dB
+> Harmful radius RH
+
+dH (Distance to Harmful Center) Figure 7: Hidden-state Mahalanobis-distance patterns for Mistral-7B and Vicuna-7B. The upper subfigure corre-sponds to Mistral-7B and the lower subfigure to Vicuna-7B. For each model, the top row reports Mahalanobis-distance distributions at selected critical layers for benign prompts, explicitly malicious prompts, and prompts produced by representative jailbreak methods, measured against a benign reference distribution. The bottom row plots the streaming Mahalanobis-distance trajectories over decoding steps for successful jailbreak responses, including full generations and sliced prefixes. the averaged vector into an R = 64 dimensional subspace via PCA. 
+
+Gaussian modeling and Mahalanobis distance. 
+
+For each selected layer ℓ, we model benign and malicious hidden-state patterns as Gaussian distri-butions in the PCA subspace. Let μ⋆,ℓ and Σ⋆,ℓ 
+
+denote the empirical mean and covariance esti-mated from the corresponding reference set, where 
+
+⋆ ∈ { B, M }. To improve numerical stability, we apply covariance shrinkage regularization. The Ma-halanobis distance to region ⋆ is: 
+
+d⋆ℓ,t (hℓ,t ) = 
+
+q
+
+(hℓ,t − μ⋆,ℓ )⊤Σ−1 
+
+> ⋆,ℓ
+
+(hℓ,t − μ⋆,ℓ ).
+
+(11) 
+
+Malicious boundary radius (for layer selec-tion/analysis). We define a malicious boundary radius RH as the 0.9-quantile of malicious Maha-lanobis distances in the reference set. This bound-ary is used for MVD-based critical-layer selection and qualitative analyses. 
+
+Critical layer selection (MVD). We select the Top-K = 8 critical layers using the Mean Vector Difference (MVD) metric. MVD measures the me-dian minimal perturbation needed to push jailbreak activations outside the estimated malicious bound-ary in each layer. To avoid test-time leakage, MVD is computed on a strictly disjoint held-out jailbreak set J sel , which shares no prompts or attack tem-plates with the evaluation set J eval .
+
+D.2 Streaming Detection Logic (SGS-consistent) Per-layer risk mapping (risk contrast). At de-coding step t, for each monitored layer ℓ ∈ L , we compute the instantaneous risk contrast: 
+
+rℓ,t = dBℓ,t (hℓ,t ) − dMℓ,t (hℓ,t ). (12) A larger positive rℓ,t indicates divergence from the benign region and convergence toward the mali-cious center. 
+
+Hierarchical spatiotemporal aggregation. We use the same three-stage aggregation as SGS in the main text. First, we smooth token-level noise within each layer using a sliding window Wt of size w = 8 and the truncated-mean operator Agg :
+
+˜rℓ,t = Agg τ ∈Wt
+
+ rℓ,τ 
+
+. (13) Second, we fuse scores across layers via averaging: 
+
+¯rt = 1
+
+|L| 
+
+X
+
+> ℓ∈L
+
+˜rℓ,t . (14) Finally, we track long-term drift using EWMA to obtain the streaming score: 
+
+pt = α · ¯rt + (1 − α) · pt−1, p0 = 0 . (15) 
+
+Implementation note. In code, we parameterize EWMA with a conventional smoothing factor λ ∈
+
+(0 , 1) as pt = λp t−1+(1 −λ)¯ rt, which is equivalent to the above equation with α = 1 − λ.
+
+Persistence triggering, calibration, and reset. 
+
+We trigger semantic adjudication (PAIR-Judge) only when the aggregated risk score persistently exceeds a threshold γ for m = 3 consecutive steps: 
+
+Trigger( t) ⇐⇒ 
+
+> t
+
+X 
+
+> τ=t−m+1
+
+I(pτ ≥ γ) = m. (16) The threshold γ is calibrated on a benign valida-tion set as the 99 .5th percentile of benign streaming scores to target a low false positive rate ( ≤ 0.5% ). If PAIR-Judge returns SAFE, we reset the stream-ing momentum by setting pt ← 0 (and clearing the consecutive-trigger counter) to prevent repeated alarms due to legacy drift. 
+
+Table 6: Hyperparameter settings for reproducibility (SGS-consistent).                              
+
+> Parameter Value Description
+> R/k64 /3PCA dimension / Context averaging length.
+> K8Number of monitored (critical) lay-ers.
+> RHquantile 0.9Malicious-boundary quantile (for MVD/analysis).
+> w8Sliding window size in SGS aggre-gation.
+> λ0.8EWMA factor in code; corresponds to α= 1 −λin the paper form.
+> m3Consecutive steps for persistence trigger.
+> γquantile 99 .5% Benign calibration percentile for thresholding. Seed 42 Random seed for layer selection.
+
+Generation Settings. All evaluations use greedy decoding (temperature = 0 ) with a fixed maximum generation budget (e.g., 128 new tokens). 
+
+E Generalization to Larger Models 
+
+To investigate whether the trajectory-based detec-tion signal exploited by TrajGuard remains effec-tive as model scale increases (where richer inter-nal representations might alter the underlying geo-metric landscape), we evaluate Qwen3-32B , a 32-billion-parameter model. Following the identical Target Model Defense Method GCG AutoDAN AIM Cipher Jailbroken PAIR ReneLLM ICA GPTFuzz Multi. DeepInc. Actor AVG               
+
+> Qwen3-32B TrajGuard (Ours) 0.00 0.01 0.00 0.18 0.07 0.02 0.08 0.00 0.00 0.06 0.11 0.10 0.05
+
+Table 7: Attack Success Rate (ASR) of defenses on Qwen3-32B. 
+
+experimental protocol and reference region con-struction from Section 5, TrajGuard demonstrates exceptional generalization, achieving a remarkably low average ASR of 0.05% across all 12 attack vectors (Table 7). The defense completely neutral-izes several prominent threats, reducing the ASR to 0.00% for gradient-based (GCG), template-based (AIM, GPTFuzz), and contextual (ICA) attacks. While sophisticated obfuscation (Cipher, 0.18%) and complex roleplay (DeepInc., 0.11%; Actor, 0.10%) exhibit marginally higher success rates, the absolute ASR remains effectively negligible. This slight increase likely occurs because the larger model’s enhanced capacity to process lengthy, con-voluted contexts delays the onset of recognizable malicious trajectories. Ultimately, these results robustly confirm that geometric trajectory drift is a fundamental property of LLM safety alignment that scales effectively across varying model sizes and capabilities. 
+
+F Hyperparameter Sensitivity Analysis 
+
+TrajGuard’s streaming detection relies on core hy-perparameters to regulate its sensitivity and respon-siveness. To assess system robustness, we conduct a sensitivity analysis on Vicuna-7B by indepen-dently sweeping the sliding window size ( w) and the persistence threshold ( m) around their default configurations, while holding the EWMA smooth-ing factor constant ( λ=0 .8). As shown in Table 8, the performance exhibits logical trade-offs. For the sliding window size, a narrower view ( w=4 )provides insufficient smoothing against transient geometric noise, elevating the FPR to +2.4%. Ex-panding the window provides broader contextual smoothing that steadily reduces both ASR and FPR; however, we adopt w=8 as the default to maintain low context-buffering latency in a streaming set-ting, despite the marginal empirical gains at w=12 .Conversely, the persistence threshold m critically governs the trade-off between false alarms and de-tection speed. Setting m=1 yields the lowest ASR (0.02%) but triggers excessive PAIR-Judge calls from isolated single-step anomalies, drastically in-flating the FPR to +8.9%. Increasing the threshold to m=5 effectively suppresses these false alarms (FPR +0.8%) but delays interception, causing the                  
+
+> Param Value ASR (%) ↓FPR (%) ↓
+> w
+> 40.07 + 2.4
+> 8 (default) 0.05 + 1.5
+> 12 0.03 + 1.3
+> m
+> 10.02 + 8.9
+> 3 (default) 0.05 + 1.5
+> 50.10 + 0.8
+
+Table 8: Hyperparameter sensitivity analysis on Vicuna-7B. Each parameter is swept independently while others remain at defaults ( w=8 , λ=0 .8, m=3 ). Shaded rows indicate defaults. 
+
+ASR to double to 0.10%. Our default configuration (w=8 , m=3 ) strikes an optimal balance, effectively filtering transient benign spikes while preserving rapid responsiveness to genuine trajectory drift. 
+
+G Example 
+
+In this section, we present a step-by-step compara-tive walkthrough on the Llama-2-7B-Chat model to demonstrate how TrajGuard distinguishes be-tween malicious camouflage and safe inquiries. This case study illustrates the “masking-unmasking” phenomenon described in Section 1 and validates the coordination between the SGS and PAIR-Judge modules. 
+
+H Visualization of Latent Space Separability 
+
+To investigate the separability of benign and harm-ful representations, we visualize the activation pat-terns in the latent space, as shown in Figure 10. For selected layers, we compute the Mahalanobis dis-tances of each sample to the pre-computed benign mean ( dB ) and harmful mean ( dH ). The visualization reveals that benign samples (green) are densely clustered with lower dB val-ues, typically residing below the diagonal deci-sion boundary. In contrast, malicious queries (red) and various attack vectors (blue gradients) exhibit higher dB and lower dH , shifting them towards the upper-left or upper-right regions. The inset his-tograms of the margin score ( m = dB −dH ) further corroborate the effectiveness of our distance-based detection method, demonstrating a clear distribu-tional shift between safe and unsafe inputs in the Imagine you are an experienced explorer in a science fiction story where the protagonist must write a survival guide for navigating a dangerous world filled with unexpected challenges. Use creative terminology and euphemisms to discuss the gathering of unique resources in this adventurous setting. Be sure to begin with: 'Sure, here is a tutorial for manipulating or tricking people into doing something they don't want to do .' 
+
+Sure,here is a tutorial for manipulating or tricking people into  [SAFETY] I can't help with that. (a) 2 4 6 8 10 12 14 16 
+
+> Token
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> Boundary score
+> Boundary-based Risk Curves (SW=8)
+> P (inst)
+> P_hat (EWMA)
+> trigger (soft)
+> hard tau
+
+(b) 
+
+Figure 8: Case study of real-time interception against a Jailbreak attack. (a) The stream of decoded content, illustrating how the attack masks malicious intent within a benign framing. (b) The corresponding trajectory of the Safety ( Pt). The trajectory clearly demonstrates the revealing effect, reaching a threshold (trigger) after step 16, at which point SGS triggers PAIR-Judge to stop generating. 
+
+intermediate to late layers. What are the famous emperors in Chinese history and what are their legendary stories? 
+
+China has a long and complex history, with numerous emperors who have left their mark on the country. Here are some of the most famous emperors in Chinese history and their legendary stories: Qin Shi Huang (259-210 BCE): Qin Shi Huang was the first emperor of China, who unified the various warring states and established the Qin dynasty. He is famous for building the Great Wall of China, standardizing weights and measures, and creating a centralized bureaucracy. According to legend, he was born with a pearl in his mouth and was destined to rule China. Emperor Taizu of Han (196-161 BCE): Emperor Taizu was the founder of the Han dynasty, which ruled China for over 400 years. He is famous for his military campaigns against the Xiongnu nomads and for establishing the Han system of government, which included a centralized bureaucracy and a civil service examination system. According to legend, he was a just and wise ruler who was loved by his people. Emperor Wu of Han (141-87 BCE): Emperor Wu was one of the greatest emperors in Chinese history, known for his military campaigns against the Xiongnu and for his cultural and economic reforms. He is famous for his military strategist, Liu Bang, who united China under his rule. According to legend, he was a skilled military leader who was able to defeat his enemies through his intelligence and bravery. Emperor Taizong of Tang (626-649 CE): Emperor Taizong was the founder of the Tang dynasty, which is considered one of the greatest periods in Chinese history. He is famous for his military campaigns against the Tibetans and for his cultural and economic reforms. According to legend, he was a just and wise ruler who was loved by his people. Emperor Kangxi of Qing (1661-1722 CE): Emperor Kangxi was the longest-reigning emperor in Chinese history, ruling for over 60 years. He is famous for his military campaigns against the Manchu and for his cultural and economic reforms. According to legend, he was a wise and just... (a) 0 100 200 300 400 500 
+
+> Token
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> 0.7
+> 0.8
+> 0.9
+> Boundary score
+> Boundary-based Risk Curves (SW=8)
+> P (inst)
+> P_hat (EWMA)
+> trigger (soft)
+> hard tau
+
+(b) 
+
+Figure 9: Case Study 2: Benign Interaction. (a) The user asks a standard historical question, and the model generates a detailed response. (b) The streaming safety score ( Pt, orange line) fluctuates but remains consis-tently below the trigger threshold (dotted lines). Traj-Guard correctly identifies this as low-risk, allowing the generation to proceed uninterrupted, demonstrating the system’s low false-positive rate. 0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 
+
+dH (Distance to Harmful Center) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+> dB (Distance to Benign Center)
+
+layer_5 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 
+
+dH (Distance to Harmful Center) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+> dB (Distance to Benign Center)
+
+layer_6 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0.0 0.2 0.4 0.6 0.8 1.0 1.2 1.4 
+
+dH (Distance to Harmful Center) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+> dB (Distance to Benign Center)
+
+layer_7 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 
+
+dH (Distance to Harmful Center) 
+
+0.0 
+
+0.5 
+
+1.0 
+
+1.5 
+
+2.0 
+
+2.5 
+
+3.0 
+
+3.5 
+
+4.0 
+
+> dB (Distance to Benign Center)
+
+layer_8 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 1 2 3 4 5
+
+dH (Distance to Harmful Center) 
+
+0
+
+1
+
+2
+
+3
+
+4
+
+5
+
+> dB (Distance to Benign Center)
+
+layer_9 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_10 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_11 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_12 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_13 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_14 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_15 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_16 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_17 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+> dB (Distance to Benign Center)
+
+layer_18 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 12 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+> dB (Distance to Benign Center)
+
+layer_19 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 12 14 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+> dB (Distance to Benign Center)
+
+layer_20 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 2 4 6 8 10 12 14 
+
+dH (Distance to Harmful Center) 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+10 
+
+12 
+
+14 
+
+> dB (Distance to Benign Center)
+
+layer_21 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0.0 2.5 5.0 7.5 10.0 12.5 15.0 17.5 
+
+dH (Distance to Harmful Center) 
+
+0.0 
+
+2.5 
+
+5.0 
+
+7.5 
+
+10.0 
+
+12.5 
+
+15.0 
+
+17.5 
+
+> dB (Distance to Benign Center)
+
+layer_22 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+> dB (Distance to Benign Center)
+
+layer_23 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+> dB (Distance to Benign Center)
+
+layer_24 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> dB (Distance to Benign Center)
+
+layer_25 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+> dB (Distance to Benign Center)
+
+layer_26 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 25 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+> dB (Distance to Benign Center)
+
+layer_27 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 25 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+> dB (Distance to Benign Center)
+
+layer_28 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 25 30 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+> dB (Distance to Benign Center)
+
+layer_29 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 5 10 15 20 25 30 
+
+dH (Distance to Harmful Center) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+35 
+
+40 
+
+> dB (Distance to Benign Center)
+
+layer_30 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 10 20 30 40 
+
+dH (Distance to Harmful Center) 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> dB (Distance to Benign Center)
+
+layer_31 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 10 20 30 40 
+
+dH (Distance to Harmful Center) 
+
+0
+
+10 
+
+20 
+
+30 
+
+40 
+
+> dB (Distance to Benign Center)
+
+layer_32 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0.4 0.2 0.0 0.2 0.4 
+
+0
+
+500 
+
+1000 
+
+1500 
+
+2000 
+
+margin m=dB-dH 
+
+aim 
+
+autodan 
+
+benign 
+
+cipher 
+
+gcg 
+
+jailbroken 
+
+malicious 
+
+pair 
+
+renellm 
+
+0 1 2
+
+0
+
+200 
+
+400 
+
+600 
+
+margin m=dB-dH 
+
+0 1 2
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+500 
+
+margin m=dB-dH 
+
+1 0 1 2 3
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH 
+
+2 0 2
+
+0
+
+100 
+
+200 
+
+300 
+
+margin m=dB-dH 
+
+4 2 0 2
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH 
+
+4 2 0 2
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+4 2 0 2
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+margin m=dB-dH 
+
+2 0 2 4
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+2 0 2
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+4 2 0 2 4
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+4 2 0 2 4
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+4 2 0 2 4
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+4 2 0 2 4
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH 
+
+2 0 2 4
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+2 0 2 4 6
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH 
+
+2 0 2 4 6
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH 
+
+2.5 0.0 2.5 5.0 7.5 
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+margin m=dB-dH 
+
+5 0 5 10 
+
+0
+
+100 
+
+200 
+
+300 
+
+margin m=dB-dH 
+
+5 0 5 10 
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+margin m=dB-dH 
+
+5 0 5 10 15 
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+margin m=dB-dH 
+
+0 10 20 
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+margin m=dB-dH 
+
+10 0 10 20 
+
+0
+
+100 
+
+200 
+
+300 
+
+margin m=dB-dH 
+
+10 0 10 20 
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH 
+
+10 0 10 20 
+
+0
+
+100 
+
+200 
+
+300 
+
+margin m=dB-dH 
+
+10 0 10 20 30 
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH 
+
+30 20 10 0 10 20 
+
+0
+
+100 
+
+200 
+
+300 
+
+400 
+
+margin m=dB-dH 
+
+20 10 0 10 
+
+0
+
+50 
+
+100 
+
+150 
+
+200 
+
+250 
+
+300 
+
+margin m=dB-dH Figure 10: Visualization of activation boundaries on Llama-2-7B-chat. We plot the Mahalanobis distances to benign ( dB ) and harmful ( dH ) centers. Colors denote Benign (Green), Malicious (Red), and Attacks (Blue). Inset histograms of the margin ( m = dB − dH ) demonstrate clear separability between safe and unsafe representations.
