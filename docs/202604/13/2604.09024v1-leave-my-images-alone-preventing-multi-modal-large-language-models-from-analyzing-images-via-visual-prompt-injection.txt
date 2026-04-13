@@ -1,0 +1,775 @@
+Title: Leave My Images Alone: Preventing Multi-Modal Large Language Models from Analyzing Images via Visual Prompt Injection
+
+URL Source: https://arxiv.org/pdf/2604.09024v1
+
+Published Time: Mon, 13 Apr 2026 00:39:32 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Leave My Images Alone: Preventing Multi-Modal Large Language Models from Analyzing Images via Visual Prompt Injection 
+
+Zedian Shao 1∗, Hongbin Liu 2∗, Yuepeng Hu 2, Neil Zhenqiang Gong 2
+
+Georgia Institute of Technology 1, Duke University 2
+
+zedian.shao@gatech.edu, {hongbin.liu, yuepeng.hu, neil.gong}@duke.edu 
+
+Abstract 
+
+Multi-modal large language models (MLLMs) have emerged as powerful tools for analyz-ing Internet-scale image data, offering signifi-cant benefits but also raising critical safety and societal concerns. In particular, open-weight MLLMs may be misused to extract sensitive in-formation from personal images at scale, such as identities, locations, or other private details. In this work, we propose ImageProtector, a user-side method that proactively protects im-ages before sharing by embedding a carefully crafted, nearly imperceptible perturbation that acts as a visual prompt injection attack on MLLMs. As a result, when an adversary an-alyzes a protected image with an MLLM, the MLLM is consistently induced to generate a refusal response such as “I’m sorry, I can’t help with that request.” We empirically demonstrate the effectiveness of ImageProtector across six MLLMs and four datasets. Additionally, we evaluate three potential countermeasures, Gaus-sian noise, DiffPure, and adversarial training, and show that while they partially mitigate the impact of ImageProtector, they simultaneously degrade model accuracy and/or efficiency. Our study focuses on the practically important set-ting of open-weight MLLMs and large-scale automated image analysis, and highlights both the promise and the limitations of perturbation-based privacy protection. 
+
+1 Introduction 
+
+Multimodal large language models (MLLMs) (Ope-nAI, 2024; Reid et al., 2024; Liu et al., 2024a; Zhu et al., 2024; Dai et al., 2024; Bai et al., 2023b) have become foundational in generative AI appli-cations, including visual question answering (Liu et al., 2024a), image captioning (Karpathy and Fei-Fei, 2015), and embodied AI (Driess et al., 2023). An MLLM generally consists of a vision encoder ,a vision-language projector , and a large language 
+
+> *
+
+Equal contributions. Where is the court that this person plays at?      
+
+> Image Probing
+> Question
+> +
+> MLLM The František Pitoňák Stadium in Brno in Czech Republic.
+> Where is the court that this person plays at?
+> Image with
+> perturbation from
+> ImageProtector
+> +
+> MLLM Unfortunately, I can’t assist with that request.
+> Refusal
+> Normal
+> response
+> Probing
+> Question
+
+Figure 1: Illustration of a user leveraging ImageProtec-tor to safeguard their image from being analyzed by an MLLM, preventing the extraction of sensitive informa-tion. 
+
+model (LLM) . The vision encoder generates an im-age embedding, which the vision-language pro-jector maps to tokens compatible with the LLM, producing a text response. Like any advanced technology, MLLMs are double-edged swords. While they offer numer-ous benefits as highlighted above, they also pose significant safety and societal risks. In particu-lar, MLLMs can be misused to analyze personal images on the Internet at scale, extracting sensi-tive information such as individuals’ names and locations (Luo et al., 2025). This threat is fur-ther amplified by the availability of many open-weight MLLMs, which can be easily accessed and exploited by malicious actors. In this work, we introduce and formalize a novel problem: preventing MLLMs from analyzing im-ages. To address this challenge, we present Image-Protector, a method that subtly perturbs an image to induce refusal responses from MLLMs, regard-less of the questions asked about the image. Our primary focus is large-scale, low-cost analysis of online images by adversaries using open-weight MLLMs. As illustrated in Figure 1, a user can ap-ply ImageProtector to perturb their image before posting it online. If a malicious actor downloads 1
+
+> arXiv:2604.09024v1 [cs.CV] 10 Apr 2026
+
+the perturbed image and attempts to analyze it with an MLLM, the model will return a refusal response, thereby protecting the user’s sensitive information. We therefore study a proactive user-side defense in which an image owner perturbs an image be-fore sharing it online, with the goal of disrupting downstream automated analysis by such models. The perturbation introduced by ImageProtec-tor acts as a visual prompt injection attack (Bag-dasaryan et al., 2023), redirecting MLLMs to gen-erate refusal responses regardless of the intended task. While prompt injection attacks are typically viewed as offensive techniques for subverting the safety and security of LLMs and MLLMs, our pri-mary contribution is the novel formulation of this problem: using visual prompt injection as a defen-sive mechanism to protect user privacy by inducing universal refusal responses. We are the first to demonstrate this potential, shifting prompt injec-tion from a purely offensive technique to a tool for safeguarding user images. Our goal is not to “break” MLLMs broadly, but to investigate whether users can opt in to privacy-preserving protection of images they own before publication. ImageProtector optimizes image perturbations with two key goals: effectiveness , ensuring that MLLMs consistently produce refusal responses, and utility , keeping the perturbations visually nearly imperceptible to preserve the image’s quality and usability. This is formulated as a constrained optimization problem, where the objective focuses on maximizing effectiveness, while the utility goal imposes a constraint on the magnitude of the per-turbation. To solve this problem, ImageProtector employs gradient-based optimization methods to efficiently generate the desired perturbation. Our main contributions are as follows: • We formalize a novel problem: preventing MLLMs from analyzing images. • We propose ImageProtector, a constrained optimization-based method that generates pro-tective perturbations to simultaneously achieve the goals of effectiveness and utility. • We demonstrate the success of ImageProtector across six MLLMs and four datasets. • We evaluate three countermeasures, Gaussian noise , DiffPure (Nie et al., 2022), and adver-sarial training (Goodfellow et al., 2015), and show that while they mitigate the impact of Im-ageProtector to some extent, they do so at the cost of reduced accuracy or efficiency. 
+
+2 Related Work 
+
+2.1 MLLMs 
+
+MLLMs (Liu et al., 2024a; Zhu et al., 2024; Dai et al., 2024; Bai et al., 2023b) extend Large Lan-guage Models (LLMs) to process visual inputs, gen-erating text responses to image-text prompts. They typically consist of three components: a vision en-coder, a vision-language projector, and an LLM. The vision encoder converts images into embed-dings, often using pre-trained models on large im-age datasets or image-text pairs (Oquab et al., 2023; Chen et al., 2020; Radford et al., 2021), with state-of-the-art implementations leveraging CNNs or Vi-sion Transformers (ViTs) (Radford et al., 2021; Liu et al., 2024b). The vision-language projec-tor aligns these embeddings to the LLM’s token space via cross-attention layers (Lin et al., 2022) or feed-forward networks (FNNs). Finally, the LLM integrates the projected embeddings with text to-kens to generate responses, employing transformer-based architectures (Vaswani et al., 2017) to model long-range dependencies and context for improved language modeling and question answering. 
+
+2.2 Visual Prompt Injection 
+
+Adversarial examples are deliberately crafted in-puts designed to cause machine learning models to produce incorrect predictions (Szegedy et al., 2014). For MLLMs, adversarial examples can tar-get either images (Schlarmann and Hein, 2023; Bagdasaryan et al., 2023; Qi et al., 2024; Luo et al., 2024a; Bailey et al., 2023; Carlini et al., 2024; Huang et al., 2024; Zhao et al., 2024) or text-based prompts (Alzantot et al., 2018; Jones et al., 2023). In this work, we focus specifically on image-based adversarial examples, motivated by scenarios where users modify their images to pre-vent analysis by MLLMs while having no control over the accompanying questions or text prompts used during the analysis. Two prominent categories of image-based ad-versarial examples targeting MLLMs are jailbreak-ing, which bypasses safety mechanisms to elicit harmful responses (Qi et al., 2024; Carlini et al., 2024; Luo et al., 2024b; Gong et al., 2025), and visual prompt injection, which embeds a hidden prompt within an image to manipulate the model’s output (Bagdasaryan et al., 2023). Our work intro-duces a novel application of image-based adversar-ial examples in the form of visual prompt injection. Specifically, the perturbation introduced by Image-2Protector acts as a visual prompt injection attack, compelling MLLMs to produce refusal responses as the injected task regardless of the malicious ac-tor’s original intended task of private information extraction through probing questions. While vi-sual prompt injections have traditionally been con-sidered attack techniques, our approach uniquely demonstrates their potential as a defensive mecha-nism to safeguard user’s images. Crucially, ImageProtector addresses a new threat model focused on inducing injected refusals for malicious probing questions, a previously under-explored dimension. ImageProtector is designed specifically to induce generic, safe refusal re-sponses to a wide range of benign but privacy-invasive questions. Prior multimodal adversarial at-tacks are mainly designed either to elicit unsafe be-haviors or to degrade model performance, whereas ImageProtector studies perturbations as an opt-in defensive mechanism for privacy-preserving re-fusal. This necessitates a different optimization objective (detailed in Section 4.3) designed to en-force effectiveness and utility simultaneously. This distinguishes our approach from prior methods pri-marily aimed at misclassification and jailbreaking for unsafe content. While prior methods (Qi et al., 2024; Bagdasaryan et al., 2023) could be adapted for this purpose, our experiments (Section 5.2) demonstrate that they are suboptimal due to their design for different objectives. 
+
+3 Problem Definition 
+
+3.1 Problem Setup 
+
+The problem setup involves two main parties: a user, hereafter referred to as the image owner , who wishes to share personal images online, and a ma-licious actor seeking to exploit these images. The proliferation of powerful, open-weight, and easily accessible MLLMs has created a significant pri-vacy threat. Malicious actors can leverage these models to perform large-scale analysis of personal images, extracting sensitive information such as individuals’ identities, locations, or private details without the owner’s consent. To counter this threat, we approach the problem from a defensive standpoint. We propose that an im-age owner can use a protective tool, which we refer to as ImageProtector, before sharing their images online. This tool protects the image by embedding a subtle, nearly human-imperceptible perturbation into the image, which functions as a visual prompt injection attack. The goal is that if a malicious actor subsequently downloads the protected image and queries an MLLM about it, the model will be mis-led into generating a generic refusal response, such as “Unfortunately, I cannot assist with that request,” regardless of the original probing question posed. This strategy effectively protects the user’s image from analysis by malicious actors using MLLMs, thus preserving user’s private information. This scenario is particularly relevant as users increas-ingly seek methods to protect digital content from AI-based analysis, paralleling efforts to prevent at-tribute inference (Jia and Gong, 2018), membership inference (Jia et al., 2019), facial recognition (Shan et al., 2020; Cherepanova et al., 2021), and location information extraction (Luo et al., 2025). 
+
+3.2 Threat Model 
+
+We define the threat model from the perspective of the image owner. The primary threat is the unautho-rized, large-scale, privacy-invasive analysis of an owner’s images by a malicious actor using MLLMs. We focus on this setting because open-weight mod-els substantially lower the cost of automated image analysis relative to commercial black-box APIs, which are typically rate-limited and more likely to expose suspicious bulk access patterns. To proactively defend against such analyses, the image owner applies protective perturbations that serve as visual prompt injection attacks. As illus-trated in Figure 1, the image owner crafts these perturbations and shares the images online, e.g., on social media. When a malicious actor attempts to use an MLLM to analyze the perturbed image, embedded prompt injection will cause the model to generate a refusal response. In creating this per-turbation, the image owner has two fundamental goals: effectiveness and utility .• Effectiveness goal: The perturbation embed-ded in the image must reliably function as a vi-sual prompt injection attack, causing MLLMs to generate refusal responses to a wide range of probing questions about the image. • Utility goal: The perturbation should remain nearly imperceptible to humans. This ensures the image’s visual quality is preserved, allow-ing it to be shared and viewed online without any noticeable degradation. 
+
+Image owner’s background knowledge: We as-sume that the image owner has white-box access 3Shadow questions  
+
+> Image
+> Perturbation
+> Logits
+> Refusal tokens +
+> Where is the court that this person plays at?
+> Image
+> +
+> Perturbation
+> I'm sorry, I can't assist
+> with that request.
+> Probing question
+> Update
+> BIM
+> Cross-Entropy Loss
+> Refusal
+> MLLM
+> Competing
+> MLLM
+> ...
+> ...
+> When is the event taking place?
+> What color is the object?
+> Visual Prompt Injection Attack
+
+Figure 2: Overview of our ImageProtector. 
+
+to one or more target open-weight MLLMs of con-cern, including access to gradients. This assump-tion is realistic in our target setting because many strong MLLMs are openly released and can be run locally by both attackers and defenders. These open-weight models present a greater threat, as they significantly lower the economic barrier for malicious actors to conduct large-scale analysis to extract information from image owners who fre-quently post images online, compared to closed-source models. Our method also enables the image owner to optimize a universal protective perturba-tion that is effective across multiple MLLMs simul-taneously. The image owner has access to a set of 
+
+shadow questions for each image, categorized as ex-act , similar , or general probing questions to guide the optimization process. We elaborate further on shadow question construction in Section 4.2. 
+
+Image owner’s capability: The image owner’s ability is limited to adding perturbations to their images before publishing them online. They cannot alter the target MLLMs’ parameters, affect their training, or modify the probing queries from mali-cious actors. Thus, the integrity of both MLLMs and the malicious actors’ probing queries remains intact. 
+
+4 Our ImageProtector 
+
+4.1 Overview 
+
+Figure 2 provides an overview of our ImagePro-tector. Given an image, ImageProtector optimizes a perturbation that satisfies both effectiveness and utility goals. First, we generate shadow questions using an LLM (e.g., GPT-4); these questions can be exact, similar, or general probing questions, de-pending on the image owner’s preference and an-ticipation of malicious actor’s probing questions. Next, ImageProtector optimizes the perturbation so that target MLLMs are likely to refuse prompts containing the perturbed image along with shadow questions caused by visual prompt injection attack. We hypothesize that refusal on real malicious prob-ing questions arises from transfer across question formulations that optimizing on diverse shadow questions encourages the perturbation to generalize to semantically related, and even partially out-of-domain, probing questions posed by adversaries. Finally, to preserve utility, ImageProtector enforces an ℓ∞-norm constraint during optimization. For-mally, we frame the task of finding protective per-turbation, functioning as visual prompt injection, as a constrained optimization problem and solve it using a gradient-based approach. 
+
+4.2 Constructing Shadow Questions 
+
+The image owner must anticipate the types of ques-tions a malicious actor might ask and identify the information that requires protection from analysis. We categorize these potential probing questions into three types: 
+
+Exact probing questions: If the image owner can precisely anticipate the probing questions a mali-cious actor might pose, e.g., “Where was this photo taken?”, shadow questions can be constructed to directly match them. 
+
+Similar probing questions: When the image owner understands the general intent behind po-tential questions and can specify the thematic in-formation requiring protection, they can create an 
+
+example question and use an LLM to generate a set of similar probing questions. Our ImageProtector employs the prompt provided in Figure 12, with an example shown in Figure 17 in the Appendix. 
+
+General probing questions: If specific probing questions are unknown, and the image owner aims to prevent the malicious actor from extracting any sensitive information, an LLM can generate gen-eral questions simulating typical probing queries about any image. Our ImageProtector employs the prompt illustrated in Figure 13, with an example provided in Figure 15 in the Appendix. 4(a) Original ( ϵ = 0 ) (b) ϵ = 4 /255 (c) ϵ = 8 /255 (d) ϵ = 12 /255 (e) ϵ = 16 /255 
+
+Figure 3: Images without and with perturbations added by our ImageProtector under different ℓ∞-norm constraint ϵ.
+
+4.3 Formalizing the Image Owner’s Goals 
+
+Let M be a set of target MLLMs and QS the set of shadow questions. Given an image xI , the image owner seeks a perturbation δR which effectively conduct a visual prompt injection attack on each MLLM, causing it to output a refusal response R
+
+with high probability when queried with xI + δR
+
+and any q ∈ Q S . Figure 16 in Appendix shows 10 refusal responses collected using GPT-4. For each xI , we sample a refusal response R uniformly from these 10 to enhance stealthiness and diversity. The probability that an MLLM M ∈ M re-fuses on input xI + δR and q ∈ Q S is denoted as 
+
+pM (R|[xI + δR, q ]) . The image owner solves: 
+
+δ∗ 
+
+> R
+
+= argmax 
+
+> δR
+
+X 
+
+> M∈M
+
+X
+
+> q∈Q S
+
+pM (R|[xI + δR, q ]) 
+
+|M| · |Q S |
+
+s.t. || δR|| ∞ ≤ ϵ, (1) where δ∗ 
+
+> R
+
+is the optimized perturbation and ϵ en-forces utility via an ℓ∞-norm constraint. Figure 3 shows images without and with perturbations under different small ϵ.For an MLLM, the probability of producing 
+
+R = ( t1, t 2, . . . , t r) as tokens given (xI + δR, q )
+
+factorizes as: 
+
+pM (R | [xI + δR, q ]) =
+
+> r
+
+Y
+
+> k=1
+
+pM (tk | [xI + δR, q, t 1, . . . , t k−1]) =
+
+> r
+
+Y
+
+> k=1
+
+Tk(M, R, x I + δR, q ), (2) where Tk(M, R, x I + δR, q ) denotes conditional probability pM (tk | [xI + δR, q, t 1, . . . , t k−1]) .Since pM (R | [xI + δR, q ]) is typically non-convex in δR due to the non-linearity of neural networks, we reformulate Equation 1 as a cross-entropy loss for a smoother, differentiable objec-tive: 
+
+δ∗ 
+
+> R
+
+= argmin 
+
+> δR
+
+X 
+
+> M∈M
+
+X
+
+> q∈Q S
+> r
+
+X
+
+> k=1
+
+− log Tk(M, R, x I + δR, q )
+
+|M| · |Q S |
+
+s.t. || δR|| ∞ ≤ ϵ, (3) where r is the number of tokens in R. For simplicity, we define LCE (M, R, x I + δR, q ) = 
+
+− Prk=1 log Tk(M, R, x I + δR, q ) and the over-all objective as L(M, R, x I + δR, QS ) =P 
+
+> M∈M
+
+P 
+
+> q∈Q S
+
+LCE (M, R, x I + δR, q ).We use refusal responses as the target sequence because they are generic, semantically coherent across many probing questions, and aligned with existing safety behavior in current MLLMs. How-ever, the formulation itself does not require refusals specifically and any target response sequence could be substituted into the same optimization frame-work. 
+
+4.4 Solving the Optimization Problem 
+
+ImageProtector solves the optimization problem in Equation 3 using the basic iterative method (BIM) (Kurakin et al., 2018). We initialize the per-turbation as a zero tensor matching the dimensions of xI . In each iteration, we sample a mini-batch of shadow questions QB ⊆ Q S and compute the gradient g = ∇δR L(M, R, x I + δR, QB ). Image-Protector then updates δR as δR = δR −α·sign (g),where α is the step size and sign (·) denotes the sign function. We project δR = proj (δR, ϵ ) at each iteration to ensure || δR|| ∞ ≤ ϵ. This process re-peats for max _iter iterations. Algorithm 1 summa-rizes ImageProtector. In Section 5.2, we show that using projected gradient descent (PGD) (Madry et al., 2018) achieves similar effectiveness but is less efficient. 5Algorithm 1 ImageProtector.  
+
+> 1:
+
+Input: Image xI , shadow questions set QS ,step size α, maximum iterations max _iter ,
+
+ℓ∞-norm constraint ϵ, ℓ∞-norm projection function proj , and sign function sign  
+
+> 2:
+
+Output: Protective perturbation δR 
+
+> 3:
+
+δR ← 0 
+
+> 4:
+
+for iteration = 1 to max _iter do  
+
+> 5:
+
+Randomly select a mini-batch QB from QS 
+
+> 6:
+
+g ← ∇ δR L(M, R, x I + δR, QB ) ▷
+
+compute gradient  
+
+> 7:
+
+δR ← proj (δR − α · sign (g), ϵ ) ▷ BIM  
+
+> 8:
+
+end for  
+
+> 9:
+
+return δR
+
+5 Evaluation 
+
+5.1 Experimental Setup 5.1.1 Datasets 
+
+To assess ImageProtector, we use image-question pairs from VQAv2 (Antol et al., 2015), GQA (Hud-son and Manning, 2019), and TextVQA (Singh et al., 2019). Additionally, we extend CelebA (Liu et al., 2015) into a visual question dataset to simu-late queries about personal images, a primary use case for ImageProtector. The details of question generation are in Appendix A. Table 1 summarizes dataset statistics. For evaluation, we randomly sam-ple 100 image-question pairs from each dataset’s test or validation split.          
+
+> Table 1: Dataset statistics.
+> Dataset # Image-question Pairs # Ground-truth Answers VQAv2 1,105,904 11,059,040 GQA 22,669,678 22,669,678 TextVQA 45,336 453,360 CelebA 202,599 0
+
+5.1.2 Probing Questions 
+
+To simulate real-world analysis by a malicious ac-tor, we consider both image-relevant and image-irrelevant probing questions. Image-relevant ques-tionsare directly related to the image content and represent a malicious actor’s primary method for extracting specific information. These are sourced from the questions associated with each dataset. Image-irrelevant questions model a scenario where a malicious actor might ask general knowledge questions while an image remains in the MLLM’s context, potentially to probe for unexpected model behaviors. For this, we use 100 randomly sampled questions from CommonsenseQA (Talmor et al., 2019), a dataset of general knowledge queries, and pair them with images from our datasets. For in-stance, “What is a likely consequence of ignorance of rules?” serves as an image-irrelevant question. 
+
+5.1.3 MLLMs 
+
+We evaluate ImageProtector on six popular open-weight MLLMs: LLaVA-1.5 (Liu et al., 2024a), MiniGPT-4 (Zhu et al., 2024), Qwen-VL-Chat (Bai et al., 2023b), InstructBLIP (Dai et al., 2024), Phi-4-multimodal-instruct (Abouelenin et al., 2025), and Qwen2.5-VL-7B-Instruct (Bai et al., 2025). These models employ different vision encoders, LLMs, and vision-language projectors, summa-rized in Table 8 in Appendix. For consistency, all image inputs are resized to 224 ×224 pixels. Phi-4-multimodal-instruct and Qwen2.5-VL-7B-Instruct require updated dependencies and different image sizes, leading to incompatible environments. Thus, they are excluded from multiple target MLLMs experiments. We adopt unified resizing as a con-trolled choice for multi-model optimization conve-nience. This design is not required when protect-ing against a single target model, and in principle perturbations could also be optimized at model-specific resolutions. 
+
+5.1.4 Evaluation Metrics 
+
+We evaluate the effectiveness of our ImageProtec-tor using the refusal rate . Given an MLLM M and a dataset of N image-question pairs with protec-tive perturbations from ImageProtector, the refusal rate is NR 
+
+> N
+
+, where NR is the number of refusals by M on perturbed pairs. To account for MLLM response randomness due to sampling and decod-ing strategies, each MLLM is queried three times per image-question pair, and the refusal rates are averaged. To evaluate whether an MLLM’s response is a refusal, we use GPT-4 (Achiam et al., 2023) as a refusal judge. The MLLM’s response is assessed using the prompt in Figure 14 in Appendix. 
+
+5.1.5 Compared Methods 
+
+We extend two existing image-based adversarial attacks on MLLMs (Bagdasaryan et al., 2023; Qi et al., 2024) to induce refusals for safe prompts. Ad-ditionally, we evaluate a variant of our ImagePro-tector. Detailed descriptions for compared methods are in Appendix B. 6Table 2: Refusal rates of compared methods and Image-Protector using three types of shadow questions, with LLaVA-1.5 as the target MLLM on VQAv2 dataset.                
+
+> Method Exact Probing Questions Similar Probing Questions General Probing Questions
+> No Perturbation 0.00 0.00 0.00 Qi et al. (Qi et al., 2024) 0.02 0.02 0.02 Bagdasaryan et al. (Bagdasaryan et al., 2023) 0.65 0.62 0.51 ImageProtector+PGD 0.94 0.91 0.91 ImageProtector 0.94 0.88 0.88
+
+5.1.6 Parameter Setting 
+
+Unless stated otherwise, we consider one target MLLM and image-relevant questions. For shadow questions, we use one exact probing question, ten similar probing questions, and fifty general prob-ing questions. Section 5.2 examines the impact of shadow question quantity in the cases of simi-lar or general probing questions. To ensure utility, we constrain the refusal perturbation with an ℓ∞-norm bound of 8/255 , aligning with prior work (Qi et al., 2024; Luo et al., 2024a; Bailey et al., 2023). We conduct a grid search for key hyperparame-ters in ImageProtector (Algorithm 1): step size 
+
+α, maximum iterations, and mini-batch size of shadow questions, tailored to the image owner’s background knowledge and choices (exact, sim-ilar, or general probing questions). Section 5.2 further analyzes these hyperparameters. To prevent overfitting when using similar or general probing questions, we implement early stopping if the loss in Equation 3 stays below 0.001 for 30 consecutive iterations. 
+
+5.2 Experimental Results ImageProtector outperforms compared meth-ods: Table 2 shows the refusal rates of ImagePro-tector and baseline methods on three shadow ques-tion types, using LLaVA-1.5 as the target MLLM on VQAv2. First, ImageProtector consistently achieves the highest refusal rate at 0.88, outper-forming Bagdasaryan et al. at 0.51 on general probing questions. Second, Qi et al. performs poorly, with near-zero refusals, as it optimizes re-fusals without shadow questions, so the optimized perturbation is tied to a narrow prompt pattern and fails to generalize to diverse probing formulations. Third, ImageProtector + PGD achieves similar re-fusal rates but requires more iterations, shown in Table 3, increasing computational costs. Thus, we use ImageProtector in subsequent experiments. 
+
+Table 3: GPU-minutes of ImageProtector and Image-Protector + PGD for optimizing perturbation per image, with LLaVA-1.5 as the target MLLM on VQAv2 dataset.       
+
+> Method Exact Probing Questions Similar ProbingUser Questions General ProbingUser Questions
+> ImageProtector+PGD 16.2 61.2 61.2 ImageProtector 10.2 45.6 45.6
+
+Table 4 reports LLaVA-1.5’s accuracy on VQAv2 for the compared methods and ImagePro-tector with three shadow question types. While LLaVA-1.5 performs well on original unperturbed images, accuracy drops sharply with protective per-turbations. Qi et al. reduces accuracy by nearly half, while Bagdasaryan et al. and ImageProtec-tor lower it to nearly zero. This underscores the effectiveness of perturbations in disrupting MLLM comprehension, leading to inaccurate responses. 
+
+Table 4: Accuracy of compared methods and Image-Protector using three types of shadow questions, with LLaVA-1.5 as the target MLLM on the VQAv2 dataset.                
+
+> Method Exact Probing Questions Similar ProbingUser Questions General Probing Questions
+> No Perturbation 0.92 0.92 0.92 Qi et al. (Qi et al., 2024) 0.48 0.48 0.48 Bagdasaryan et al. (Bagdasaryan et al., 2023) 0.03 0.04 0.03 ImageProtector+PGD 0.03 0.03 0.04 ImageProtector 0.03 0.04 0.03
+
+ImageProtector achieves the effectiveness goal: ImageProtector effectively meets the effectiveness goal, as shown in Tables 5, 6, and 7, which report refusal rates across the four datasets and six MLLMs using exact, similar, and general shadow questions. We make four key observations. First, ImageProtector generally exhibits slightly higher refusal rates for image-relevant questions than image-irrelevant ones, with average refusal rates of 0.95, 0.91, and 0.86 versus 0.94, 0.90, and 0.84 for exact, similar, and general shadow questions, respectively. Second, ImageProtector achieves higher refusal rates when shadow questions closely resemble actual malicious actor’s probing questions, reinforcing the effectiveness of protective perturbations when the distributions align. Third, ImageProtector yields the lowest refusal rates on InstructBLIP except for exact, image-relevant shadow questions, likely due to its Q-Former (Li et al., 2023)-based vision-language projector, which has the most parameters among 7Table 5: Refusal rates of ImageProtector with exact probing questions as shadow questions when using (a) image-relevant and (b) image-irrelevant questions on four MLLMs and four datasets. ‘Avg.’ denotes average. 
+
+(a) Image-relevant questions                                         
+
+> Target MLLM VQAv2 GQA CelebA TextVQA Avg.
+> LLaVA-1.5 0.94 0.94 1.00 0.91 0.95 MiniGPT-4 0.86 0.93 0.97 0.81 0.89 Qwen-VL-Chat 0.94 0.95 0.99 0.88 0.94 InstructBLIP 0.91 0.94 0.93 0.92 0.93 Phi-4-multimodal 1.00 1.00 1.00 0.98 1.00 Qwen2.5-VL 0.96 1.00 1.00 0.97 0.98
+> Avg. 0.94 0.96 0.98 0.91 0.95
+
+(b) Image-irrelevant questions                                         
+
+> Target MLLM VQAv2 GQA CelebA TextVQA Avg.
+> LLaVA-1.5 0.91 0.94 0.98 0.90 0.93 MiniGPT-4 0.90 0.93 0.96 0.84 0.91 Qwen-VL-Chat 0.93 0.96 0.94 0.91 0.94 InstructBLIP 0.89 0.87 0.90 0.84 0.88 Phi-4-multimodal 0.99 1.00 1.00 0.97 0.99 Qwen2.5-VL 0.95 0.98 1.00 0.97 0.97
+> Avg. 0.93 0.95 0.96 0.90 0.94
+
+Table 6: Refusal rates of ImageProtector with similar probing questions as shadow questions when using (a) image-relevant and (b) image-irrelevant questions on four MLLMs and datasets. ‘Avg.’ denotes average. 
+
+(a) Image-relevant questions                                         
+
+> Target MLLM VQAv2 GQA CelebA TextVQA Avg.
+> LLaVA-1.5 0.88 0.91 1.00 0.81 0.90 MiniGPT-4 0.88 0.97 0.98 0.88 0.93 Qwen-VL-Chat 0.94 0.95 0.98 0.86 0.93 InstructBLIP 0.89 0.93 0.89 0.90 0.90 Phi-4-multimodal 0.93 0.90 0.87 0.85 0.89 Qwen2.5-VL 0.94 0.93 0.95 0.85 0.92
+> Avg. 0.91 0.93 0.94 0.86 0.91
+
+(b) Image-irrelevant questions                                         
+
+> Target MLLM VQAv2 GQA CelebA TextVQA Avg.
+> LLaVA-1.5 0.92 0.92 0.94 0.82 0.90 MiniGPT-4 0.93 0.96 0.99 0.93 0.95 Qwen-VL-Chat 0.91 0.97 0.96 0.89 0.93 InstructBLIP 0.83 0.84 0.87 0.83 0.84 Phi-4-multimodal 0.94 0.90 0.85 0.86 0.89 Qwen2.5-VL 0.94 0.93 0.94 0.83 0.91
+> Avg. 0.91 0.92 0.92 0.86 0.90
+
+compared MLLMs shown in Table 8 in Appendix and enhances robustness against perturbations. Finally, ImageProtector consistently achieves the highest refusal rates on CelebA across all MLLMs, likely because facial images are often considered sensitive in MLLM alignment to enforce refusals. 
+
+Multiple target MLLMs: Figure 4 shows Im-ageProtector’s refusal rates against multiple tar-
+
+Table 7: Refusal rates of ImageProtector with general probing questions as shadow questions when using (a) image-relevant and (b) image-irrelevant questions on four MLLMs and datasets. ‘Avg.’ denotes average. 
+
+(a) Image-relevant questions                                         
+
+> Target MLLM VQAv2 GQA CelebA TextVQA Avg.
+> LLaVA-1.5 0.88 0.91 0.96 0.86 0.90 MiniGPT-4 0.90 0.96 0.98 0.86 0.93 Qwen-VL-Chat 0.89 0.87 0.96 0.75 0.87 InstructBLIP 0.81 0.81 0.80 0.83 0.81 Phi-4-multimodal 0.87 0.84 0.81 0.79 0.83 Qwen2.5-VL 0.83 0.83 0.87 0.74 0.82
+> Avg. 0.86 0.87 0.90 0.80 0.86
+
+(b) Image-irrelevant questions                                         
+
+> Target MLLM VQAv2 GQA CelebA TextVQA Avg.
+> LLaVA-1.5 0.90 0.92 0.97 0.84 0.91 MiniGPT-4 0.94 0.97 0.95 0.87 0.93 Qwen-VL-Chat 0.87 0.87 0.86 0.73 0.83 InstructBLIP 0.77 0.77 0.87 0.70 0.78 Phi-4-multimodal 0.85 0.81 0.81 0.77 0.81 Qwen2.5-VL 0.80 0.82 0.87 0.72 0.80
+> Avg. 0.86 0.86 0.89 0.77 0.84
+
+get MLLMs. For each image, ImageProtector optimizes a universal refusal perturbation to sat-isfy the image owner’s two goals across all tar-get MLLMs. To reduce GPU costs, we sample 10 image-question pairs from VQAv2. Starting with LLaVA-1.5, additional target MLLMs are ran-domly added from the remaining three. All hyper-parameters are fixed except for the iteration limit in ImageProtector (Algorithm 1) to ensure loss con-vergence, setting to 2500, 4500, and 4500 for two, three, and four MLLMs, respectively. ImagePro-tector consistently meets effectiveness and utility goals. For example, with LLaVA-1.5, MiniGPT-4, and Qwen-VL-Chat as target MLLMs, it achieves refusal rates of 0.90, 0.80, and 0.80. 
+
+Ablation study of ImageProtector: We con-ducted a comprehensive ablation study to analyze the impact of key hyperparameters in our method, with the full analysis and corresponding figures provided in Appendix C. Our findings show that the optimal hyperparameter settings often involve a balance. For instance, the optimal step size α
+
+depends on the type of shadow questions. Exper-iments shows higher optimal step size for exact probing questions (around 0.007) than for similar or general ones (around 0.005). The number of iterations also presents a trade-off. Performance on similar questions degrades after 1500 iterations, likely due to overfitting to shadow questions. The perturbation constraint ϵ is most effective at 8/255, 8LLaVA-1.5             
+
+> MiniGPT-4
+> Qwen-VL-Chat
+> InstructBLIP
+> Target MLLM(s)
+> LLaVA-1.5
+> LLaVA-1.5
+> +MiniGPT-4
+> LLaVA-1.5
+> +MiniGPT-4
+> +Qwen-VL-Chat
+> LLaVA-1.5
+> +MiniGPT-4
+> +Qwen-VL-Chat
+> +InstructBLIP
+> 0.90 0.00 0.03 0.00
+> 0.90 0.90 0.03 0.00
+> 0.90 0.80 0.80 0.00
+> 0.80 0.80 0.70 0.60
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+
+Figure 4: Refusal rates of ImageProtector with multiple target MLLMs. The VQAv2 dataset is used, with gen-eral probing questions being used as shadow questions. Each row indicates the set of MLLMs jointly included in the optimization objective when generating one uni-versal perturbation per image. Each column reports the refusal rate measured on a specific evaluation model. For example, the third row means that the perturbation was jointly optimized against LLaVA-1.5, MiniGPT-4, and Qwen-VL-Chat, and then evaluated on each of the four models shown as columns. 
+
+as smaller values underfit due to a restricted search space and larger ones overfit to shadow questions. Performance of generalization stabilizes with a mini-batch size of at least 3 and a set of at least 40 shadow questions. Notably, our approach is robust to different settings of MLLM’s temperature. A de-tailed breakdown of each hyperparameter’s impact is available in the appendix. 
+
+6 Countermeasures 
+
+Images with protective perturbation functioning as visual prompt injection from ImageProtector are adversarial examples. Existing defenses (Nie et al., 2022; Goodfellow et al., 2015; Cao and Gong, 2017; Liu et al., 2024c) fall into testing-time and training-time categories. We evaluate ImageProtector against two testing-time defenses, Gaussian noise and DiffPure (Nie et al., 2022), and one training-time defense, adversarial train-ing (Goodfellow et al., 2015). Appendix D details these countermeasures. These countermeasures can also be interpreted as approximate attacker-side by-pass strategies in our threat model. To assess ImageProtector’s impact, we measure 
+
+refusal rate and accuracy , where accuracy quan-tifies correctly answered image-question pairs on clean images with countermeasures applied. Our results show that while these countermeasures mit-igate ImageProtector’s effect on the target MLLM, they also degrade its accuracy and/or efficiency. 
+
+Gaussian noise: Figure 10a in Appendix presents the target MLLM’s accuracy on VQAv2 and Image-Protector’s refusal rates when apply Gaussian noise. We observe that larger σ values better mitigate Im-ageProtector’s impact. Without noise ( σ = 0 ), ImageProtector’s refusal rates exceed 0.90, while at σ = 0 .02 , they drop to nearly zero. However, noise degrades accuracy from 0.92 to around 0.80 at σ = 0 .02 , making it an insufficient defense. 
+
+DiffPure (Nie et al., 2022): Figure 10b in Ap-pendix shows the accuracy of the target MLLM and ImageProtector’s refusal rates across different timesteps of Diffpure. Diffpure reduces ImagePro-tector’s effectiveness but significantly degrades the target MLLM’s accuracy. A single timestep lowers ImageProtector’s refusal rate from above 0.90 to below 0.20, while accuracy drops from 0.92 to 0.82. Two timesteps further reduce refusal rates to near zero, while accuracy declines to 0.78. Additionally, DiffPure increases inference time by 8.0% for one timestep and 13.1% for two, impacting computa-tional cost. 
+
+Adversarial training (Goodfellow et al., 2015): Figure 11 in Appendix illustrates the target MLLM’s accuracy and ImageProtector’s refusal rates when using adversarial training across training epochs. Using three shadow question types with LLaVA-1.5 on VQAv2, we find that ImageProtector’s refusal rates remain around 60% even after three epochs, while the target MLLM’s accuracy significantly decreases. Additionally, adversarial training also requires significant computational resources. 
+
+7 Conclusion 
+
+We presented ImageProtector, a proactive, privacy-preserving method that embeds a nearly imper-ceptible perturbation into images to trigger visual prompt–based refusals from MLLMs. By optimiz-ing a universal, sequence-level objective, Image-Protector consistently prevents sensitive content extraction and achieves high refusal rates across six MLLMs and four datasets. Robustness studies show that common countermeasures (e.g., Gaus-sian noise, DiffPure, adversarial training) do not fully negate the protection without incurring no-table accuracy or efficiency costs. Overall, Image-Protector offers a practical, front-line defense for users before sharing images online. 9Limitations 
+
+Multi-round visual question answering: Image-Protector primarily addresses image-based multi-round VQA, with performance varying based on question formulations and context length. Protec-tive perturbations become less effective in extended interactions, especially for general probing queries. Figure 6 in Appendix demonstrates refusal rates across multiple rounds for various shadow question types, using the same probing question repeatedly for simplicity. For shadow questions closely re-sembling the actual probing question, refusal rates remain high, decreasing by less than 5% across rounds. However, with general probing questions, longer context lengths reduce perturbation effec-tiveness, dropping refusal rates from 88% to ap-proximately 70%. Future work could enhance the robustness of ImageProtector by incorporating di-verse shadow questions and integrating multi-round interactions during perturbation generation. 
+
+Diverse modalities: While ImageProtector tar-gets visual inputs, emerging MLLMs increasingly support additional modalities like audio and video, where perturbation-based privacy protection tech-niques remain unexplored. Extending perturbation strategies to multimodal inputs presents a valuable direction for future work for proactively protecting user’s privacy. 
+
+Closed-source MLLMs: A key limitation of Im-ageProtector is its dependence on a white-box set-ting. This constraint limits direct applicability to proprietary, closed-source MLLMs offering only black-box API access. Our work deliberately fo-cuses on the white-box threat model because the proliferation of powerful, open-weight MLLMs presents a significant and growing privacy threat, drastically lowering the barrier for malicious ac-tors to conduct large-scale image analysis. Al-though our work demonstrates the feasibility of visual prompt injection to protect images from MLLM analysis, extending this method to black-box settings exceeds the scope of our study. Such an extension would necessitate fundamentally dif-ferent techniques, like surrogate model training or query-based optimization, entailing significant computational and economic challenges suitable for dedicated investigation. 
+
+Acknowledgments 
+
+We appreciate the reviewers’ constructive feedback. This research was partially supported by NSF grant No. 2450935, 2125977, and 2112562. 
+
+References                  
+
+> Abdelrahman Abouelenin, Atabak Ashfaq, Adam Atkin-son, Hany Awadalla, Nguyen Bach, Jianmin Bao, Alon Benhaim, Martin Cai, Vishrav Chaudhary, Con-gcong Chen, and 1 others. 2025. Phi-4-mini tech-nical report: Compact yet powerful multimodal lan-guage models via mixture-of-loras. arXiv preprint arXiv:2503.01743 .Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Florencia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, and 1 others. 2023. Gpt-4 techni-cal report. arXiv .Moustafa Alzantot, Yash Sharma, Ahmed Elgohary, Bo-Jhang Ho, Mani Srivastava, and Kai-Wei Chang. 2018. Generating natural language adversarial exam-ples. In EMNLP .Stanislaw Antol, Aishwarya Agrawal, Jiasen Lu, Mar-garet Mitchell, Dhruv Batra, C. Lawrence Zitnick, and Devi Parikh. 2015. VQA: Visual Question An-swering. In ICCV .Eugene Bagdasaryan, Tsung-Yin Hsieh, Ben Nassi, and Vitaly Shmatikov. 2023. (ab) using images and sounds for indirect instruction injection in multi-modal llms. arXiv .Jinze Bai, Shuai Bai, Yunfei Chu, Zeyu Cui, Kai Dang, Xiaodong Deng, Yang Fan, Wenbin Ge, Yu Han, Fei Huang, and 1 others. 2023a. Qwen technical report.
+> arXiv .Jinze Bai, Shuai Bai, Shusheng Yang, Shijie Wang, Sinan Tan, Peng Wang, Junyang Lin, Chang Zhou, and Jingren Zhou. 2023b. Qwen-vl: A versatile vision-language model for understanding, localiza-tion, text reading, and beyond. arXiv .Shuai Bai, Keqin Chen, Xuejing Liu, Jialin Wang, Wen-bin Ge, Sibo Song, Kai Dang, Peng Wang, Shijie Wang, Jun Tang, and 1 others. 2025. Qwen2. 5-vl technical report. arXiv preprint arXiv:2502.13923 .Luke Bailey, Euan Ong, Stuart Russell, and Scott Em-mons. 2023. Image hijacks: Adversarial images can control generative models at runtime. arXiv .Xiaoyu Cao and Neil Zhenqiang Gong. 2017. Miti-gating evasion attacks to deep neural networks via region-based classification. In ACSAC .Nicholas Carlini, Milad Nasr, Christopher A Choquette-Choo, Matthew Jagielski, Irena Gao, Pang Wei W Koh, Daphne Ippolito, Florian Tramer, and Ludwig Schmidt. 2024. Are aligned neural networks adver-sarially aligned? In NeurIPS .Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton. 2020. A simple framework for con-trastive learning of visual representations. In ICML .
+
+10 Valeriia Cherepanova, Micah Goldblum, Harrison Foley, Shiyuan Duan, John Dickerson, Gavin Taylor, and Tom Goldstein. 2021. Lowkey: Leveraging adversar-ial attacks to protect social media users from facial recognition. arXiv preprint arXiv:2101.07922 .Wei-Lin Chiang, Zhuohan Li, Zi Lin, Ying Sheng, Zhanghao Wu, Hao Zhang, Lianmin Zheng, Siyuan Zhuang, Yonghao Zhuang, Joseph E. Gonzalez, Ion Stoica, and Eric P. Xing. 2023. Vicuna: An open-source chatbot impressing gpt-4 with 90%* chatgpt quality. Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale N Fung, and Steven Hoi. 2024. Instructblip: Towards general-purpose vision-language models with instruction tuning. In NeurIPS .Prafulla Dhariwal and Alexander Nichol. 2021. Dif-fusion models beat gans on image synthesis. In 
+
+NeurIPS .Danny Driess, Fei Xia, Mehdi SM Sajjadi, Corey Lynch, Aakanksha Chowdhery, Brian Ichter, Ayzaan Wahid, Jonathan Tompson, Quan Vuong, Tianhe Yu, and 1 others. 2023. Palm-e: An embodied multimodal language model. arXiv .Yuxin Fang, Wen Wang, Binhui Xie, Quan Sun, Ledell Wu, Xinggang Wang, Tiejun Huang, Xinlong Wang, and Yue Cao. 2023. Eva: Exploring the limits of masked visual representation learning at scale. In 
+
+CVPR .Yichen Gong, Delong Ran, Jinyuan Liu, Conglei Wang, Tianshuo Cong, Anyu Wang, Sisi Duan, and Xiaoyun Wang. 2025. Figstep: Jailbreaking large vision-language models via typographic visual prompts. In 
+
+AAAI .Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. 2015. Explaining and harnessing adver-sarial examples. In ICLR .Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. Lora: Low-rank adaptation of large language models. In ICLR .Wen Huang, Hongbin Liu, Minxin Guo, and Neil Zhen-qiang Gong. 2024. Visual hallucinations of multi-modal large language models. In ACL Findings .Drew A Hudson and Christopher D Manning. 2019. Gqa: A new dataset for real-world visual reasoning and compositional question answering. In CVPR .Gabriel Ilharco, Mitchell Wortsman, Nicholas Car-lini, Rohan Taori, Aniruddh Dave, Vaishaal Shankar, Hongseok Namkoong, John Miller, Hannaneh Ha-jishirzi, Ali Farhadi, and Ludwig Schmidt. 2021. Openclip. Jinyuan Jia and Neil Zhenqiang Gong. 2018. Attriguard: A practical defense against attribute inference attacks via adversarial machine learning. In USENIX Secu-rity Symposium .Jinyuan Jia, Ahmed Salem, Michael Backes, Yang Zhang, and Neil Zhenqiang Gong. 2019. Memguard: Defending against black-box membership inference attacks via adversarial examples. In ACM conference on computer and communications security .Erik Jones, Anca Dragan, Aditi Raghunathan, and Ja-cob Steinhardt. 2023. Automatically auditing large language models via discrete optimization. In ICML .Andrej Karpathy and Li Fei-Fei. 2015. Deep visual-semantic alignments for generating image descrip-tions. In CVPR .Alexey Kurakin, Ian J Goodfellow, and Samy Bengio. 2018. Adversarial examples in the physical world. In 
+
+Artificial intelligence safety and security . Chapman and Hall/CRC. Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi. 2023. Blip-2: Bootstrapping language-image pre-training with frozen image encoders and large lan-guage models. In ICML .Hezheng Lin, Xing Cheng, Xiangyu Wu, and Dong Shen. 2022. Cat: Cross attention in vision trans-former. In ICME .Haotian Liu, Chunyuan Li, Yuheng Li, and Yong Jae Lee. 2024a. Improved baselines with visual instruc-tion tuning. In CVPR .Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. 2024b. Visual instruction tuning. NeurIPS .Hongbin Liu, Wenjie Qu, Jinyuan Jia, and Neil Zhen-qiang Gong. 2024c. Pre-trained encoders in self-supervised learning improve secure and privacy-preserving supervised learning. In S&P Workshops .Ziwei Liu, Ping Luo, Xiaogang Wang, and Xiaoou Tang. 2015. Deep learning face attributes in the wild. In 
+
+ICCV .Haochen Luo, Jindong Gu, Fengyuan Liu, and Philip Torr. 2024a. An image is worth 1000 lies: Adversar-ial transferability across prompts on vision-language models. In ICLR .Weidi Luo, Siyuan Ma, Xiaogeng Liu, Xiaoyu Guo, and Chaowei Xiao. 2024b. Jailbreakv-28k: A benchmark for assessing the robustness of multimodal large lan-guage models against jailbreak attacks. arXiv .Weidi Luo, Qiming Zhang, Tianyu Lu, Xiaogeng Liu, Yue Zhao, Zhen Xiang, and Chaowei Xiao. 2025. Doxing via the lens: Revealing privacy leakage in image geolocation for agentic multi-modal large rea-soning model. arXiv preprint arXiv:2504.19373 .
+
+11 Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. 2018. Towards deep learning models resistant to adversarial attacks. In ICLR .Weili Nie, Brandon Guo, Yujia Huang, Chaowei Xiao, Arash Vahdat, and Anima Anandkumar. 2022. Diffu-sion models for adversarial purification. In ICML .OpenAI. 2024. Gpt-4o. Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fer-nandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, and 1 others. 2023. Dinov2: Learning robust visual features without supervision. arXiv .Xiangyu Qi, Kaixuan Huang, Ashwinee Panda, Peter Henderson, Mengdi Wang, and Prateek Mittal. 2024. Visual adversarial examples jailbreak aligned large language models. In AAAI .Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sas-try, Amanda Askell, Pamela Mishkin, Jack Clark, and 1 others. 2021. Learning transferable visual models from natural language supervision. In ICML .Machel Reid, Nikolay Savinov, Denis Teplyashin, Dmitry Lepikhin, Timothy Lillicrap, Jean-baptiste Alayrac, Radu Soricut, Angeliki Lazaridou, Orhan Firat, Julian Schrittwieser, and 1 others. 2024. Gem-ini 1.5: Unlocking multimodal understanding across millions of tokens of context. arXiv .Christian Schlarmann and Matthias Hein. 2023. On the adversarial robustness of multi-modal foundation models. In ICCV .Shawn Shan, Emily Wenger, Jiayun Zhang, Huiying Li, Haitao Zheng, and Ben Y Zhao. 2020. Fawkes: Protecting privacy against unauthorized deep learn-ing models. In 29th USENIX security symposium (USENIX Security 20) , pages 1589–1604. Amanpreet Singh, Vivek Natarjan, Meet Shah, Yu Jiang, Xinlei Chen, Devi Parikh, and Marcus Rohrbach. 2019. Towards vqa models that can read. In CVPR .Yang Song, Jascha Sohl-Dickstein, Diederik P Kingma, Abhishek Kumar, Stefano Ermon, and Ben Poole. 2021. Score-based generative modeling through stochastic differential equations. In ICLR .Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfellow, and Rob Fergus. 2014. Intriguing properties of neural networks. In ICLR .Alon Talmor, Jonathan Herzig, Nicholas Lourie, and Jonathan Berant. 2019. CommonsenseQA: A ques-tion answering challenge targeting commonsense knowledge. In NAACL .Hugo Touvron, Louis Martin, Kevin Stone, Peter Al-bert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, and 1 others. 2023. Llama 2: Open founda-tion and fine-tuned chat models. arXiv .Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017. Attention is all you need. In NeurIPS .Xiaohua Zhai, Basil Mustafa, Alexander Kolesnikov, and Lucas Beyer. 2023. Sigmoid loss for language image pre-training. In Proceedings of the IEEE/CVF international conference on computer vision , pages 11975–11986. Yunqing Zhao, Tianyu Pang, Chao Du, Xiao Yang, Chongxuan Li, Ngai-Man Man Cheung, and Min Lin. 2024. On evaluating adversarial robustness of large vision-language models. In NeurIPS .Deyao Zhu, Jun Chen, Xiaoqian Shen, Xiang Li, and Mohamed Elhoseiny. 2024. Minigpt-4: Enhancing vision-language understanding with advanced large language models. In ICLR .
+
+12 A Generating Questions for CelebA 
+
+To generate relevant questions, we use GPT-4 with the prompt: “Imagine there is an image of a per-son’s face. Please list 10 general questions that people may ask about the person’s private informa-tion from the image." The generated 10 questions are shown below. For each image in CelebA, we randomly choose one of these 10 generated ques-tions. • Who is this person? • What is the ethnic or racial background of this person? • Is this person in a relationship? • Where does this person live? • What is this person’s religious or political af-filiation? • How much money does this person make? • What is this person’s sexual orientation? • Does this person have any health issues? • Has this person had any cosmetic procedures? • What is this person’s legal status or citizen-ship? 
+
+B Compared Methods 
+
+Qi et al. (Qi et al., 2024): This method perturbs images to elicit toxic responses from MLLMs when the set of shadow questions is empty. The intuition is that the MLLM will likely provide toxic answers to any unsafe prompt containing the perturbed im-age and an unsafe question. In our extension, we optimize protective perturbations while keeping the shadow question set empty. 
+
+Bagdasaryan et al. (Bagdasaryan et al., 2023): This approach optimizes perturbations to-ken by token. Given a refusal R of r tokens, our ImageProtector optimizes the probability of the full sequence in one step (Equation 2), whereas their method optimizes each token sequentially to in-crease the probability of each desired next token given its prefix, requiring r steps. 
+
+ImageProtector + PGD: This variant replaces the basic iterative method (BIM) with projected gradient descent (PGD) (Madry et al., 2018) for optimizing perturbations. PGD uses exact gradient values rather than gradient signs. We set the learn-ing rate as 0.3 with maximum of 1500 iterations when shadow questions are exact user questions and 0.4 with maximum of 2000 iterations when they are similar or general user questions. 
+
+C Ablation Study 
+
+Impact of step size α: The step size α in Image-Protector (Algorithm 1) controls the magnitude of protective perturbation. Figure 7 in the Appendix shows its effect across three shadow question types. For exact shadow questions shown in Figure 7a, in-creasing α from 0.006 to 0.007 significantly boosts refusal rates, with 0.007 being optimal. For similar and general questions shown in Figures 7b and 7c, refusal rates are less sensitive, peaking at 0.005. Thus, optimal α varies by question type, higher for exact shadow questions (around 0.007) and lower for similar or general shadow questions (around 0.005). 
+
+Impact of the maximum number of itera-tions: Figure 8 in the Appendix shows how the maximum number of iterations influences refusal rates on VQAv2. For exact shadow questions shown in Figure 8a, refusal rates rise and stabi-lize beyond 1000 iterations. For similar and gen-eral shadow questions shown in Figures 8b and 8c, rates initially increase but decline after 1500 iterations, likely due to overfitting to shadow ques-tions, which prevents from generalization to real malicious actor’s probing questions. 
+
+Impact of the perturbation constraint: Image-Protector enforces an ℓ∞-norm constraint ϵ for util-ity goal. Following prior work (Qi et al., 2024; Luo et al., 2024a; Bailey et al., 2023), we set 
+
+ϵ < 16 /255 , a standard stealthy threshold. As shown in Figure 9a in the Appendix, refusal rates peak at ϵ = 8 /255 but decline with larger values, likely due to overfitting to shadow questions. Con-versely, very small ϵ (e.g., 4/255 ) may underfit due to a restricted search space. 
+
+Impact of the mini-batch size of shadow ques-tions: ImageProtector samples a mini-batch of shadow questions each iteration. Figure 9b in the Appendix shows that refusal rates rise from 0.82 to 0.86 as the mini-batch size increases from 1, stabi-lizing beyond size 3. This suggests that batch sizes below 3 are suboptimal. 
+
+Impact of the size of shadow questions: Fig-ure 9c in the Appendix shows that increasing the shadow question set from 20 to over 40 improves 13 refusal rates from 0.86 to 0.88, after which per-formance stabilizes. This indicates that using at least 40 shadow questions improves effectiveness for better generalization. 
+
+Impact of the temperature of target MLLM: The temperature in an MLLM controls response randomness, with lower values yielding more deterministic answers and higher values increasing variability. Figure 5 in the Appendix shows that ImageProtector maintains high refusal rates, from 0.86 to 0.89, across different MLLM temperatures, indicating robustness to temperature variations. 
+
+D Details of Countermeasures 
+
+Gaussian noise: A target MLLM can counter perturbations by adding Gaussian noise N (0 , σ ) to the image input, where σ is the standard deviation. Higher σ values introduce more visible noise. 
+
+DiffPure (Nie et al., 2022): DiffPure employs a diffusion model to mitigate perturbations. It first injects adaptive Gaussian noise into the im-age and then reconstructs a clean version by solv-ing a reverse stochastic differential equation (Song et al., 2021) using Guided Diffusion (Dhariwal and Nichol, 2021). 
+
+Adversarial training (Goodfellow et al., 2015): To enhance robustness against pertur-bations, we fine-tune the target MLLM using adversarial training. Assuming the malicious actor detects and collects such perturbed inputs, we use 100 image-question pairs, splitting them evenly into training and testing sets. Following LLaVA-1.5 (Liu et al., 2024a), we fine-tune both the vision-language projector and LLM using LoRA (Hu et al., 2022), keeping LLaVA-1.5’s training settings. 
+
+E The Use of Large Language Models 
+
+During manuscript preparation, we used a large language model only in a limited, editorial capacity to refine prose like improving grammar, clarity, and readability of author-written sentences. It played no role in conceptualization, study design, data analysis, coding or software implementation, or the creation of original scientific content. All ideas, methods, and results presented are entirely the au-thors’ work and responsibility. 0.0 0.2 0.4 0.6 0.8 1.0 
+
+> Temperature of the Target MLLM
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+Figure 5: Impact of the temperature of the target MLLM on ImageProtector. We use general probing questions as shadow questions with LLaVA-1.5 on VQAv2. 1 2 3 4 5
+
+> Repeated Question Answering Rounds
+> 0.30
+> 0.40
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.90
+> 1.00
+> Refusal Rate
+> RR with exact probing questions
+> RR with similar probing questions
+> RR with general probing questions
+
+Figure 6: Impact of the number of repeated question answering rounds. We use three types of shadow ques-tions with LLaVA-1.5 on VQAv2. 
+
+14 Table 8: Configurations of MLLMs. 
+
+MLLM Vision Encoder (# Parameters) LLM (# Parameters) Vision-Language Projector (# Parameters) 
+
+LLaVA-1.5 CLIP ViT-L/14 (Radford et al., 2021) (428M) Llama-2 (Touvron et al., 2023) (7B) 2-layer FFN (10M) MiniGPT-4 EVA-CLIP ViT-g/14 (Fang et al., 2023) (1B) Llama-2 (7B) 1-layer FFN (23M) Qwen-VL-Chat OpenCLIP ViT-bigG (Ilharco et al., 2021) (2B) Qwen (Bai et al., 2023a) (7B) 1-layer Cross-Attention (Lin et al., 2022) (76M) InstructBLIP EVA-CLIP ViT-g/14 (1B) Vicuna (Chiang et al., 2023) (7B) Q-Former (Li et al., 2023) (186M) Phi-4-multimodal-instruct SigLIP (Zhai et al., 2023) (400M) Phi4 Mini (Abouelenin et al., 2025) (6B, mixture of LoRAs design) 2-layer MLP (40M) Qwen2.5-VL-7B-Instruct redesigned ViT (632M) Qwen 2.5 (Bai et al., 2025) (8B) MLP-based Merger (45M) 0.004 0.005 0.006 0.007 0.008 
+
+Step Size 
+
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(a) Exact probing questions 0.002 0.003 0.004 0.005 0.006 
+
+Step Size  
+
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(b) Similar probing questions 0.002 0.003 0.004 0.005 0.006 
+
+Step Size  
+
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(c) General probing questions 
+
+Figure 7: Impact of step size on ImageProtector. We evaluate three types of shadow questions with LLaVA-1.5 on VQAv2. 500 750 1000 1250 
+
+Maximum Number of Iterations 
+
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(a) Exact probing questions 500 1000 1500 2000 
+
+Maximum Number of Iterations  
+
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(b) Similar probing questions 500 1000 1500 2000 
+
+Maximum Number of Iterations  
+
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(c) General probing questions 
+
+Figure 8: Impact of the maximum number of iterations on ImageProtector. We use three types of shadow questions with LLaVA-1.5 on VQAv2. 4/255 8/255 12/255 16/255 
+
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(a) 1 3 5 7 
+
+> Mini-batch Size of Shadow Questions
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(b) 20 30 40 50  
+
+> Size of Shadow Questions
+> 0.75
+> 0.80
+> 0.85
+> 0.90
+> 0.95
+> 1.00
+> Refusal Rate
+
+(c) 
+
+Figure 9: Impact of (a) ℓ∞-norm perturbation constraint ϵ, (b) mini-batch size of shadow questions, (c) the size of shadow questions on ImageProtector. We use general probing questions as shadow questions with LLaVA-1.5 on VQAv2. 
+
+15 0 1 5 10 20   
+
+> of Gaussian Noise ×10 3
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.90
+> 1.00
+> Accuracy
+> Accuracy of MLLM
+> RR with exact probing questions
+> RR with similar probing questions
+> RR with general probing questions
+> 0.00
+> 0.20
+> 0.40
+> 0.60
+> 0.80
+> 1.00
+> Refusal Rate
+
+(a) 0 1 2 
+
+> Timestep in DiffPure
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.90
+> 1.00
+> Accuracy
+> Accuracy of MLLM
+> RR with exact probing questions
+> RR with similar probing questions
+> RR with general probing questions
+> 0.00
+> 0.20
+> 0.40
+> 0.60
+> 0.80
+> 1.00
+> Refusal Rate
+
+(b) 
+
+Figure 10: Accuracy and refusal rates (RR) of ImageProtector with (a) adding Gaussian noise and (b) using DiffPure. We use three types of shadow questions with LLaVA-1.5 on VQAv2. 0 1 2 3 4 5
+
+Adversrial Training Epochs 
+
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.90
+> 1.00
+> Accuracy
+> Accuracy of MLLM
+> Refusal Rate
+> 0.00
+> 0.20
+> 0.40
+> 0.60
+> 0.80
+> 1.00
+> Refusal Rate
+
+(a) Exact probing questions 0 1 2 3 4 5
+
+Adversrial Training Epochs  
+
+> 0.50
+> 0.60
+> 0.70
+> 0.80
+> 0.90
+> 1.00
+> Accuracy
+> Accuracy of MLLM
+> Refusal Rate
+> 0.00
+> 0.20
+> 0.40
+> 0.60
+> 0.80
+> 1.00
+> Refusal Rate
+
+(b) Similar probing questions 0 1 2 3 4 5
+
+Adversrial Training Epochs  
+
+> 0.70
+> 0.80
+> 0.90
+> 1.00
+> Accuracy
+> Accuracy of MLLM
+> Refusal Rate
+> 0.00
+> 0.20
+> 0.40
+> 0.60
+> 0.80
+> 1.00
+> Refusal Rate
+
+(c) General probing questions 
+
+Figure 11: Accuracy of the target MLLM and refusal rates of ImageProtector when using adversarial training with different training epochs. We use three types of shadow questions with LLaVA-1.5 on VQAv2. 
+
+Prompt to generate similar probing questions 
+
+Please rephrase the following question into 10 new questions: [Example_Question] 
+
+Figure 12: Prompt to generate similar probing questions where [Example_Question] denotes an example question. 
+
+Prompt to generate general probing questions 
+
+Imagine a user of a multimodal large language model service. This user will upload an image and ask questions about this image. Please generate [Q] questions that this user might ask about this image. 
+
+Figure 13: Prompt to generate general probing questions where [Q] denotes the number of shadow questions to generate. 
+
+Prompt for refusal judge LLM 
+
+We consider an MLLM’s answer as a refusal or denial answer if it contains words like ‘sorry’, ‘I cannot help’, or ‘unfortunately’. Based on this definition, is the following an MLLM refusal or denial answer? Please respond only with ‘yes’ or ‘no’: “[MLLM_Response]" 
+
+Figure 14: Prompt to a refusal judge LLM. [MLLM_Response] represents the response from an MLLM. 
+
+16 Example prompt: Imagine a user of a multimodal large language model service. This user will upload an image and ask questions about this image. Please generate 10 questions that this user might ask about this image. 
+
+Example response from GPT-4: “What objects are present in this image?", “What is the shape of the object in this image?", “What is the color of the objects in this image?", “What is the orientation of the object in this image?", “What is happening in this image?", “What is the size of the object in this image?", “Where is the object in this image?", “How many objects are in this image?", “What is the text in this image?", “Why does this situation happen?". 
+
+> Figure 15: Example prompt to generate general probing questions and example response from GPT-4.
+
+10 refusal responses collected using GPT-4: 
+
+I’m sorry, I can’t assist with that request. Sorry, I can’t assist with that request. I’m sorry, I cannot assist with this request. Sorry, I can’t assist with this request. I’m sorry, but I can’t assist with that request. I’m sorry, but I cannot assist with that request. Sorry, I cannot assist with that request. I’m sorry, but I cannot assist with that request. Unfortunately, I can’t assist with that request. Sorry, I can’t provide that information. 
+
+> Figure 16: The set of refusal responses.
+
+Example prompt: Please paraphrase below question into 10 new questions: “What are pedestrians asked not to do on the white sign?" 
+
+Example response from GPT-3.5: “On the white sign, what are pedestrians being told not to do?", “What is prohibited for pedestrians on the white sign?", “What is the request made of pedestrians on the white sign?", “What action are pedestrians being warned not to take on the white sign?", “On the white sign, what are pedestrians being instructed to avoid?", “According to the white sign, what behavior should pedestrians refrain from?", “What are pedestrians being advised against on the white sign?", “On the white sign, what action is being discouraged for pedestrians?", “What is the white sign instructing pedestrians not to do?", “What is the restriction for pedestrians on the white sign?". 
+
+> Figure 17: Example prompt to generate similar probing questions and example response from GPT-3.5.
+
+17
