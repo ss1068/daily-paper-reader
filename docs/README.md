@@ -6,91 +6,79 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-14
-- 运行时间：2026-04-14 20:13:53 UTC
+- 最新运行日期：2026-04-15
+- 运行时间：2026-04-15 20:11:03 UTC
 - 运行状态：成功
-- 本次总论文数：23
-- 精读区：12
-- 速读区：11
+- 本次总论文数：19
+- 精读区：10
+- 速读区：9
 
 ### 今日简报（AI）
-深度复盘 23 篇安全前沿论文，聚焦大模型 Agent 在提示词注入与后门攻击下的防御实战。
-揭示了提示词注入防御中不可兼得的“三难困境”，并提出通过规划一致性校验（PlanGuard）有效抵御间接注入。
-建议开发者警惕 Agent 技能插件与 GUI 交互中的隐蔽风险，在构建系统时引入语义级验证以增强鲁棒性。
-- 详情：[/202604/14/README](/202604/14/README)
+今日精选 19 篇前沿论文，深度聚焦 LLM 聊天模板漏洞挖掘与 Web Agent 提示词注入防御。
+满分研究展示了细粒度模糊测试在越狱攻击中的威力，并提出基于推理的 Guard 模型守护智能体安全。
+建议开发者重点关注大模型攻防实战及全同态加密隐私推理，构建更稳健的 AI 应用。
+- 详情：[/202604/15/README](/202604/15/README)
 
 ### 精读区论文标签
-1. [The Defense Trilemma: Why Prompt Injection Defense Wrappers Fail?](/202604/14/2604.06436v3-the-defense-trilemma-why-prompt-injection-defense-wrappers-fail)  
+1. [TEMPLATEFUZZ: Fine-Grained Chat Template Fuzzing for Jailbreaking and Red Teaming LLMs](/202604/15/2604.12232v1-templatefuzz-fine-grained-chat-template-fuzzing-for-jailbreaking-and-red-teaming-llms)  
    标签：评分：10.0/10、query:llm
-   evidence：提示注入防御包装器失效的理论分析
-2. [PlanGuard: Defending Agents against Indirect Prompt Injection via Planning-based Consistency Verification](/202604/14/2604.10134v1-planguard-defending-agents-against-indirect-prompt-injection-via-planning-based-consistency-verification)  
+   evidence：针对大语言模型越狱的聊天模板模糊测试
+2. [WebAgentGuard: A Reasoning-Driven Guard Model for Detecting Prompt Injection Attacks in Web Agents](/202604/15/2604.12284v1-webagentguard-a-reasoning-driven-guard-model-for-detecting-prompt-injection-attacks-in-web-agents)  
    标签：评分：10.0/10、query:llm
-   evidence：防御智能体免受间接提示词注入攻击
-3. [Seeing No Evil: Blinding Large Vision-Language Models to Safety Instructions via Adversarial Attention Hijacking](/202604/14/2604.10299v1-seeing-no-evil-blinding-large-vision-language-models-to-safety-instructions-via-adversarial-attention-hijacking)  
+   evidence：用于检测Web智能体提示注入的推理驱动防护模型
+3. [Reading Between the Pixels: Linking Text-Image Embedding Alignment to Typographic Attack Success on Vision-Language Models](/202604/15/2604.12371v1-reading-between-the-pixels-linking-text-image-embedding-alignment-to-typographic-attack-success-on-vision-language-models)  
    标签：评分：10.0/10、query:llm
-   evidence：针对多模态大模型视觉越狱的对抗性注意力劫持
-4. [Jailbreaking the Matrix: Nullspace Steering for Controlled Model Subversion](/202604/14/2604.10326v1-jailbreaking-the-matrix-nullspace-steering-for-controlled-model-subversion)  
+   evidence：针对视觉语言模型的排版提示注入攻击
+4. [DeepSeek Robustness Against Semantic-Character Dual-Space Mutated Prompt Injection](/202604/15/2604.12548v1-deepseek-robustness-against-semantic-character-dual-space-mutated-prompt-injection)  
    标签：评分：10.0/10、query:llm
-   evidence：针对越狱防御的电路级干预方法
-5. [Latent Instruction Representation Alignment: defending against jailbreaks, backdoors and undesired knowledge in LLMs](/202604/14/2604.10403v1-latent-instruction-representation-alignment-defending-against-jailbreaks-backdoors-and-undesired-knowledge-in-llms)  
+   evidence：提示注入漏洞与鲁棒性
+5. [Understanding and Improving Continuous Adversarial Training for LLMs via In-context Learning Theory](/202604/15/2604.12817v1-understanding-and-improving-continuous-adversarial-training-for-llms-via-in-context-learning-theory)  
    标签：评分：10.0/10、query:llm
-   evidence：通过表示对齐防御越狱和后门的新型机制
-6. [The Salami Slicing Threat: Exploiting Cumulative Risks in LLM Systems](/202604/14/2604.11309v1-the-salami-slicing-threat-exploiting-cumulative-risks-in-llm-systems)  
-   标签：评分：10.0/10、query:llm
-   evidence：利用累积风险的多轮越狱攻击
-7. [ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection](/202604/14/2604.11790v1-clawguard-a-runtime-security-framework-for-tool-augmented-llm-agents-against-indirect-prompt-injection)  
-   标签：评分：10.0/10、query:llm
-   evidence：针对工具增强型LLM智能体中间接提示注入的安全性框架
-8. [Stop Fixating on Prompts: Reasoning Hijacking and Constraint Tightening for Red-Teaming LLM Agents](/202604/14/2604.05549v2-stop-fixating-on-prompts-reasoning-hijacking-and-constraint-tightening-for-red-teaming-llm-agents)  
+   evidence：针对越狱攻击的LLM对抗训练
+6. [FedDetox: Robust Federated SLM Alignment via On-Device Data Sanitization](/202604/15/2604.06833v1-feddetox-robust-federated-slm-alignment-via-on-device-data-sanitization)  
    标签：评分：9.0/10、query:llm
-   evidence：通过推理劫持对大模型智能体进行红队测试
-9. [ACIArena: Toward Unified Evaluation for Agent Cascading Injection](/202604/14/2604.07775v1-aciarena-toward-unified-evaluation-for-agent-cascading-injection)  
+   evidence：针对非预期数据投毒的鲁棒联邦对齐
+7. [Compiling Activation Steering into Weights via Null-Space Constraints for Stealthy Backdoors](/202604/15/2604.12359v1-compiling-activation-steering-into-weights-via-null-space-constraints-for-stealthy-backdoors)  
    标签：评分：9.0/10、query:llm
-   evidence：智能体级联注入攻击的评估
-10. [Precise Shield: Explaining and Aligning VLLM Safety via Neuron-Level Guidance](/202604/14/2604.08881v1-precise-shield-explaining-and-aligning-vllm-safety-via-neuron-level-guidance)  
+   evidence：在隐藏触发器下导致越狱的隐蔽后门
+8. [Preventing Safety Drift in Large Language Models via Coupled Weight and Activation Constraints](/202604/15/2604.12384v1-preventing-safety-drift-in-large-language-models-via-coupled-weight-and-activation-constraints)  
    标签：评分：9.0/10、query:llm
-   evidence：通过神经元级引导防御多模态复合攻击
-11. [Backdoors in RLVR: Jailbreak Backdoors in LLMs From Verifiable Reward](/202604/14/2604.09748v1-backdoors-in-rlvr-jailbreak-backdoors-in-llms-from-verifiable-reward)  
+   evidence：通过安全对齐保护减轻越狱漏洞
+9. [Every Picture Tells a Dangerous Story: Memory-Augmented Multi-Agent Jailbreak Attacks on VLMs](/202604/15/2604.12616v1-every-picture-tells-a-dangerous-story-memory-augmented-multi-agent-jailbreak-attacks-on-vlms)  
    标签：评分：9.0/10、query:llm
-   evidence：通过在RLVR训练集中注入中毒数据实施后门攻击
-12. [Detecting RAG Extraction Attack via Dual-Path Runtime Integrity Game](/202604/14/2604.10717v1-detecting-rag-extraction-attack-via-dual-path-runtime-integrity-game)  
+   evidence：针对视觉语言模型的多智能体越狱攻击
+10. [LASA: Language-Agnostic Semantic Alignment at the Semantic Bottleneck for LLM Safety](/202604/15/2604.12710v1-lasa-language-agnostic-semantic-alignment-at-the-semantic-bottleneck-for-llm-safety)  
    标签：评分：9.0/10、query:llm
-   evidence：防御RAG提取攻击和知识库泄露
+   evidence：用于大语言模型安全防御的跨语言语义对齐
 
 ### 速读区论文标签
-1. [SkillTrojan: Backdoor Attacks on Skill-Based Agent Systems](/202604/14/2604.06811v1-skilltrojan-backdoor-attacks-on-skill-based-agent-systems)  
+1. [AdverMCTS: Combating Pseudo-Correctness in Code Generation via Adversarial Monte Carlo Tree Search](/202604/15/2604.10449v1-advermcts-combating-pseudo-correctness-in-code-generation-via-adversarial-monte-carlo-tree-search)  
    标签：评分：8.0/10、query:llm
-   evidence：针对基于技能的智能体系统的后门攻击
-2. [Are GUI Agents Focused Enough? Automated Distraction via Semantic-level UI Element Injection](/202604/14/2604.07831v1-are-gui-agents-focused-enough-automated-distraction-via-semantic-level-ui-element-injection)  
+   evidence：用于主动漏洞发现的对抗搜索
+2. [Finetune Like You Pretrain: Boosting Zero-shot Adversarial Robustness in Vision-language Models](/202604/15/2604.11576v1-finetune-like-you-pretrain-boosting-zero-shot-adversarial-robustness-in-vision-language-models)  
    标签：评分：8.0/10、query:llm
-   evidence：语义级UI元素注入作为红队测试设置
-3. [BadSkill: Backdoor Attacks on Agent Skills via Model-in-Skill Poisoning](/202604/14/2604.09378v1-badskill-backdoor-attacks-on-agent-skills-via-model-in-skill-poisoning)  
+   evidence：提升视觉语言模型的零样本对抗鲁棒性
+3. [Fully Homomorphic Encryption on Llama 3 model for privacy preserving LLM inference](/202604/15/2604.12168v1-fully-homomorphic-encryption-on-llama-3-model-for-privacy-preserving-llm-inference)  
    标签：评分：8.0/10、query:llm
-   evidence：通过模型中毒对大模型智能体技能进行后门攻击
-4. [Machine Learning-Based Detection of MCP Attacks](/202604/14/2604.10534v1-machine-learning-based-detection-of-mcp-attacks)  
+   evidence：针对数据投毒和提示词注入的大语言模型安全
+4. [Challenging Vision-Language Models with Physically Deployable Multimodal Semantic Lighting Attacks](/202604/15/2604.12833v1-challenging-vision-language-models-with-physically-deployable-multimodal-semantic-lighting-attacks)  
    标签：评分：8.0/10、query:llm
-   evidence：针对LLM模型上下文协议（MCP）攻击的检测
-5. [Critical-CoT: A Robust Defense Framework against Reasoning-Level Backdoor Attacks in Large Language Models](/202604/14/2604.10681v1-critical-cot-a-robust-defense-framework-against-reasoning-level-backdoor-attacks-in-large-language-models)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对大语言模型推理级后门攻击的防御
-6. [XFED: Non-Collusive Model Poisoning Attack Against Byzantine-Robust Federated Classifiers](/202604/14/2604.09489v1-xfed-non-collusive-model-poisoning-attack-against-byzantine-robust-federated-classifiers)  
+   evidence：针对视觉语言模型的物理对抗攻击
+5. [QShield: Securing Neural Networks Against Adversarial Attacks using Quantum Circuits](/202604/15/2604.10933v1-qshield-securing-neural-networks-against-adversarial-attacks-using-quantum-circuits)  
    标签：评分：7.0/10、query:llm
-   evidence：针对联邦学习分类器的模型投毒攻击
-7. [Mask-Free Privacy Extraction and Rewriting: A Domain-Aware Approach via Prototype Learning](/202604/14/2604.10145v1-mask-free-privacy-extraction-and-rewriting-a-domain-aware-approach-via-prototype-learning)  
+   evidence：保护神经网络免受对抗性攻击
+6. [CoLA: A Choice Leakage Attack Framework to Expose Privacy Risks in Subset Training](/202604/15/2604.12342v1-cola-a-choice-leakage-attack-framework-to-expose-privacy-risks-in-subset-training)  
    标签：评分：7.0/10、query:llm
-   evidence：大语言模型中的隐私提取与泄露
-8. [Beyond A Fixed Seal: Adaptive Stealing Watermark in Large Language Models](/202604/14/2604.10893v1-beyond-a-fixed-seal-adaptive-stealing-watermark-in-large-language-models)  
+   evidence：大语言模型子集训练中的隐私风险和信息泄露
+7. [GF-Score: Certified Class-Conditional Robustness Evaluation with Fairness Guarantees](/202604/15/2604.12757v1-gf-score-certified-class-conditional-robustness-evaluation-with-fairness-guarantees)  
    标签：评分：7.0/10、query:llm
-   evidence：破坏大语言模型水印的对抗性攻击
-9. [Security Concerns in Generative AI Coding Assistants: Insights from Online Discussions on GitHub Copilot](/202604/14/2604.08352v1-security-concerns-in-generative-ai-coding-assistants-insights-from-online-discussions-on-github-copilot)  
+   evidence：认证的类别条件鲁棒性评估
+8. [LLM-Redactor: An Empirical Evaluation of Eight Techniques for Privacy-Preserving LLM Requests](/202604/15/2604.12064v1-llm-redactor-an-empirical-evaluation-of-eight-techniques-for-privacy-preserving-llm-requests)  
    标签：评分：6.0/10、query:llm
-   evidence：AI编程助手中的安全问题与漏洞
-10. [CORA: Conformal Risk-Controlled Agents for Safeguarded Mobile GUI Automation](/202604/14/2604.09155v1-cora-conformal-risk-controlled-agents-for-safeguarded-mobile-gui-automation)  
+   evidence：大语言模型请求和内容的隐私保护技术
+9. [LLM-Guided Prompt Evolution for Password Guessing](/202604/15/2604.12601v1-llm-guided-prompt-evolution-for-password-guessing)  
    标签：评分：6.0/10、query:llm
-   evidence：GUI智能体的安全保障框架
-11. [Trans-RAG: Query-Centric Vector Transformation for Secure Cross-Organizational Retrieval](/202604/14/2604.09541v1-trans-rag-query-centric-vector-transformation-for-secure-cross-organizational-retrieval)  
-   标签：评分：6.0/10、query:llm
-   evidence：RAG系统的跨组织安全检索
+   evidence：大语言模型驱动的进化计算用于优化攻击提示词
 
 
 <div class="dpr-home-promo-card">

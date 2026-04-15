@@ -1,0 +1,1068 @@
+Title: GF-Score: Certified Class-Conditional Robustness Evaluation with Fairness Guarantees
+
+URL Source: https://arxiv.org/pdf/2604.12757v1
+
+Published Time: Wed, 15 Apr 2026 01:45:51 GMT
+
+Number of Pages: 16
+
+Markdown Content:
+# GF-Score: Certified Class-Conditional Robustness Evaluation with Fairness Guarantees 
+
+Arya Shah 
+
+IIT Gandhinagar 
+
+arya.shah@iitgn.ac.in 
+
+Kaveri Visavadiya 
+
+IIT Gandhinagar 
+
+kaveri.visavadiya@iitgn.ac.in 
+
+Manisha Padala 
+
+IIT Gandhinagar 
+
+manisha.padala@iitgn.ac.in 
+
+Abstract 
+
+Adversarial robustness is essential for deploying neural networks in safety-critical applications, yet standard evaluation methods either require expensive adversarial attacks or report only a single aggregate score that obscures how robustness is distributed across classes. We introduce the GF-Score (GREAT-Fairness Score), a framework that decomposes the certified GREAT Score into per-class robustness profiles and quantifies their disparity through four metrics grounded in welfare economics: the Robustness Disparity Index (RDI), the Normalized Robustness Gini Coefficient (NRGC), Worst-Case Class Robustness (WCR), and a Fairness-Penalized GREAT Score (FP-GREAT). The framework further eliminates the original method’s dependence on adversarial attacks through a self-calibration pro-cedure that tunes the temperature parameter using only clean accuracy correlations. Evaluating 22 models from RobustBench across CIFAR-10 and ImageNet, we find that the decomposition is exact, that per-class scores reveal consistent vulnerability patterns (e.g., “cat” is the weakest class in 76% of CIFAR-10 models), and that more robust models tend to exhibit greater class-level disparity. These results establish a practical, attack-free auditing pipeline for diagnosing where certified robustness guarantees fail to protect all classes equally. We release our code on GitHub. 
+
+1 Introduction 
+
+Deep neural networks are vulnerable to adversarial examples: imperceptible perturbations that cause confident misclassifications [Szegedy et al., 2014, Goodfellow et al., 2015]. This vulnerability poses serious risks in safety-critical settings such as autonomous driving and medical diagnosis, where a single misclassification can have catastrophic consequences. Adversarial training [Madry et al., 2019] remains the dominant defense, and substantial progress has been tracked through standardized benchmarks like RobustBench [Croce et al., 2021], which ranks models by their accuracy under the AutoAttack ensemble [Croce and Hein, 2020]. Yet a fundamental tension exists between robustness and standard accuracy [Tsipras et al., 2019], and recent work on certified defenses [Cohen et al., 2019] has shifted attention toward provable guarantees rather than empirical attack evaluations alone. A critical limitation of current evaluation practice is that robustness is almost always reported as a single aggregate number. Whether the metric is empirical robust accuracy or a certified lower bound, it averages over the entire test distribution and thereby conceals how robustness is distributed across classes. Several studies have shown that adversarial training induces pronounced class-wise performance gaps: certain classes become far more vulnerable than others under the same model [Benz et al., 2021, Xu et al., 2021, Tian et al., 2021]. For instance, an autonomous perception 
+
+> arXiv:2604.12757v1 [cs.LG] 14 Apr 2026
+
+system may appear globally robust while being nearly defenseless on pedestrian classes. Despite this, no existing framework provides certified, attack-free, per-class robustness evaluation. The GREAT Score [Li et al., 2024], introduced at NeurIPS 2024, offers a certified global robustness bound using only generative model samples and forward passes, achieving roughly 2,000 × speedup over attack-based methods. However, it reports only a single scalar, inheriting the same class-blindness problem. Concurrently, training-time fairness interventions [Wei et al., 2023, Sun et al., 2022, Li and Liu, 2023, Zhang et al., 2024] address the disparity during model optimization but offer no tools for post-hoc auditing of already-deployed models. In this paper, we introduce the GF-Score (GREAT-Fairness Score), a framework that bridges this gap through three components. First, we decompose the GREAT Score into per-class certified robustness profiles by partitioning samples according to their ground-truth labels and computing class-conditional confidence margins. This decomposition is exact: the weighted sum of per-class scores recovers the aggregate score with zero numerical error. Second, we quantify the disparity of these per-class profiles through four metrics grounded in welfare economics and fairness theory: the Robustness Disparity Index (RDI), the Normalized Robustness Gini Coefficient (NRGC), Worst-Case Class Robustness (WCR), and a Fairness-Penalized GREAT Score (FP-GREAT). Third, we eliminate the original method’s dependence on adversarial attacks for temperature calibration by introducing a self-calibration procedure that maximizes rank correlation with publicly available clean accuracies. We evaluate the GF-Score on 22 robust models from RobustBench spanning CIFAR-10 (17 ℓ2 models) and ImageNet (5 ℓ∞ models). Our experiments yield several notable findings. The class-conditional decomposition is exactly consistent across all 22 models, confirming the mathematical validity of the approach. Per-class analysis reveals that the class “cat” is the most vulnerable in 76% of CIFAR-10 models, while “automobile” is consistently the most robust, suggesting that class vulnerability is an intrinsic data property rather than a training artifact. We observe a positive correlation between aggregate robustness and the Robustness Disparity Index, providing new quantitative evidence for the tension between robustness and fairness identified by prior work [Xu et al., 2021, Benz et al., 2021]. Our attack-free self-calibration achieves a Spearman rank correlation of ρ = 0 .871 on CIFAR-10 and ρ = 1 .000 on ImageNet with RobustBench rankings, making the entire evaluation pipeline truly attack-free. In summary, we make the following contributions: 1. We propose a class-conditional decomposition of the GREAT Score that preserves the certified lower-bound guarantee at per-class granularity, with formal concentration bounds (Propositions 1 and 2). 2. We introduce four fairness-aware disparity metrics (RDI, NRGC, WCR, FP-GREAT) grounded in welfare economics that quantify how robustness is distributed across classes. 3. We propose an attack-free self-calibration procedure that replaces adversarial-attack-based temperature tuning with clean accuracy correlation, enabling fully attack-free evaluation. 4. We conduct extensive experiments on 22 models across two benchmarks , revealing consis-tent class vulnerability patterns and a quantifiable robustness-fairness tension that aggregate metrics conceal. 
+
+2 Related Work 
+
+Our work lies at the intersection of three active research areas: adversarial robustness evaluation, fairness in adversarial training, and inequality measurement in machine learning. We synthesize each area below and position our contribution relative to existing methods in Table 1. 
+
+2.1 Adversarial Robustness Evaluation 
+
+Since the discovery that neural networks are vulnerable to imperceptible perturbations [Szegedy et al., 2014, Goodfellow et al., 2015], a rich line of work has developed increasingly powerful attacks to evaluate robustness. Gradient-based methods such as PGD [Madry et al., 2019] and the C&W attack [Carlini and Wagner, 2017] became standard tools, though Athalye et al. [2018] showed that many defenses merely obfuscated gradients rather than achieving true robustness. The AutoAttack ensemble [Croce and Hein, 2020] addressed this by combining complementary attack strategies into 2airplane 
+
+> automobile
+> bird
+> cat
+> deer
+> dog
+> frog
+> horse
+> ship
+> truck
+
+CIFAR-10 Class                                                                                                                                                          
+
+> Augustin_WRN_extra
+> Augustin2020
+> Augustin_WRN
+> Gowal_extra
+> Rebuffi_extra
+> Rebuffi_70_ddpm
+> Rebuffi_28_ddpm
+> Rade_R18
+> Rebuffi_R18
+> Sehwag_Proxy
+> Rony2019
+> Sehwag_R18
+> Engstrom2019
+> Rice2020
+> Gowal2020
+> Wu2020
+> Ding_MMA
+> Model (sorted by aggregate score  )
+> 0.579 0.654 0.463 0.335 0.430 0.444 0.518 0.598 0.613 0.621
+> 0.526 0.652 0.440 0.218 0.419 0.336 0.537 0.582 0.584 0.588
+> 0.486 0.628 0.434 0.242 0.404 0.345 0.548 0.577 0.584 0.585
+> 0.549 0.636 0.391 0.288 0.349 0.368 0.459 0.591 0.570 0.598
+> 0.528 0.616 0.373 0.283 0.341 0.368 0.441 0.562 0.553 0.582
+> 0.414 0.526 0.302 0.166 0.282 0.221 0.430 0.478 0.493 0.499
+> 0.391 0.502 0.265 0.144 0.248 0.201 0.396 0.445 0.461 0.468
+> 0.372 0.472 0.244 0.157 0.238 0.211 0.375 0.420 0.436 0.441
+> 0.324 0.447 0.227 0.121 0.215 0.176 0.343 0.387 0.398 0.379
+> 0.227 0.277 0.201 0.060 0.154 0.072 0.341 0.363 0.313 0.317
+> 0.212 0.370 0.193 0.096 0.107 0.129 0.232 0.298 0.306 0.278
+> 0.197 0.233 0.129 0.054 0.115 0.061 0.261 0.302 0.272 0.240
+> 0.115 0.232 0.092 0.038 0.077 0.024 0.102 0.168 0.158 0.258
+> 0.107 0.200 0.074 0.031 0.079 0.031 0.107 0.150 0.156 0.231
+> 0.112 0.122 0.082 0.061 0.098 0.046 0.118 0.167 0.153 0.146
+> 0.104 0.134 0.078 0.062 0.091 0.047 0.097 0.158 0.116 0.158
+> 0.084 0.128 0.074 0.039 0.064 0.047 0.090 0.166 0.090 0.080
+
+Class-Conditional Robustness Heatmap 
+
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> Per-Class GREAT Score (  )
+
+Figure 1: Per-class GREAT Scores for 17 CIFAR-10 models reveal substantial class-level robustness disparity hidden by aggregate scores. Each row is a model (sorted by aggregate GREAT Score); each column is a class. The class “cat” is consistently the most vulnerable (darkest column), while “automobile” is most often the most robust (10 of 17 models). Models with higher aggregate robustness (top rows) tend to exhibit greater disparity between their strongest and weakest classes. a reliable evaluation protocol, and RobustBench [Croce et al., 2021] standardized model comparison through a public leaderboard. In parallel, certified approaches emerged to provide provable robustness guarantees. Convex relax-ation methods [Wong and Kolter, 2018] and randomized smoothing [Cohen et al., 2019, Lecuyer et al., 2019, Salman et al., 2020] offer formal certificates that no perturbation within a given norm ball can change the prediction. Li et al. [2023] provide a comprehensive systematization of these approaches. However, all certified methods operate at the per-sample level, producing local guarantees that must be aggregated to characterize a model’s overall robustness. The GREAT Score [Li et al., 2024] took a fundamentally different approach by defining a global certified robustness metric over the data distribution using generative models, achieving strong rank correlation with RobustBench while requiring only forward passes. Our work extends the GREAT Score by decomposing this global metric into per-class components, revealing structure that the aggregate score conceals. 
+
+2.2 Fairness in Adversarial Robustness 
+
+The observation that adversarial training creates significant class-wise performance gaps was first documented empirically by Benz et al. [2021], who showed that robust accuracy can vary by over 30 percentage points across classes. Xu et al. [2021] formalized this as the robust fairness problem and proposed Fair Robust Learning (FRL) through class-level reweighting and remargin strategies. Tian et al. [2021] further analyzed the phenomenon at KDD 2021, demonstrating that class-wise vulnerability patterns are systematic rather than random. These findings inspired a wave of training-time interventions. Wei et al. [2023] proposed class-wise calibrated adversarial configurations (CFA) that adapt attack strength per class. Sun et al. [2022] introduced balanced adversarial training (BAT) to equalize robustness across classes. Li and Liu 3[2023] optimized directly for worst-class robustness via WAT. More recently, Zhang et al. [2024] framed the problem through distributionally robust optimization (FAAL), Zhi et al. [2025] proposed class-optimal distribution adversarial training (CODA), Jin et al. [2025] regularized the spectral norm of the robust confusion matrix at ICLR 2025, and Lin et al. [2023] proposed hard adversarial example mining to improve robust fairness. The connection to broader fairness literature is reinforced by Sagawa et al. [2020], who showed that standard training can fail on minority groups and proposed GroupDRO for worst-group optimization. Several concurrent works continue to address class-wise disparity from complementary angles [Amerehi and Healy, 2025, Zhu et al., 2026, Mou et al., 2025]. A crucial observation is that all of the above methods operate at training time . They modify the adversarial training procedure to produce fairer models, but they do not provide tools for post-hoc auditing of models that have already been trained and deployed. Our framework fills precisely this gap: it evaluates and quantifies class-level robustness disparity for any given model, without requiring retraining or adversarial attacks. 
+
+2.3 Inequality Metrics and Welfare-Theoretic Fairness 
+
+Our disparity metrics draw on a long tradition in welfare economics. The Gini coefficient has been the standard measure of distributional inequality for over a century, and the Rawlsian maximin principle [Rawls, 2009] provides a philosophical foundation for prioritizing the worst-off group. Speicher et al. [2018] were among the first to connect these classical inequality indices to algorithmic fairness, proposing a unified framework that encompasses individual and group fairness through generalized entropy indices and the Gini coefficient. Cousins [2021] formalized welfare-centric machine learning axiomatically at NeurIPS 2021, establishing conditions under which welfare functions yield provably fair outcomes. Despite this rich foundation, no prior work has applied formal inequality metrics to certified robustness bounds . Existing fairness-aware robustness studies [Xu et al., 2021, Wei et al., 2023, Zhang et al., 2024] use ad-hoc measures such as the gap between the best and worst class accuracy, without grounding them in established fairness theory. Our RDI, NRGC, WCR, and FP-GREAT metrics bridge this disconnect by applying principled inequality measures from welfare economics directly to certified per-class robustness scores, and we further provide formal concentration bounds on these metrics via Hoeffding’s inequality [Hoeffding, 1963]. 
+
+2.4 Positioning of This Work 
+
+Table 1 summarizes how the GF-Score relates to prior work along five key dimensions. Unlike training-time fairness methods, our framework requires no model modification. Unlike existing evaluation methods, it provides per-class certified guarantees with formal disparity quantification. The combination of attack-free evaluation, class-conditional decomposition, and welfare-grounded fairness metrics is, to our knowledge, novel. 
+
+3 Methodology 
+
+We present the GF-Score framework in three parts. Section 3.2 introduces the class-conditional decomposition of the GREAT Score with its consistency guarantee. Section 3.3 defines four disparity metrics grounded in welfare economics. Section 3.4 describes the attack-free self-calibration proce-dure that makes the entire pipeline independent of adversarial attacks. Formal concentration bounds and their proofs are deferred to Section 4.2. 
+
+3.1 Preliminaries: The GREAT Score 
+
+We briefly recall the GREAT Score [Li et al., 2024]. Let f : X → RK be a classifier mapping inputs to K-dimensional logits. Given a generative model G that approximates the data distribution, the GREAT Score defines a certified global robustness metric as 
+
+Ω( f ) = Ez∼pz
+
+g G(z) , (1) where g(x) = pπ/ 2 · max σ(f (x)) y − max j̸ =y σ(f (x)) j , 0 is the local robustness score, σ
+
+denotes the sigmoid or softmax activation scaled by a temperature parameter T , and y is the ground-truth label of x. The local score g(x) provides a certified lower bound on the ℓ2 perturbation required 4Table 1: Comparison of the GF-Score with prior methods across five key dimensions. Certified :provides provable robustness guarantees. Per-class : offers class-level granularity. Attack-free : does not require adversarial attacks. Post-hoc : applicable to already-trained models. Fairness metrics :includes formal disparity quantification grounded in established theory.                                                                  
+
+> Method Certified Per-class Attack-free Post-hoc Fairness metrics
+> AutoAttack [Croce and Hein, 2020] ✗✗✗✓✗
+> RobustBench [Croce et al., 2021] ✗✗✗✓✗
+> Rand. Smoothing [Cohen et al., 2019] ✓✓*✓✓✗
+> GREAT Score [Li et al., 2024] ✓✗✓✓✗
+> FRL [Xu et al., 2021] ✗✓✗✗✗
+> CFA [Wei et al., 2023] ✗✓✗✗✗
+> WAT [Li and Liu, 2023] ✗✓✗✗✗
+> BAT [Sun et al., 2022] ✗✓✗✗✗
+> FAAL [Zhang et al., 2024] ✗✓✗✗✗
+> CODA [Zhi et al., 2025] ✗✓✗✗✗
+> CSR [Jin et al., 2025] ✗✓✗✗✗
+> GF-Score (Ours) ✓✓✓✓✓
+> *Per-sample certificates can be aggregated per class, but no prior work has done so with disparity metrics.
+
+to change the prediction at x [Li et al., 2024]. Given N i.i.d. samples, the finite-sample estimator is 
+
+ˆΩ( f ) = 1
+
+> N
+
+PNi=1 g(xi).
+
+3.2 Class-Conditional Decomposition 
+
+The aggregate GREAT Score averages the local robustness scores over all samples irrespective of their class membership. We propose to partition the evaluation set by ground-truth labels to obtain per-class robustness profiles. 
+
+Definition 1 (Per-Class GREAT Score) . Let Sk = {xi : yi = k} denote the set of nk samples belonging to class k ∈ { 1, . . . , K }. The per-class GREAT Score for class k is 
+
+ˆΩk(f ) = 1
+
+nk
+
+X
+
+> i:yi=k
+
+g(xi). (2) Since g(xi) inherits the certified lower-bound property of the original GREAT Score for each sample, 
+
+ˆΩk(f ) is the average certified robustness bound restricted to class k. The following result shows that this decomposition is exact. 
+
+Decomposition consistency. The aggregate score can be recovered from the per-class scores as a weighted average: 
+
+ˆΩ( f ) = 
+
+> K
+
+X
+
+> k=1
+
+nk
+
+N ˆΩk(f ), (3) where N = PKk=1 nk is the total number of samples. This identity holds exactly by linearity of the mean: each sample contributes to exactly one class partition, and the weighted recombination recovers the global average. We verify empirically that this identity holds with zero numerical error across all 22 models (Section 4.3). Concentration bounds for the per-class estimates are established in Section 4.2. 
+
+3.3 Robustness Disparity Metrics 
+
+Given the K-dimensional vector of per-class scores ( ˆΩ1, . . . , ˆΩK ), we define four complementary metrics that each capture a different facet of the robustness distribution. These metrics are grounded in welfare economics and adapted to the robustness evaluation setting. 
+
+Definition 2 (Robustness Disparity Index (RDI)) .
+
+RDI( f ) = max 
+
+> k
+
+ˆΩk(f ) − min 
+
+> k
+
+ˆΩk(f ). (4) 5The RDI measures the range of per-class robustness scores. It is zero if and only if all classes have equal robustness, and is bounded above by pπ/ 2 ≈ 1.253 . This metric adapts the Max Group Disparity principle commonly used in fairness auditing. 
+
+Definition 3 (Normalized Robustness Gini Coefficient (NRGC)) .
+
+NRGC( f ) = 
+
+> K
+
+X
+
+> i=1
+> K
+
+X
+
+> j=1
+
+| ˆΩi − ˆΩj |
+
+2K2 · ¯Ω , (5) 
+
+where ¯Ω = 1
+
+> K
+
+PKk=1 ˆΩk is the mean per-class score. The NRGC adapts the Gini coefficient to robustness evaluation: it lies in [0 , 1) , with 0 indicating perfect equality and values approaching 1 indicating maximal concentration. Unlike RDI, the NRGC captures the full shape of the distribution rather than only the extremes, making it more informative when K > 2.
+
+Definition 4 (Worst-Case Class Robustness (WCR)) .
+
+WCR( f ) = min 
+
+> k
+
+ˆΩk(f ). (6) 
+
+Grounded in the Rawlsian maximin principle [Rawls, 2009], WCR gives the certified robustness level guaranteed for every class. A model passes a fairness audit only if WCR( f ) ≥ τ for some application-specific threshold τ . This metric is particularly relevant for safety-critical deployments where no class can be left unprotected. 
+
+Definition 5 (Fairness-Penalized GREAT Score (FP-GREAT)) .
+
+FP -GREAT( f ; λ) = ¯Ω( f ) − λ · RDI( f ), (7) 
+
+where λ ≥ 0 controls the fairness penalty weight. When λ = 0 , the metric reduces to the mean per-class GREAT Score (no fairness consideration). As λ increases, models with high disparity are penalized more heavily. This formulation adapts the Inequality-Adjusted Human Development Index (IHDI) used by the United Nations Development Programme, which discounts aggregate welfare by an inequality measure. 
+
+Complementarity of metrics. The four metrics serve distinct roles. RDI flags the existence of disparity; NRGC quantifies its severity across the full distribution; WCR identifies the weakest link; FP-GREAT produces an adjusted ranking. Together, they provide a comprehensive robustness-fairness profile for any model. A concentration bound for the empirical RDI is provided in Section 4.2. 
+
+3.4 Attack-Free Self-Calibration 
+
+The original GREAT Score framework uses the C&W attack [Carlini and Wagner, 2017] to calibrate the temperature parameter T in the softmax/sigmoid activation by maximizing rank correlation between GREAT Scores and attack-based robustness rankings. This dependence on adversarial attacks undermines the computational advantages of the certified approach. We propose a fully attack-free alternative. 
+
+Key insight. There exists a well-established monotonic relationship between adversarial robustness and clean accuracy [Tsipras et al., 2019]: models that are more robust tend to achieve higher clean accuracy within the same defense family. We exploit this relationship to calibrate T using only publicly available clean accuracy values from RobustBench [Croce et al., 2021], which require no adversarial computation. 
+
+Definition 6 (Accuracy-Correlation Self-Calibration) . Given M models {fm}Mm=1 with known clean accuracies {am}Mm=1 , the self-calibrated temperature is 
+
+T ∗ = arg max   
+
+> T∈T
+
+ρs
+
+ ˆΩ(T )(fm) Mm=1 , am
+
+> Mm=1
+
+
+
+, (8) 
+
+where ρs denotes Spearman’s rank correlation coefficient [Spearman, 2010] and T is the search space. 
+
+Optimization procedure. We employ a two-phase grid search. The coarse phase evaluates tempera-tures in [0 .01 , 10 .0] with step size 0.1. The fine phase refines the search in a neighborhood of the best 6coarse temperature with step size 0.001 . This procedure is computationally inexpensive since it only requires recomputing softmax/sigmoid outputs from cached logits (no additional forward passes). 
+
+Ranking stability calibration. As a complementary approach, we also consider a stability-based calibration that selects the temperature at which per-class score rankings are most stable under small perturbations: 
+
+T ∗ 
+
+> stab
+
+= arg max   
+
+> T∈T
+
+min       
+
+> T′∈[T−δT,T +δT]
+
+ρs
+
+
+
+rank( ˆΩ(T )
+
+), rank( ˆΩ(T ′)
+
+)
+
+
+
+, (9) where δT is a small perturbation window and ˆΩ(T )
+
+= ( ˆΩ(T )1 , . . . , ˆΩ(T ) 
+
+> K
+
+) is the vector of per-class scores at temperature T . This criterion ensures that the chosen temperature produces robust rankings that do not fluctuate with minor parameter changes. 
+
+Complete pipeline. Combining the three components, the GF-Score evaluation pipeline proceeds as follows: (1) collect logits via forward passes on test or generated samples; (2) partition samples by class and compute per-class GREAT Scores (Definition 1); (3) compute disparity metrics (Defini-tions 2–5); (4) self-calibrate the temperature (Definition 6) and recompute all scores at T ∗. The entire pipeline requires only forward passes through the classifier, with no adversarial attack computation at any stage. 
+
+4 Experimental Setup and Theoretical Analysis 
+
+4.1 Setup Models and datasets. We evaluate 22 adversarially robust models from RobustBench [Croce et al., 2021]: 17 CIFAR-10 [Krizhevsky, 2009] models under the ℓ2 threat model and 5 ImageNet [Rus-sakovsky et al., 2015] models under ℓ∞. CIFAR-10 models span diverse training methods including PGD-AT [Madry et al., 2019], TRADES [Zhang et al., 2019], AWP [Wu et al., 2020], data augmen-tation with DDPM [Rebuffi et al., 2021], and MMA training [Ding et al., 2020]. ImageNet models include adversarially trained ResNet and WideResNet variants [Salman et al., 2020, Wong et al., 2020]. We use the standard test sets (10K for CIFAR-10; 50K for ImageNet) with GAN-generated samples for GREAT Score computation following the protocol of Li et al. [2024]. 
+
+Implementation. All evaluations use only forward passes with cached logits. Temperature is set to 
+
+T = 1 .0 (uncalibrated) or T ∗ (self-calibrated). We use sigmoid activation for CIFAR-10 and softmax for ImageNet, matching the original GREAT Score setup. The fairness penalty is set to λ = 0 .5 for FP-GREAT. Full model lists and per-class breakdowns are in Appendix A. 
+
+4.2 Theoretical Analysis 
+
+We establish formal concentration guarantees for the per-class GREAT Scores and the derived disparity metrics. 
+
+Proposition 1 (Per-Class Concentration Bound) . Since g(x) ∈ [0 , pπ/ 2] is bounded, Hoeffding’s inequality [Hoeffding, 1963] gives, for each class k and any ϵ > 0:
+
+Pr | ˆΩk − Ωk| ≥ ϵ ≤ 2 exp 
+
+
+
+− 2nkϵ2
+
+π/ 2
+
+
+
+. (10) 
+
+Setting δk = 2 exp( −2nkϵ2/(π/ 2)) and applying a union bound over K classes, with probability at least 1 − δ, simultaneously for all k:
+
+| ˆΩk − Ωk| ≤ 
+
+s
+
+π log(2 K/δ )4nk
+
+. (11) 
+
+Proof. The local score g(x) is bounded in [0 , pπ/ 2] by construction (the confidence margin lies in 
+
+[0 , 1] and is scaled by pπ/ 2). For class k, the nk samples are i.i.d. draws from the class-conditional distribution, so Hoeffding’s inequality applies directly with range parameter b − a = pπ/ 2. Setting 
+
+δk = δ/K for each class and inverting for ϵ yields the stated bound. The union bound ensures all K
+
+inequalities hold simultaneously. 7Table 2: Spearman rank correlation ( ρ) with RobustBench accuracy rankings. Self-calibration matches or exceeds the original attack-based calibration while being fully attack-free.               
+
+> CIFAR-10 (ℓ2, 17 models) ImageNet (ℓ∞, 5 models) Uncalibrated Calibrated Uncalibrated Calibrated Original [Li et al., 2024] 0.662 0.897 †0.800 —‡
+> GF-Score (Ours) 0.662 0.871 0.900 1.000
+> †Uses C&W attack for calibration; ours is fully attack-free.
+> ‡Calibration not performed for ImageNet in the original paper.
+
+Interpretation. With nk = 1 ,000 samples per class, K = 10 classes, and δ = 0 .05 , the bound gives 
+
+| ˆΩk − Ωk| ≤ 0.069 simultaneously for all classes. 
+
+Proposition 2 (RDI Concentration Bound) . Let nmin = min k nk. Under the conditions of Proposi-tion 1, with probability at least 1 − δ:
+
+| dRDI − RDI | ≤ 2
+
+s
+
+π log(2 K/δ )4nmin 
+
+. (12) 
+
+Proof. The empirical RDI is dRDI = max k ˆΩk − min k ˆΩk, and the population RDI is RDI = max k Ωk − min k Ωk. By the triangle inequality: 
+
+| dRDI − RDI | ≤ | ˆΩk∗ − Ωk∗ | + | ˆΩk∗ − Ωk∗ |≤ 2 max  
+
+> k
+
+| ˆΩk − Ωk|, (13) where k∗ = arg max k Ωk and k∗ = arg min k Ωk. Applying Proposition 1 with nk ≥ nmin for all k
+
+completes the proof. 
+
+4.3 Decomposition Consistency 
+
+The weighted sum P
+
+> k
+
+(nk/N ) ˆΩk recovers the aggregate ˆΩ with zero numerical error across all 22 models on both datasets, confirming the mathematical identity in Equation (3). This also verifies our implementation: the per-class partition is exhaustive and non-overlapping. 
+
+5 Results 
+
+5.1 Self-Calibration and Ranking Fidelity 
+
+Table 2 reports rank correlations with RobustBench. On CIFAR-10, our uncalibrated scores achieve 
+
+ρ = 0 .662 , matching the original paper’s reported value of 0.6618 . Self-calibration at T ∗ = 2 .70 
+
+improves this to ρ = 0 .871 . On ImageNet, where the original paper reported ρ = 0 .800 without calibration, our uncalibrated scores reach ρ = 0 .900 , and calibration at T ∗ = 0 .10 yields ρ = 1 .000 
+
+(perfect ranking). The entire calibration uses only clean accuracies with no adversarial attacks. 
+
+5.2 Per-Class Robustness Disparity Class vulnerability patterns. The heatmap in Figure 1 reveals striking structure. On CIFAR-10, “cat” is the most vulnerable class in 13 of 17 models (76%), while “automobile” is the most robust in 10 of 17 (59%). The remaining worst cases are “dog” (4 models) and best cases are “horse” (5) and “truck” (2). This consistency across diverse training methods suggests that class vulnerability is driven by intrinsic data properties (visual similarity between cats and dogs, distinctiveness of vehicles) rather than training artifacts. 
+
+Robustness-fairness tension. Figure 2 plots aggregate GREAT Score against RDI. We observe a clear positive correlation: models with higher aggregate robustness tend to exhibit greater class-level disparity. On CIFAR-10, RDI ranges from 0.11 (Wu2020, most fair) to 0.43 (Augustin2020, most disparate), with the most robust models clustered in the high-RDI region. ImageNet shows the same 80.1 0.2 0.3 0.4 0.5   
+
+> Aggregate GREAT Score ( )
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> Robustness Disparity Index (RDI)
+> Augustin_WRN_extra
+> Augustin_WRN
+> Augustin2020
+> Ding_MMA
+> Engstrom2019
+> Gowal2020
+> Gowal_extra
+> Rade_R18
+> Rebuffi_28_ddpm Rebuffi_70_ddpm
+> Rebuffi_extra
+> Rebuffi_R18
+> Rice2020
+> Rony2019
+> Sehwag_Proxy
+> Sehwag_R18
+> Wu2020 Ideal: High Robustness,
+> Low Disparity
+> Robustness vs. Fairness: Pareto Analysis
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> Aggregate GREAT Score
+
+(a) CIFAR-10 0.30 0.35 0.40 0.45 0.50 0.55    
+
+> Aggregate GREAT Score ( )
+> 1.14
+> 1.16
+> 1.18
+> 1.20
+> 1.22
+> Robustness Disparity Index (RDI)
+> Salman_WRN50-2
+> Salman_R50
+> Engstrom2019
+> Wong2020
+> Salman_R18 Ideal: High Robustness,
+> Low Disparity
+> Robustness vs. Fairness: Pareto Analysis
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> Aggregate GREAT Score
+
+(b) ImageNet 
+
+Figure 2: Aggregate GREAT Score vs. RDI. Higher robustness correlates with greater class-level disparity on both datasets, revealing a quantifiable robustness-fairness tension. pattern, with RDI between 1.13 and 1.23. Two ImageNet models (Salman_R18 and Wong2020) have WCR = 0 .000 , meaning at least one class receives zero certified robustness despite positive aggregate scores. This finding provides new quantitative evidence for the robustness-fairness tension identified qualitatively by Benz et al. [2021] and Xu et al. [2021]. 
+
+FP-GREAT re-ranking. When models are ranked by FP-GREAT ( λ = 0 .5) instead of the aggregate score, rankings shift substantially. For instance, on CIFAR-10, Augustin2020 drops from 2nd (by aggregate) to 5th (by FP-GREAT) due to the highest disparity ( RDI = 0 .43 ), while Wu2020 rises from 16th to 14th due to its low disparity ( RDI = 0 .11 ). This demonstrates that fairness-aware ranking provides a meaningfully different and more nuanced view of model quality. Full FP-GREAT rankings and additional figures (disparity bars, vulnerability analysis, calibration curves, RDI concentration plots) are provided in Appendix B. 
+
+6 Discussion and Limitations 
+
+Implications. The GF-Score reveals that aggregate robustness metrics systematically hide class-level disparities that matter for deployment. The consistent vulnerability of “cat” across 76% of CIFAR-10 models, and the existence of ImageNet models with WCR = 0 (zero certified robustness on at least one class), demonstrate that passing an aggregate robustness audit provides no guarantee for individual classes. The positive correlation between aggregate robustness and RDI suggests that improving overall robustness through current training methods may inadvertently worsen fairness, reinforcing the tension identified by Xu et al. [2021] and Benz et al. [2021] with new certified evidence. Our framework enables practitioners to detect such issues post-hoc, without retraining, making it complementary to training-time fairness interventions [Wei et al., 2023, Zhang et al., 2024]. 
+
+Limitations. Our framework inherits the assumptions of the GREAT Score: (1) the generative model must approximate the true data distribution well enough for the certified bound to be meaningful; (2) the local score’s certification relies on the confidence margin, which may be loose for models with poorly calibrated softmax outputs. The self-calibration procedure assumes a monotonic relationship between robustness and clean accuracy, which holds within a defense family but may not hold across fundamentally different architectures. Our ImageNet evaluation covers only 5 models due to computational constraints on logit extraction for 50K images across 1000 classes; scaling to more models would strengthen the findings. Finally, while we provide concentration bounds for RDI, tighter bounds for NRGC and WCR remain open theoretical questions. 
+
+Conclusion. We introduced the GF-Score, a framework that decomposes the certified GREAT Score into per-class robustness profiles and quantifies their disparity through four metrics grounded in welfare economics. The decomposition is provably exact and comes with finite-sample concentra-tion guarantees. Our attack-free self-calibration eliminates the need for adversarial attacks entirely, achieving rank correlations of ρ = 0 .871 on CIFAR-10 and ρ = 1 .000 on ImageNet with Robust-9Bench. Evaluating 22 models across two benchmarks, we find that class vulnerability is remarkably consistent (“cat” is worst in 76% of CIFAR-10 models) and that more robust models exhibit greater class-level disparity. These findings demonstrate that aggregate robustness scores are insufficient for safety-critical deployment and that post-hoc fairness auditing of robustness is both feasible and necessary. We release an interactive auditing dashboard alongside our evaluation code to support adoption by practitioners and researchers. 
+
+References 
+
+Fatemeh Amerehi and Patrick Healy. Narrowing class-wise robustness gaps in adversarial training, 2025. URL https://arxiv.org/abs/2503.16179 .Anish Athalye, Nicholas Carlini, and David Wagner. Obfuscated gradients give a false sense of security: Circumventing defenses to adversarial examples, 2018. URL https://arxiv.org/ abs/1802.00420 .Philipp Benz, Chaoning Zhang, Adil Karjauv, and In So Kweon. Robustness may be at odds with fairness: An empirical study on class-wise accuracy, 2021. URL https://arxiv.org/abs/ 2010.13365 .Nicholas Carlini and David Wagner. Towards evaluating the robustness of neural networks, 2017. URL https://arxiv.org/abs/1608.04644 .Jeremy M Cohen, Elan Rosenfeld, and J. Zico Kolter. Certified adversarial robustness via randomized smoothing, 2019. URL https://arxiv.org/abs/1902.02918 .Cyrus Cousins. An axiomatic theory of provably-fair welfare-centric machine learning, 2021. URL 
+
+https://arxiv.org/abs/2104.14504 .Francesco Croce and Matthias Hein. Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks, 2020. URL https://arxiv.org/abs/2003.01690 .Francesco Croce, Maksym Andriushchenko, Vikash Sehwag, Edoardo Debenedetti, Nicolas Flam-marion, Mung Chiang, Prateek Mittal, and Matthias Hein. Robustbench: a standardized adversarial robustness benchmark, 2021. URL https://arxiv.org/abs/2010.09670 .Gavin Weiguang Ding, Yash Sharma, Kry Yik Chau Lui, and Ruitong Huang. Mma training: Direct input space margin maximization through adversarial training, 2020. URL https://arxiv.org/ abs/1812.02637 .Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples, 2015. URL https://arxiv.org/abs/1412.6572 .Wassily Hoeffding. Probability inequalities for sums of bounded random variables. J. Am. Stat. Assoc. , 58(301):13–30, March 1963. Gaojie Jin, Sihao Wu, Jiaxu Liu, Tianjin Huang, and Ronghui Mu. Enhancing robust fairness via confusional spectral regularization, 2025. URL https://arxiv.org/abs/2501.13273 .Alex Krizhevsky. Learning multiple layers of features from tiny images, 2009. URL https: //api.semanticscholar.org/CorpusID:18268744 .Mathias Lecuyer, Vaggelis Atlidakis, Roxana Geambasu, Daniel Hsu, and Suman Jana. Certified robustness to adversarial examples with differential privacy, 2019. URL https://arxiv.org/ abs/1802.03471 .Boqi Li and Weiwei Liu. Wat: Improve the worst-class robustness in adversarial training, 2023. URL 
+
+https://arxiv.org/abs/2302.04025 .Linyi Li, Tao Xie, and Bo Li. Sok: Certified robustness for deep neural networks, 2023. URL 
+
+https://arxiv.org/abs/2009.04131 .Zaitang Li, Pin-Yu Chen, and Tsung-Yi Ho. Great score: Global robustness evaluation of adversarial perturbation using generative models, 2024. URL https://arxiv.org/abs/2304.09875 .10 Chenhao Lin, Xiang Ji, Yulong Yang, Qian Li, Chao Shen, Run Wang, and Liming Fang. Hard adversarial example mining for improving robust fairness, 2023. URL https://arxiv.org/ abs/2308.01823 .Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks, 2019. URL https://arxiv.org/ abs/1706.06083 .Ningping Mou, Xinli Yue, Lingchen Zhao, and Qian Wang. Fairness is essential for robustness: fair adversarial training by identifying and augmenting hard examples. Front. Comput. Sci. , 19(3), March 2025. John Rawls. A theory of justice . Belknap Press, London, England, July 2009. Sylvestre-Alvise Rebuffi, Sven Gowal, Dan A. Calian, Florian Stimberg, Olivia Wiles, and Timothy Mann. Fixing data augmentation to improve adversarial robustness, 2021. URL https://arxiv. org/abs/2103.01946 .Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma, Zhiheng Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein, Alexander C. Berg, and Li Fei-Fei. Imagenet large scale visual recognition challenge, 2015. URL https://arxiv.org/abs/1409.0575 .Shiori Sagawa, Pang Wei Koh, Tatsunori B. Hashimoto, and Percy Liang. Distributionally robust neural networks for group shifts: On the importance of regularization for worst-case generalization, 2020. URL https://arxiv.org/abs/1911.08731 .Hadi Salman, Greg Yang, Jerry Li, Pengchuan Zhang, Huan Zhang, Ilya Razenshteyn, and Sebastien Bubeck. Provably robust deep learning via adversarially trained smoothed classifiers, 2020. URL 
+
+https://arxiv.org/abs/1906.04584 .C Spearman. The proof and measurement of association between two things. Int. J. Epidemiol. , 39 (5):1137–1150, October 2010. Till Speicher, Hoda Heidari, Nina Grgic-Hlaca, Krishna P. Gummadi, Adish Singla, Adrian Weller, and Muhammad Bilal Zafar. A unified approach to quantifying algorithmic unfair-ness: Measuring individual & group unfairness via inequality indices. In Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery & Data Min-ing , KDD ’18, page 2239–2248. ACM, July 2018. doi: 10.1145/3219819.3220046. URL 
+
+http://dx.doi.org/10.1145/3219819.3220046 .Chunyu Sun, Chenye Xu, Chengyuan Yao, Siyuan Liang, Yichao Wu, Ding Liang, XiangLong Liu, and Aishan Liu. Improving robust fairness via balance adversarial training, 2022. URL 
+
+https://arxiv.org/abs/2209.07534 .Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Goodfellow, and Rob Fergus. Intriguing properties of neural networks, 2014. URL https://arxiv.org/ abs/1312.6199 .Qi Tian, Kun Kuang, Kelu Jiang, Fei Wu, and Yisen Wang. Analysis and applications of class-wise robustness in adversarial training, 2021. URL https://arxiv.org/abs/2105.14240 .Dimitris Tsipras, Shibani Santurkar, Logan Engstrom, Alexander Turner, and Aleksander Madry. Robustness may be at odds with accuracy, 2019. URL https://arxiv.org/abs/1805.12152 .Zeming Wei, Yifei Wang, Yiwen Guo, and Yisen Wang. Cfa: Class-wise calibrated fair adversarial training, 2023. URL https://arxiv.org/abs/2303.14460 .Eric Wong and J. Zico Kolter. Provable defenses against adversarial examples via the convex outer adversarial polytope, 2018. URL https://arxiv.org/abs/1711.00851 .Eric Wong, Leslie Rice, and J. Zico Kolter. Fast is better than free: Revisiting adversarial training, 2020. URL https://arxiv.org/abs/2001.03994 .Dongxian Wu, Shu tao Xia, and Yisen Wang. Adversarial weight perturbation helps robust general-ization, 2020. URL https://arxiv.org/abs/2004.05884 .11 Han Xu, Xiaorui Liu, Yaxin Li, Anil K. Jain, and Jiliang Tang. To be robust or to be fair: Towards fairness in adversarial training, 2021. URL https://arxiv.org/abs/2010.06121 .Hongyang Zhang, Yaodong Yu, Jiantao Jiao, Eric P. Xing, Laurent El Ghaoui, and Michael I. Jordan. Theoretically principled trade-off between robustness and accuracy, 2019. URL https: //arxiv.org/abs/1901.08573 .Yanghao Zhang, Tianle Zhang, Ronghui Mu, Xiaowei Huang, and Wenjie Ruan. Towards fairness-aware adversarial learning, 2024. URL https://arxiv.org/abs/2402.17729 .Hongxin Zhi, Hongtao Yu, Shaome Li, Xiuming Zhao, and Yiteng Wu. Towards fair class-wise robustness: Class optimal distribution adversarial training, 2025. URL https://arxiv.org/ abs/2501.04527 .Beier Zhu, Kesen Zhao, Jiequan Cui, Qianru Sun, Yuan Zhou, Xun Yang, and Hanwang Zhang. Reducing class-wise performance disparity via margin regularization, 2026. URL https:// arxiv.org/abs/2602.00205 .
+
+A Full Experimental Results 
+
+This appendix provides complete numerical results for all 22 models evaluated in our experiments. Table 3 reports the full CIFAR-10 results and Table 4 reports the ImageNet results. Table 5 provides the per-class GREAT Score breakdown for all CIFAR-10 models. Table 3: Full GF-Score results for 17 CIFAR-10 ℓ2 models, sorted by RobustBench accuracy. RB Acc :RobustBench robust accuracy (%). GS : uncalibrated GREAT Score. Cal. GS : calibrated GREAT Score ( T ∗ = 2 .70 ). FP-GR : Fairness-Penalized GREAT ( λ = 0 .5).                                                                                                                                                 
+
+> Model RB Acc GS Cal. GS RDI NRGC WCR WCR Class FP-GR
+> Rebuffi_extra 82.32 0.465 0.330 0.333 0.135 0.283 cat 0.298 Gowal_extra 80.53 0.480 0.344 0.348 0.138 0.288 cat 0.306 Rebuffi_70_ddpm 80.42 0.381 0.277 0.360 0.178 0.166 cat 0.201 Augustin_WRN_ext 78.79 0.526 0.330 0.319 0.105 0.335 cat 0.366 Rebuffi_28_ddpm 78.80 0.352 0.255 0.359 0.191 0.144 cat 0.173 Sehwag_Proxy 77.24 0.232 0.290 0.302 0.250 0.060 cat 0.081 Augustin_WRN 76.25 0.483 0.309 0.385 0.135 0.242 cat 0.291 Rade_R18 76.15 0.337 0.256 0.315 0.177 0.157 cat 0.179 Rebuffi_R18 75.86 0.302 0.220 0.326 0.193 0.121 cat 0.139 Gowal2020 74.50 0.111 0.207 0.121 0.192 0.046 dog 0.050 Sehwag_R18 74.41 0.186 0.257 0.248 0.258 0.054 cat 0.062 Wu2020 73.66 0.105 0.173 0.111 0.194 0.047 dog 0.049 Augustin2020 72.91 0.488 0.304 0.435 0.142 0.218 cat 0.271 Engstrom2019 69.24 0.126 0.252 0.234 0.327 0.024 dog 0.009 Rice2020 67.68 0.117 0.212 0.200 0.309 0.031 dog 0.017 Rony2019 66.44 0.222 0.324 0.275 0.225 0.096 cat 0.085 Ding_MMA 66.09 0.086 0.235 0.127 0.218 0.039 cat 0.023
+
+Table 4: Full GF-Score results for 5 ImageNet ℓ∞ models, sorted by RobustBench accuracy. Cal-ibrated at T ∗ = 0 .10 . Two models achieve WCR = 0 .000 , indicating at least one class with zero certified robustness. 
+
+Model RB Acc GS Cal. GS RDI NRGC WCR WCR Class FP-GR 
+
+Salman_WRN50-2 38.14 0.545 0.800 1.231 0.299 0.009 n01756291 −0.070 Salman_R50 34.96 0.444 0.730 1.198 0.350 0.003 n04525038 −0.155 Engstrom2019 29.22 0.446 0.717 1.196 0.361 0.003 n03710637 −0.152 Wong2020 26.24 0.360 0.591 1.148 0.388 0.000 n04525038 −0.214 Salman_R18 25.32 0.280 0.575 1.126 0.454 0.000 n04525038 −0.283 
+
+12 Table 5: Per-class GREAT Scores for all 17 CIFAR-10 ℓ2 models (uncalibrated, T = 1 .0). The class “cat” (column 4) is consistently the lowest-scoring class, while “automobile” (column 2) is consistently the highest. The final column shows the aggregate score, which equals the weighted mean of per-class scores with zero numerical error. 
+
+Model 
+
+> airplane
+> auto
+> bird
+> cat
+> deer
+> dog
+> frog
+> horse
+> ship
+> truck
+> Agg.
+
+Aug._WRN_ext .579 .654 .463 .335 .430 .444 .518 .598 .613 .621 .526 Aug._WRN .486 .628 .435 .242 .404 .346 .548 .577 .584 .585 .483 Aug.2020 .526 .652 .440 .218 .419 .336 .537 .582 .584 .588 .488 Ding_MMA .084 .128 .074 .039 .064 .047 .090 .166 .090 .080 .086 Engstrom .115 .232 .092 .038 .077 .024 .102 .168 .158 .258 .126 Gowal2020 .112 .122 .082 .061 .098 .046 .118 .167 .153 .146 .111 Gowal_ext .549 .636 .391 .288 .349 .368 .459 .591 .570 .598 .480 Rade_R18 .373 .472 .244 .157 .238 .211 .375 .420 .437 .441 .337 Reb._28_ddpm .391 .502 .265 .144 .248 .201 .396 .445 .461 .468 .352 Reb._70_ddpm .414 .527 .302 .166 .282 .221 .430 .478 .493 .499 .381 Reb._extra .528 .616 .373 .283 .341 .368 .441 .562 .553 .582 .465 Reb._R18 .324 .447 .227 .121 .215 .176 .343 .387 .398 .379 .302 Rice2020 .107 .200 .074 .031 .079 .031 .107 .151 .156 .231 .117 Rony2019 .212 .370 .193 .096 .107 .129 .232 .298 .306 .278 .222 Sehwag_Proxy .227 .277 .201 .060 .154 .072 .341 .363 .313 .317 .232 Sehwag_R18 .197 .233 .129 .054 .115 .061 .261 .302 .272 .240 .186 Wu2020 .104 .134 .078 .062 .091 .047 .097 .158 .116 .158 .105 
+
+B Additional Figures 
+
+This section presents additional visualizations referenced in the main text. All figures are generated from the same evaluation data reported in Appendix A. 
+
+B.1 Disparity Bar Charts 
+
+Figure 3 shows per-model RDI, NRGC, WCR, and FP-GREAT values as bar charts, providing an intuitive comparison of disparity across models within each dataset. Augustin2020  
+
+> Augustin_WRN
+> Rebuffi_70_ddpm
+> Rebuffi_28_ddpm
+> Gowal_extra
+> Rebuffi_extra
+> Rebuffi_R18
+> Augustin_WRN_extra
+> Rade_R18
+> Sehwag_Proxy
+> Rony2019
+> Sehwag_R18
+> Engstrom2019
+> Rice2020
+> Ding_MMA
+> Gowal2020
+> Wu2020
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> Metric Value
+> Fairness Metrics Across Models
+> (sorted by RDI )
+> RDI
+> NRGC
+> WCR
+
+(a) CIFAR-10 ( ℓ2, 17 models) Salman_WRN50-2   
+
+> Salman_R50
+> Engstrom2019
+> Wong2020
+> Salman_R18
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> Metric Value
+> Fairness Metrics Across Models
+> (sorted by RDI )
+> RDI
+> NRGC
+> WCR
+
+(b) ImageNet ( ℓ∞, 5 models) 
+
+Figure 3: Disparity metric bar charts. Models are sorted by aggregate GREAT Score. Higher RDI and NRGC indicate greater disparity; lower WCR indicates worse fairness. All ImageNet models exhibit high RDI ( > 1.1) due to the extreme class diversity (1,000 classes). 
+
+B.2 Vulnerability Analysis 
+
+Figure 4 visualizes which classes are most and least robust across all models. 13 0.0 0.1 0.2 0.3 0.4 0.5 0.6 
+
+Mean Per-Class GREAT Score (±1 SD across models) 
+
+cat 
+
+dog 
+
+deer 
+
+bird 
+
+airplane 
+
+frog 
+
+ship 
+
+horse 
+
+truck 
+
+automobile 
+
+Class Vulnerability Analysis 
+
+(averaged across all models) 
+
+Grand Mean (a) CIFAR-10 0.0 0.2 0.4 0.6 0.8 1.0 1.2 
+
+Mean Per-Class GREAT Score (±1 SD across models) 
+
+n04525038 
+
+n04008634 
+
+n01756291 
+
+n03710637 
+
+n04560804 
+
+n02113624 
+
+n04152593 
+
+n01740131 
+
+n04493381 
+
+n01737021 
+
+n04355933 
+
+n03866082 
+
+n04392985 
+
+n01744401 
+
+n03476991 
+
+n02107908 
+
+n03782006 
+
+n03125729 
+
+n02808440 
+
+n04356056 
+
+n02279972 
+
+n02917067 
+
+n04562935 
+
+n02025239 
+
+n01818515 
+
+n03393912 
+
+n02111129 
+
+n02606052 
+
+n03447447 
+
+n11939491 
+
+n01622779 
+
+n02276258 
+
+n01820546 
+
+n13044778 
+
+n11879895 
+
+n01860187 
+
+n02391049 
+
+n03590841 
+
+n03841143 
+
+n12057211 
+
+Class Vulnerability Analysis 
+
+(averaged across all models) 
+
+(Bottom 20 + Top 20 Classes) 
+
+Grand Mean (b) ImageNet 
+
+Figure 4: Class vulnerability analysis. On CIFAR-10, “cat” appears as the worst-case class in 13 of 17 models (76%), while “automobile” is the best class in 10 of 17 (59%). On ImageNet, “n04525038” (viaduct) is worst in 3 of 5 models, while “n12057211” (cattail) is best in all 5. 
+
+B.3 FP-GREAT Rankings 
+
+Figure 5 shows how model rankings change when using FP-GREAT ( λ = 0 .5) instead of the aggregate GREAT Score. Models with high disparity are penalized and drop in the fairness-aware ranking. 0.0 0.1 0.2 0.3 0.4 0.5 
+
+GREAT Score 
+
+Augustin_WRN_extra 
+
+Augustin2020 
+
+Augustin_WRN 
+
+Gowal_extra 
+
+Rebuffi_extra 
+
+Rebuffi_70_ddpm 
+
+Rebuffi_28_ddpm 
+
+Rade_R18 
+
+Rebuffi_R18 
+
+Sehwag_Proxy 
+
+Rony2019 
+
+Sehwag_R18 
+
+Engstrom2019 
+
+Rice2020 
+
+Gowal2020 
+
+Wu2020 
+
+Ding_MMA 
+
+Standard GREAT Score Ranking 
+
+0.00 0.05 0.10 0.15 0.20 0.25 0.30 0.35 
+
+FP-GREAT Score ( =0.5) 
+
+Augustin_WRN_extra 
+
+Gowal_extra 
+
+Rebuffi_extra 
+
+Augustin_WRN 
+
+Augustin2020 
+
+Rebuffi_70_ddpm 
+
+Rade_R18 
+
+Rebuffi_28_ddpm 
+
+Rebuffi_R18 
+
+Rony2019 
+
+Sehwag_Proxy 
+
+Sehwag_R18 
+
+Gowal2020 
+
+Wu2020 
+
+Ding_MMA 
+
+Rice2020 
+
+Engstrom2019 
+
+Fairness-Penalized Ranking 
+
+Impact of Fairness Penalty on Model Ranking 
+
+(a) CIFAR-10 0.0 0.1 0.2 0.3 0.4 0.5 
+
+GREAT Score 
+
+Salman_WRN50-2 
+
+Engstrom2019 
+
+Salman_R50 
+
+Wong2020 
+
+Salman_R18 
+
+Standard GREAT Score Ranking 
+
+0.25 0.20 0.15 0.10 0.05 0.00 
+
+FP-GREAT Score ( =0.5) 
+
+Salman_WRN50-2 
+
+Engstrom2019 
+
+Salman_R50 
+
+Wong2020 
+
+Salman_R18 
+
+Fairness-Penalized Ranking 
+
+Impact of Fairness Penalty on Model Ranking (b) ImageNet 
+
+Figure 5: FP-GREAT re-ranking. On CIFAR-10, models with low disparity (e.g., Wu2020) rise, while those with high disparity (e.g., Augustin2020) fall. On ImageNet, the high RDI values ( > 1.1)cause all FP-GREAT scores to be negative at λ = 0 .5.
+
+B.4 Self-Calibration Curves 
+
+Figure 6 plots the Spearman rank correlation as a function of temperature T during the self-calibration grid search. 14 0.0 0.5 1.0 1.5 2.0 2.5 3.0       
+
+> Temperature (T)
+> 0.76
+> 0.78
+> 0.80
+> 0.82
+> 0.84
+> 0.86
+> Avg. Spearman Correlation
+> Accuracy-Correlation Calibration
+> T*=2.700
+> 0.0 0.5 1.0 1.5 2.0 2.5 3.0
+> Temperature (T)
+> 0.986
+> 0.988
+> 0.990
+> 0.992
+> 0.994
+> 0.996
+> 0.998
+> 1.000
+> Min. Ranking Stability
+> Ranking-Stability Calibration
+> T*=0.850
+
+Attack-Free Self-Calibration Results (a) CIFAR-10 ( T ∗ = 2 .70 , ρ = 0 .871 )0.0 0.5 1.0 1.5 2.0 2.5 3.0       
+
+> Temperature (T)
+> 0.84
+> 0.86
+> 0.88
+> 0.90
+> 0.92
+> 0.94
+> 0.96
+> 0.98
+> 1.00
+> Avg. Spearman Correlation
+> Accuracy-Correlation Calibration
+> T*=0.100
+> 0.0 0.5 1.0 1.5 2.0 2.5 3.0
+> Temperature (T)
+> 0.9992
+> 0.9993
+> 0.9994
+> 0.9995
+> 0.9996
+> 0.9997
+> 0.9998
+> 0.9999
+> 1.0000
+> Min. Ranking Stability
+> Ranking-Stability Calibration
+> T*=3.000
+
+Attack-Free Self-Calibration Results (b) ImageNet ( T ∗ = 0 .10 , ρ = 1 .000 )
+
+Figure 6: Self-calibration curves. Both curves are smooth, confirming that the two-phase grid search reliably finds the optimum. On ImageNet, perfect agreement with RobustBench rankings is achieved using only clean accuracies. 
+
+B.5 RDI Concentration Bounds 
+
+Figure 7 visualizes the RDI concentration bound from Proposition 2 as a function of per-class sample size nk.10 1 10 2 10 3
+
+Samples per Class (n_k) 
+
+0.250 
+
+0.275 
+
+0.300 
+
+0.325 
+
+0.350 
+
+0.375 
+
+0.400 
+
+> Robustness Disparity Index
+
+RDI Concentration (Proposition 2) 
+
+Model: Augustin_WRN_extra 
+
+Sample RDI (mean) 
+
+±2 SD 
+
+True RDI = 0.3189 
+
+(a) CIFAR-10 ( K = 10 , δ = 0 .05 )10 1 10 2 10 3
+
+Samples per Class (n_k) 
+
+1.20 
+
+1.22 
+
+1.24 
+
+1.26 
+
+1.28 
+
+1.30 
+
+> Robustness Disparity Index
+
+RDI Concentration (Proposition 2) 
+
+Model: Salman_WRN50-2 
+
+Sample RDI (mean) 
+
+±2 SD 
+
+True RDI = 1.2311 (b) ImageNet ( K = 1 ,000 , δ = 0 .05 )
+
+Figure 7: RDI concentration bounds. The bound tightens as per-class sample size increases. Our CIFAR-10 evaluation with 1,000 samples per class provides tight estimates; the ImageNet union bound over 1,000 classes requires more samples, but 50 per class still achieves a bound of approximately 0.35. 
+
+B.6 Radar Chart 
+
+Figure 8 shows a radar chart of per-class GREAT Scores for selected CIFAR-10 models, providing an intuitive visualization of how robustness profiles differ across models. 15 airplane 
+
+automobile 
+
+bird cat 
+
+deer 
+
+dog 
+
+frog 
+
+horse ship 
+
+truck 
+
+0.1 
+
+0.2 
+
+0.3 
+
+0.4 
+
+0.5 
+
+0.6 
+
+Per-Class Robustness Profiles 
+
+(Class-Conditional GREAT Score) Augustin_WRN_extra 
+
+Augustin2020 
+
+Augustin_WRN 
+
+Gowal_extra 
+
+Rebuffi_extra Figure 8: Radar chart of per-class GREAT Scores for selected CIFAR-10 models. Each axis represents one class. Models with higher aggregate scores (outer polygons) show more pronounced asymmetry between classes, visually confirming the robustness-fairness tension. 
+
+B.7 ImageNet Heatmap 
+
+Figure 9 shows the per-class GREAT Score heatmap for ImageNet models, analogous to Figure 1 in the main text for CIFAR-10. n04525038 
+
+> n04008634
+> n01756291
+> n03710637
+> n04560804
+> n02113624
+> n04152593
+> n01740131
+> n04493381
+> n01737021
+> n01622779
+> n02276258
+> n01820546
+> n13044778
+> n11879895
+> n01860187
+> n02391049
+> n03590841
+> n03841143
+> n12057211
+
+Class 
+
+Salman_WRN50-2 
+
+Engstrom2019 
+
+Salman_R50 
+
+Wong2020 
+
+Salman_R18 
+
+> Model (sorted by aggregate score  )
+
+0.014 0.012 0.009 0.035 0.023 0.028 0.011 0.025 0.051 0.059 1.116 1.168 1.170 1.177 1.115 1.152 1.141 1.146 1.175 1.240 
+
+0.004 0.016 0.017 0.003 0.009 0.015 0.040 0.022 0.013 0.020 1.101 1.126 1.144 1.155 1.116 1.124 1.141 1.120 1.158 1.199 
+
+0.003 0.013 0.010 0.014 0.016 0.029 0.014 0.016 0.021 0.022 1.081 1.125 1.124 1.109 1.092 1.125 1.120 1.139 1.130 1.201 
+
+0.000 0.005 0.014 0.012 0.024 0.009 0.013 0.020 0.011 0.003 1.049 1.013 1.019 0.985 1.093 1.059 1.116 1.083 1.089 1.148 
+
+0.000 0.006 0.009 0.003 0.011 0.003 0.007 0.006 0.001 0.001 0.972 0.983 0.966 1.016 1.044 1.033 1.036 1.080 1.059 1.126 
+
+Class-Conditional Robustness Heatmap (Top/Bottom 10 Classes) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+> Per-Class GREAT Score (  )
+
+Figure 9: Per-class GREAT Scores for 5 ImageNet ℓ∞ models. The extreme contrast between the brightest and darkest columns reflects the high RDI values ( > 1.1) reported in Table 4. Several classes receive near-zero scores across all models. 16
