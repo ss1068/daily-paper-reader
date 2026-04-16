@@ -6,79 +6,70 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-15
-- 运行时间：2026-04-15 20:11:03 UTC
+- 最新运行日期：2026-04-16
+- 运行时间：2026-04-16 20:25:16 UTC
 - 运行状态：成功
-- 本次总论文数：19
-- 精读区：10
-- 速读区：9
+- 本次总论文数：16
+- 精读区：6
+- 速读区：10
 
 ### 今日简报（AI）
-今日精选 19 篇前沿论文，深度聚焦 LLM 聊天模板漏洞挖掘与 Web Agent 提示词注入防御。
-满分研究展示了细粒度模糊测试在越狱攻击中的威力，并提出基于推理的 Guard 模型守护智能体安全。
-建议开发者重点关注大模型攻防实战及全同态加密隐私推理，构建更稳健的 AI 应用。
-- 详情：[/202604/15/README](/202604/15/README)
+今日精选 16 篇前沿论文，深度剖析了大规模推理模型在逻辑冲突与检索投毒下的安全软肋。
+研究重点揭示了 AdversarialCoT 等手段如何通过干扰检索源瓦解模型推理，证明了当前推理链条的脆弱性。
+建议在构建 RAG 或复杂推理系统时，务必加强对输入冲突检测与检索内容的安全性审计。
+- 详情：[/202604/16/README](/202604/16/README)
 
 ### 精读区论文标签
-1. [TEMPLATEFUZZ: Fine-Grained Chat Template Fuzzing for Jailbreaking and Red Teaming LLMs](/202604/15/2604.12232v1-templatefuzz-fine-grained-chat-template-fuzzing-for-jailbreaking-and-red-teaming-llms)  
-   标签：评分：10.0/10、query:llm
-   evidence：针对大语言模型越狱的聊天模板模糊测试
-2. [WebAgentGuard: A Reasoning-Driven Guard Model for Detecting Prompt Injection Attacks in Web Agents](/202604/15/2604.12284v1-webagentguard-a-reasoning-driven-guard-model-for-detecting-prompt-injection-attacks-in-web-agents)  
-   标签：评分：10.0/10、query:llm
-   evidence：用于检测Web智能体提示注入的推理驱动防护模型
-3. [Reading Between the Pixels: Linking Text-Image Embedding Alignment to Typographic Attack Success on Vision-Language Models](/202604/15/2604.12371v1-reading-between-the-pixels-linking-text-image-embedding-alignment-to-typographic-attack-success-on-vision-language-models)  
-   标签：评分：10.0/10、query:llm
-   evidence：针对视觉语言模型的排版提示注入攻击
-4. [DeepSeek Robustness Against Semantic-Character Dual-Space Mutated Prompt Injection](/202604/15/2604.12548v1-deepseek-robustness-against-semantic-character-dual-space-mutated-prompt-injection)  
-   标签：评分：10.0/10、query:llm
-   evidence：提示注入漏洞与鲁棒性
-5. [Understanding and Improving Continuous Adversarial Training for LLMs via In-context Learning Theory](/202604/15/2604.12817v1-understanding-and-improving-continuous-adversarial-training-for-llms-via-in-context-learning-theory)  
-   标签：评分：10.0/10、query:llm
-   evidence：针对越狱攻击的LLM对抗训练
-6. [FedDetox: Robust Federated SLM Alignment via On-Device Data Sanitization](/202604/15/2604.06833v1-feddetox-robust-federated-slm-alignment-via-on-device-data-sanitization)  
+1. [Conflicts Make Large Reasoning Models Vulnerable to Attacks](/202604/16/2604.09750v1-conflicts-make-large-reasoning-models-vulnerable-to-attacks)  
    标签：评分：9.0/10、query:llm
-   evidence：针对非预期数据投毒的鲁棒联邦对齐
-7. [Compiling Activation Steering into Weights via Null-Space Constraints for Stealthy Backdoors](/202604/15/2604.12359v1-compiling-activation-steering-into-weights-via-null-space-constraints-for-stealthy-backdoors)  
+   evidence：研究大语言模型在冲突目标下对有害查询的响应
+2. [AdversarialCoT: Single-Document Retrieval Poisoning for LLM Reasoning](/202604/16/2604.12201v1-adversarialcot-single-document-retrieval-poisoning-for-llm-reasoning)  
    标签：评分：9.0/10、query:llm
-   evidence：在隐藏触发器下导致越狱的隐蔽后门
-8. [Preventing Safety Drift in Large Language Models via Coupled Weight and Activation Constraints](/202604/15/2604.12384v1-preventing-safety-drift-in-large-language-models-via-coupled-weight-and-activation-constraints)  
+   evidence：针对LLM推理的检索投毒
+3. [Reading Between the Pixels: Linking Text-Image Embedding Alignment to Typographic Attack Success on Vision-Language Models](/202604/16/2604.12371v2-reading-between-the-pixels-linking-text-image-embedding-alignment-to-typographic-attack-success-on-vision-language-models)  
    标签：评分：9.0/10、query:llm
-   evidence：通过安全对齐保护减轻越狱漏洞
-9. [Every Picture Tells a Dangerous Story: Memory-Augmented Multi-Agent Jailbreak Attacks on VLMs](/202604/15/2604.12616v1-every-picture-tells-a-dangerous-story-memory-augmented-multi-agent-jailbreak-attacks-on-vlms)  
+   evidence：视觉语言模型中的排版提示注入攻击
+4. [SafeHarness: Lifecycle-Integrated Security Architecture for LLM-based Agent Deployment](/202604/16/2604.13630v1-safeharness-lifecycle-integrated-security-architecture-for-llm-based-agent-deployment)  
    标签：评分：9.0/10、query:llm
-   evidence：针对视觉语言模型的多智能体越狱攻击
-10. [LASA: Language-Agnostic Semantic Alignment at the Semantic Bottleneck for LLM Safety](/202604/15/2604.12710v1-lasa-language-agnostic-semantic-alignment-at-the-semantic-bottleneck-for-llm-safety)  
-   标签：评分：9.0/10、query:llm
-   evidence：用于大语言模型安全防御的跨语言语义对齐
+   evidence：基于LLM代理部署的安全架构
+5. [ADAM: A Systematic Data Extraction Attack on Agent Memory via Adaptive Querying](/202604/16/2604.09747v1-adam-a-systematic-data-extraction-attack-on-agent-memory-via-adaptive-querying)  
+   标签：评分：8.0/10、query:llm
+   evidence：针对LLM代理记忆的数据提取攻击
+6. [MCPThreatHive: Automated Threat Intelligence for Model Context Protocol Ecosystems](/202604/16/2604.13849v1-mcpthreathive-automated-threat-intelligence-for-model-context-protocol-ecosystems)  
+   标签：评分：8.0/10、query:llm
+   evidence：LLM智能体生态系统的自动化威胁情报
 
 ### 速读区论文标签
-1. [AdverMCTS: Combating Pseudo-Correctness in Code Generation via Adversarial Monte Carlo Tree Search](/202604/15/2604.10449v1-advermcts-combating-pseudo-correctness-in-code-generation-via-adversarial-monte-carlo-tree-search)  
-   标签：评分：8.0/10、query:llm
-   evidence：用于主动漏洞发现的对抗搜索
-2. [Finetune Like You Pretrain: Boosting Zero-shot Adversarial Robustness in Vision-language Models](/202604/15/2604.11576v1-finetune-like-you-pretrain-boosting-zero-shot-adversarial-robustness-in-vision-language-models)  
-   标签：评分：8.0/10、query:llm
-   evidence：提升视觉语言模型的零样本对抗鲁棒性
-3. [Fully Homomorphic Encryption on Llama 3 model for privacy preserving LLM inference](/202604/15/2604.12168v1-fully-homomorphic-encryption-on-llama-3-model-for-privacy-preserving-llm-inference)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对数据投毒和提示词注入的大语言模型安全
-4. [Challenging Vision-Language Models with Physically Deployable Multimodal Semantic Lighting Attacks](/202604/15/2604.12833v1-challenging-vision-language-models-with-physically-deployable-multimodal-semantic-lighting-attacks)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对视觉语言模型的物理对抗攻击
-5. [QShield: Securing Neural Networks Against Adversarial Attacks using Quantum Circuits](/202604/15/2604.10933v1-qshield-securing-neural-networks-against-adversarial-attacks-using-quantum-circuits)  
+1. [DuCodeMark: Dual-Purpose Code Dataset Watermarking via Style-Aware Watermark-Poison Design](/202604/16/2604.10611v1-ducodemark-dual-purpose-code-dataset-watermarking-via-style-aware-watermark-poison-design)  
    标签：评分：7.0/10、query:llm
-   evidence：保护神经网络免受对抗性攻击
-6. [CoLA: A Choice Leakage Attack Framework to Expose Privacy Risks in Subset Training](/202604/15/2604.12342v1-cola-a-choice-leakage-attack-framework-to-expose-privacy-risks-in-subset-training)  
+   evidence：代码数据集的水印投毒设计
+2. [Structured Safety Auditing for Balancing Code Correctness and Content Safety in LLM-Generated Code](/202604/16/2604.12088v1-structured-safety-auditing-for-balancing-code-correctness-and-content-safety-in-llm-generated-code)  
    标签：评分：7.0/10、query:llm
-   evidence：大语言模型子集训练中的隐私风险和信息泄露
-7. [GF-Score: Certified Class-Conditional Robustness Evaluation with Fairness Guarantees](/202604/15/2604.12757v1-gf-score-certified-class-conditional-robustness-evaluation-with-fairness-guarantees)  
+   evidence：大模型生成代码的安全审计与内容安全
+3. [CIA: Inferring the Communication Topology from LLM-based Multi-Agent Systems](/202604/16/2604.12461v1-cia-inferring-the-communication-topology-from-llm-based-multi-agent-systems)  
    标签：评分：7.0/10、query:llm
-   evidence：认证的类别条件鲁棒性评估
-8. [LLM-Redactor: An Empirical Evaluation of Eight Techniques for Privacy-Preserving LLM Requests](/202604/15/2604.12064v1-llm-redactor-an-empirical-evaluation-of-eight-techniques-for-privacy-preserving-llm-requests)  
+   evidence：利用对抗性查询推断大模型多智能体系统的拓扑结构
+4. [From Anchors to Supervision: Memory-Graph Guided Corpus-Free Unlearning for Large Language Models](/202604/16/2604.13777v1-from-anchors-to-supervision-memory-graph-guided-corpus-free-unlearning-for-large-language-models)  
+   标签：评分：7.0/10、query:llm
+   evidence：通过机器遗忘减轻隐私和法律风险
+5. [From Where Words Come: Efficient Regularization of Code Tokenizers Through Source Attribution](/202604/16/2604.14053v1-from-where-words-come-efficient-regularization-of-code-tokenizers-through-source-attribution)  
+   标签：评分：7.0/10、query:llm
+   evidence：分词器正则化作为防御越狱攻击的手段
+6. [Mitigating Privacy Risk via Forget Set-Free Unlearning](/202604/16/2604.10636v1-mitigating-privacy-risk-via-forget-set-free-unlearning)  
    标签：评分：6.0/10、query:llm
-   evidence：大语言模型请求和内容的隐私保护技术
-9. [LLM-Guided Prompt Evolution for Password Guessing](/202604/15/2604.12601v1-llm-guided-prompt-evolution-for-password-guessing)  
+   evidence：通过机器卸载缓解训练数据带来的隐私风险
+7. [RLSpoofer: A Lightweight Evaluator for LLM Watermark Spoofing Resilience](/202604/16/2604.11546v1-rlspoofer-a-lightweight-evaluator-for-llm-watermark-spoofing-resilience)  
    标签：评分：6.0/10、query:llm
-   evidence：大语言模型驱动的进化计算用于优化攻击提示词
+   evidence：针对大模型水印的黑盒欺骗攻击
+8. [Towards Automated Pentesting with Large Language Models](/202604/16/2604.11772v1-towards-automated-pentesting-with-large-language-models)  
+   标签：评分：6.0/10、query:llm
+   evidence：LLM用于攻击性网络安全和生成恶意代码
+9. [Three Birds, One Stone: Solving the Communication-Memory-Privacy Trilemma in LLM Fine-tuning Over Wireless Networks with Zeroth-Order Optimization](/202604/16/2604.12401v1-three-birds-one-stone-solving-the-communication-memory-privacy-trilemma-in-llm-fine-tuning-over-wireless-networks-with-zeroth-order-optimization)  
+   标签：评分：6.0/10、query:llm
+   evidence：大模型微调中的隐私泄露问题
+10. [Operationalising the Right to be Forgotten in LLMs: A Lightweight Sequential Unlearning Framework for Privacy-Aligned Deployment in Politically Sensitive Environments](/202604/16/2604.12459v1-operationalising-the-right-to-be-forgotten-in-llms-a-lightweight-sequential-unlearning-framework-for-privacy-aligned-deployment-in-politically-sensitive-environments)  
+   标签：评分：6.0/10、query:llm
+   evidence：隐私对齐部署与敏感模式抑制
 
 
 <div class="dpr-home-promo-card">
