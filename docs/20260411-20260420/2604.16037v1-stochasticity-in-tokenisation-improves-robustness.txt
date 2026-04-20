@@ -1,0 +1,2597 @@
+Title: Stochasticity in Tokenisation Improves Robustness
+
+URL Source: https://arxiv.org/pdf/2604.16037v1
+
+Published Time: Mon, 20 Apr 2026 01:00:05 GMT
+
+Number of Pages: 37
+
+Markdown Content:
+# Stochasticity in Tokenisation Improves Robustness 
+
+Sophie Steger 1 Rui Li 2 Sofiane Ennadir 3 Anya Sims 4 Arno Solin 2 Franz Pernkopf 1 Martin Trapp 5
+
+## Abstract 
+
+The widespread adoption of large language models (LLMs) has increased concerns about their robustness. Vulnerabilities in perturbations of tokenisation of the input indicate that models trained with a deterministic canonical tokenisa-tion can be brittle to adversarial attacks. Recent studies suggest that stochastic tokenisation can deliver internal representations that are less sen-sitive to perturbations. In this paper, we analyse how stochastic tokenisations affect robustness to adversarial attacks and random perturbations. We systematically study this over a range of learning regimes (pre-training, supervised fine-tuning, and in-context learning), data sets, and model architectures. We show that pre-training and fine-tuning with uniformly sampled stochastic tokenisations improve robustness to random and adversarial perturbations. Evaluating on uniformly sampled non-canonical tokenisations reduces the accuracy of a canonically trained Llama-1b model by 29.8%. We find that training with stochastic tokenisation preserves accuracy without increasing inference cost. 
+
+## 1. Introduction 
+
+In recent years, large language models (LLMs) have demon-strated remarkable capabilities across a wide range of natu-ral language processing tasks, leading to their rapid and widespread adoption (Achiam et al., 2023; Team et al., 2023; Grattafiori et al., 2024; Brown et al., 2020). As their use has increased, so too have concerns about their safety and robustness (Li & Fung, 2025; Dong et al., 2024; Geh et al., 2025). Various approaches have been proposed to tackle these safety concerns, including fine-tuning (Wei et al., 2022; Agarwal et al., 2024), preference alignment 
+
+> 1
+
+Institute of Signal Processing and Speech Communication, Graz University of Technology, Graz, Austria 2ELLIS Institute Finland & Aalto University, Espoo, Finland 3King AI Labs, Mi-crosoft Gaming 4University of Oxford, Oxford, United Kingdom 
+
+> 5
+
+KTH Royal Institute of Technology, Stockholm, Sweden. Corre-spondence to: Sophie Steger <sophie.steger@tugraz.at>. 
+
+Preprint. April 20, 2026.     
+
+> 00.1 0.5 13
+> 85 % 90 % 95 %
+
+Normalised number of splits (amount of perturbation) →
+
+> Avg. test accuracy  →
+
+CANON ST OK ST OK -UNI UNI -K
+
+Figure 1. Effect of stochastic tokenisation during testing. As the level of stochasticity increases (increasing number of splits), the accuracy of Llama-1b trained on L ANGUAGE GAME with canonical tokenisation (C ANON ) sharply drops while the same model fine-tuned with stochastic tokenisation (S TOK , S TOK -UNI ,or UNI -K) remains robust to perturbations during testing. 
+
+(Rafailov et al., 2023; Song et al., 2024), and red teaming (Perez et al., 2022; Deng et al., 2023). However, studying their robustness to perturbations in the inputs, for example, as adversarial attacks, remains underexplored. Subword tokenisation, a standard component of modern LLMs, has recently attracted attention in the study of LLM robustness. In LLMs, a tokeniser, such as Byte Pair En-coding (BPE) Sennrich et al. (2016), encodes text into a sequence of tokens through a typically deterministic en-coding function. Those token sequences then serve as the basis for all subsequent computations in LLMs. This makes them a natural point of attack. Although decoding is a many-to-one mapping, text is typically encoded using a deterministic function that returns the canonical tokenisa-tion. However, multiple token sequences can reconstruct the same string, referred to as non-canonical tokenisations. In standard training, the models are exposed to only the canonical tokenisation. Recently, Zheng et al. (2025); Ka-plan et al. (2025) investigated the robustness of pre-trained LLMs against non-canonical tokenisation and found that random non-canonical tokenisation generally significantly reduces performance. Further, Geh et al. (2025) showed that alignment in LLMs can be broken by finding adversarial attacks in the space of tokenisations without changing the content of the query. These results indicate that LLMs are surprisingly brittle with respect to non-canonical tokenisa-1
+
+> arXiv:2604.16037v1 [cs.CL] 17 Apr 2026 Stochasticity in Tokenisation Improves Robustness
+
+tion, as also highlighted in Fig. 1. A potential remedy is to train with stochastic tokenisations ,which expose the model to alternative segmentations of the same string while keeping the vocabulary fixed. BPE, for example, retains all intermediate merges, enabling multiple valid token sequences per string. BPE-dropout (Provilkov et al., 2020) introduces stochasticity by skipping merge rules at random. More recently, Sims et al. (2026) proposed STOCHAS TOK , which randomly splits tokens into equiva-lent subtokens with some small probability. These works focus on improvements to subtoken-level understanding; consequently, the extent to which training under stochastic tokenisations affects robustness remains an open question. In this work, we tackle the fundamental question: Can stochastic tokenisation improve robustness? To this end, we investigate how stochastic tokenisation during train-ing affects robustness against random and adversarial to-kenisations. We study various training regimes, including stochastic tokenisation during pre-training, fine-tuning, and in-context learning (ICL). In our study, we use S TOCHAS -TOK as the starting point, but find that S TOCHAS TOK in-troduces a biased sampling distribution over tokenisations. Therefore, we devise S TOCHAS TOK -UNI , which generates uniformly distributed tokenisations conditioned on a spe-cific per-token split count, and U NIFORM -K, which gen-erates uniformly distributed tokenisations with a specified number of total splits. Both can represent a larger set of non-canonical tokenisations compared to S TOCHAS TOK ,
+
+i.e. they have larger support. Our findings indicate that STOCHAS TOK helps generalise across random tokenisa-tions during testing, but for worst-case (adversarial) eval-uations, we observe a significant drop in test performance compared to S TOCHAS TOK -UNI and U NIFORM -K. Lastly, we provide theoretical insights into the adversarial robust-ness introduced by stochastic tokenisation during training. Our contributions can be summarised as follows: (i) We study how training with stochastic tokenisation affects robustness against random and adversarial tokenisations (Sec. 4). (ii) We analyse the sampling distribution of STOCHAS TOK , finding that it is biased towards certain tokenisations and introduce unbiased uniform sampling schemes (Sec. 5). (iii) Lastly, we provide theoretical in-sights into adversarial robustness introduced by stochastic tokenisation (Sec. 6). 
+
+## 2. Background 
+
+We now introduce the necessary notation and formally de-fine relevant concepts on tokenisation in LLMs. 
+
+Notation. Let X denote an alphabet of characters xi (or bytes), and let x = ( x1, . . . , x n) ∈ X ∗ be a string, i.e. , a character sequence. The tokenisation of x w.r.t. a token vocabulary V is a token sequence v = ( v1, . . . , v m) ∈V∗ such that v1 ◦ · · · ◦ vm = x, where ◦ is the string concatenation. The vocabulary V is a finite set of string sequences V ⊆ X ∗. We denote the encoding function 
+
+τ : X ∗ → V ∗ and the decoding function κ : V∗ → X ∗,which satisfy κ(τ (x)) = x for all x ∈ X ∗.
+
+Non-canonical tokenisation. Subword tokenisation is the most prevalent tokenisation scheme in modern LLMs, map-ping a sequence of characters to tokens. Which character sequences are merged is determined by the tokenisation scheme. For instance, byte-pair encoding (BPE; Gage, 1994) starts with a vocabulary that includes all individual charac-ters. This vocabulary is then iteratively extended by merging the most frequent adjacent pairs of tokens in a given training corpus (Sennrich et al., 2016). The procedure stops once a predetermined vocabulary size is reached. However, this mapping is not unique. Given a token vo-cabulary V, there may exist multiple token sequences that reconstruct the same underlying string sequence. 
+
+Example. Consider the string x = ( revolution ) and suppose the vocabulary 
+
+V = {a, . . . , z, re , v, ol , ution , revolution }
+
+contains all single characters as well as the listed merged character sequences. The canonical tokenisation is the single-token decomposition 
+
+vc = ( revolution ).
+
+Other possible tokenisations include 
+
+v = ( re , v, ol , ution ),
+
+and, at the extreme, the character-level tokenisation 
+
+vchar = ( r, e, v, o, l, u, t, i, o, n),
+
+all of which satisfy v1 ◦ · · · ◦ vm = x.We denote the set of all valid tokenisations w.r.t. a vo-cabulary V as TV (x) = {v : v1 ◦ · · · ◦ vm = x}, call 
+
+vc = τ (x) the canonical tokenisation, and refer to any 
+
+v ∈ T V (x) \ { vc} as a non-canonical tokenisation .
+
+STOCHAS TOK . Recently, Sims et al. (2026) introduced a stochastic tokenisation scheme that is compatible with any tokeniser. It creates non-canonical tokenisations by randomly splitting tokens into pairs of smaller subtokens by following the merge rules reflected in the vocabulary. Consider a string x and its canonical tokenisation vc =(v1, . . . , v m), and define the expansion proportion α. Then, STOCHAS TOK aims to create a total of N = α · m
+
+splits by iteratively splitting the canonical tokenisation, 2Stochasticity in Tokenisation Improves Robustness 
+
+i.e. , a subtoken vi is selected uniformly at random and then replaced with a pair of subtokens (t1, t 2) ∈ V2.This procedure is repeated on the extended sequence 
+
+(v1, . . . , v i−1, t 1, t 2, v i+1 , . . . , v m) for N iterations. 
+
+Adversarial tokenisation. The goal of adversarial tokeni-sation is to search for tokenisations of a string x that change an LLM’s correct prediction, i.e. , break an alignment of an LLM. As the number of non-canonical tokenisations grows exponentially with the length of the string |x|, an exhaustive enumeration is infeasible. Instead, Geh et al. (2025) proposed performing an adversarial search over local neighbourhoods in the tokenisation space. Let d(·, ·) be a token-level edit distance (Levenshtein dis-tance (Levenshtein, 1965)) with insertion cost 1 and deletion cost 0. For a reference tokenisation v, define the set of to-kenisations at edit distance i as T i 
+
+> V
+
+(x, v) = {u : u ∈TV (x) ∧ d(v, u) = i}. The neighbourhood of v is defined as Ne( v) = T 2 
+
+> V
+
+(x, v) whose cardinality is bounded by 
+
+O(|v|2).In this work, we focus on multiple-choice question answer-ing tasks. Let x be a question string with tokenisation v,and {ac}Cc=1 be a set of answer strings with tokenisation 
+
+{vac }Cc=1 . The model assigns a score, i.e. ,
+
+zc(v) = p(vac | v), (1) to each answer option. When attacking, our aim is to max-imise the margin of violation: 
+
+v⋆ = arg max  
+
+> u∈T V(x)
+
+
+
+max  
+
+> c̸=y
+
+zc(u) − zy (u)
+
+
+
+. (2) where y denotes the true class and c the most probable wrong class. To approximate this, (Geh et al., 2025) proposed a greedy search over a local neighbourhood. Alg. 2 (Sec. D) summarises the procedure used in this work. 
+
+## 3. Related Work 
+
+Robustness to tokenisations. Typically, LLMs are trained with deterministic subword tokenisation (Sennrich et al., 2016; Kudo, 2018), which has been argued to obscure sub-token and character-level information (Chai et al., 2024; Edman et al., 2024). Recent work has demonstrated that models still encode within-word information without direct access to its characters (Itzhak & Levy, 2022; Hiraoka & Inui, 2025), with larger models performing better in gen-eral (Kaushal & Mahowald, 2022). Evidence suggests that models convert subword tokens into an implicit vocabulary, which allows models to retrieve character-level informa-tion (Feucht et al., 2024; Kaplan et al., 2025). In addition, Zheng et al. (2025) demonstrate the robustness of canoni-cally trained LLMs to unseen non-canonical tokenisations at test time, especially after instruction-tuning. Post-training on curated datasets with canonical tokenisation, however, has been argued to render models vulnerable to adversarial tokenisation attacks (Geh et al., 2025). 
+
+Training with stochastic tokenisations. Several works have proposed to train with stochastic tokenisations to im-prove the model’s subword understanding. Among the first, Provilkov et al. (2020) introduce stochasticity by ran-domly dropping merge rules. Cognetta et al. (2024) demon-strate that BPE-dropout (Provilkov et al., 2020) and Max-Match/Unigram (Wu et al., 2016) result in non-uniform dis-tribution over tokenisations, and show improvements in ma-chine translation quality with uniform sampling. Bauwens et al. (2025) argue that uniform sampling leads to tokens with reduced character count and propose length-aware sam-pling. Most recently, Sims et al. (2026) randomly split to-kens into pairs of sub-tokens, showing improved sub-word understanding. In addition, results suggest improved robust-ness to non-canonical tokenisations. 
+
+## 4. Does S TOCHAS TOK Improve Robustness? 
+
+In the following section, we investigate whether training with S TOCHAS TOK instead of canonical tokenisation im-proves robustness to non-canonical tokenisations. Our aim is to provide a practical overview of the benefits of using stochastic tokenisation in different training regimes. For our evaluation setup, we use the L ANGUAGE GAME and CUTE data sets from Sims et al. (2026). These data sets test sub-token-level understanding, such as counting or detect-ing letters within words, see Sec. C for examples. We assess the effect of stochastic tokenisation during (i) pre-training, (ii) supervised fine-tuning, and (iii) in-context learning. In particular, we evaluate the performance on canonical tokeni-sation during testing (clean case) and on stochastic tokeni-sation at various levels during testing, to assess the model’s ability to solve the task in the ideal setting and its robustness to input perturbations. 
+
+4.1. Does Pre-training Improve Robustness? 
+
+First, we test whether S TOCHAS TOK pre-training can in-stil both sub-token understanding and robustness. While choosing the pre-training scheme offers the highest flexibil-ity, it also imposes a high computational burden. For this reason, we pre-train a small Tiny-LLM (50 M-parameter) (Hillier et al., 2024) model from scratch on OpenWebText and focus on fine-tuning and in-context learning for larger models. In Sec. G.1, we report validation perplexity, accu-racy on general multiple-choice benchmarks, and TokSuite (Altınta¸ s et al., 2025) results after pre-training under both canonical and stochastic tokenisation. Below, we follow Sims et al. (2026) and perform canonical fine-tuning on LANGUAGE GAME to test whether sub-token understand-ing and robustness to alternative tokenisations persist. In 3Stochasticity in Tokenisation Improves Robustness     
+
+> 00.1 0.5 13
+> 20 % 40 % 60 % 80 %
+
+Normalised number of splits 
+
+> Avg. test accuracy  →
+
+Pre-training:         
+
+> αpre = 0 .0αpre = 0 .1
+> αpre = 0 .5
+> 00.1 0.5 13
+
+Normalised number of splits 
+
+Fine-tuning:       
+
+> αfine = 0 .0αfine = 0 .1
+> αfine = 0 .5αfine = 1 .0
+
+Figure 2. (Left) Average test accuracy of Tiny-LLM pre-trained on L ANGUAGE GAME with canonical tokenisation and STOCHAS TOK tokenisation. Stochastic tokenisation performs favourably in all settings and provides mild robustness to input perturbations (normalised number of splits > 0). (Right) Addition-ally fine-tuning with S TOCHAS TOK tokenisation ( αfine > 0) after pre-training with αpre = 0 .1 substantially improves robustness. 
+
+particular, we evaluate the average accuracy for stochas-tic tokenisations sampled with S TOCHAS TOK at increasing edit distances, normalised by the length of the canonical token sequence (see Eq. (5), Sec. B.1). Specifically, we used the range {0, 0.1, 0.5, 1, 3}, where zero corresponds to canonical, deterministic tokenisation. Note that all test-time stochastic tokenisations in this experiment are sampled with S TOCHAS TOK . Hence, tokenisations are not sampled uniformly but reflect sampling biases induced by S TOCHAS -TOK . In Sec. 5, we test the robustness to uniformly sampled tokenisations. In Fig. 2 (left) , we see that canonical pre-training, i.e. , ex-pansion proportion of αpre = 0 .0, is insufficient to produce useful representations for solving these subtoken-level tasks, which is consistent with findings in Sims et al. (2026), and pre-training with stochastic tokenisation ( αpre > 0.0) sub-stantially improves accuracy. Further, across all tokenisation schemes, we observe that accuracy degrades as the nor-malised number of splits increases. However, accuracy with stochastic pre-training remains substantially higher com-pared to canonical pre-training. Results for C UTE exhibit the same trend and are shown in Fig. 10, Sec. G.2. We note that although stochastic pre-training performs favourably in the clean case, it is not clear that it provides strong robust-ness benefits against alternative tokenisations. 
+
+4.2. Does Fine-tuning Improve Robustness? 
+
+As pre-training with S TOCHAS TOK alone provides mild robustness against noisy inputs, we now address the follow-ing two questions: (i) does fine-tuning with S TOCHAS TOK 
+
+after pre-training with S TOCHAS TOK instil additional ro-bustness, and if so (ii) is fine-tuning with S TOCHAS TOK     
+
+> 00.1 0.5 13
+> 70 % 80 % 90 %
+
+Normalised number of splits 
+
+> Avg. test accuracy  →
+
+αfine = 0 .0 αfine = 0 .1 αfine = 0 .5 αfine = 1 
+
+Figure 3. Average test accuracy for canonically pre-trained 
+
+Llama-1b model and stochastic tokenisation during fine-tuning on L ANGUAGE GAME . Stochastic fine-tuning with S TOCHAS TOK 
+
+consistently improves robustness to random perturbations during testing without affecting performance on canonical test data. 
+
+sufficient to provide robustness against noisy inputs? Previ-ously, Geh et al. (2025) found that large models, pre-trained on massive, possibly noisy, text corpora, exhibit a certain robustness to non-canonical tokenisations. However, fine-tuning on smaller, curated data sets was argued to introduce vulnerabilities. Hence, question (ii) examines if fine-tuning with S TOCHAS TOK prevents those vulnerabilities. To address the first question, we compare canonical fine-tuning against fine-tuning with S TOCHAS TOK using varying expansion proportions αfine ∈ { 0.1, 0.5, 1}. In all cases, we start with stochastic pre-training using αpre = 0 .1. In Fig. 2 (right), we observe that additional stochastic fine-tuning sub-stantially improves robustness against input perturbations and does not degrade accuracy on canonical tokenisations. In Fig. 9a (Sec. G.2), we provided additional ablations on canonical pre-training. Next, we test whether this effect translates to larger canon-ically pre-trained models. For this, we use a publicly available model checkpoint of Llama-1b and fine-tune a low-rank adapter (LoRA) (Hu et al., 2022). Fig. 3 demon-strates that, while the Llama-1b model is able to solve the subword-level tasks without stochastic pre-training, it is brit-tle to non-canonical tokenisations during evaluation. Again, a moderate expansion proportion ( αfine = 0 .1) significantly increases robustness, with a slight drop at a normalised num-ber of splits of αeval = 3 . Increased levels of stochasticity (αfine ∈ { 0.1, 0.5}) lead to almost constant accuracy at all levels of αeval . This suggests that stochastic tokenisation during fine-tuning is an effective way to improve robustness to non-canonical tokenisation, even in the case of canonical pre-training, and effectively reduces potential vulnerabilities to non-canonical tokenisation. 
+
+4.3. Does In-context Learning Improve Robustness? 
+
+Lastly, we study the most restrictive scenario, where the model parameters are kept frozen. We test whether robust-4Stochasticity in Tokenisation Improves Robustness 
+
+Table 1. Accuracy (%) under canonical versus S TOCHAS TOK (αeval = 3 ) query tokenisation across data sets, K = 10 few shot examples.                                                                                  
+
+> Context tokenisation αICL
+> LANGUAGE GAME ARC-E COPA CSQA HELLA SWAG PIQA SOCIAL IQA
+> canon. ST OK canon. ST OK canon. ST OK canon. ST OK canon. ST OK canon. ST OK canon. ST OK
+> Canonical -83 .872 .378 .273 .892 .088 .268 .465 .254 .851 .281 .480 .252 .447 .2
+> STOCHAS TOK 0.1 84 .676 .477 .074 .792 .088 .368 .464 .755 .251 .881 .880 .152 .650 .2
+> STOCHAS TOK 0.5 87 .080 .277 .676 .092 .088 .267 .465 .754 .251 .382 .080 .554 .050 .7
+> STOCHAS TOK 1.0 86 .480 .777 .676 .091 .087 .766 .665 .454 .251 .582 .880 .853 .051 .1
+
+ness to stochastic tokenisations can be improved without pa-rameter updates , using in-context learning (ICL) (Yin et al., 2024). In ICL, the prediction for a test input x∗ is obtained by prepending solved examples (x1, r1, . . . , xK , rK , x∗),while keeping model parameters fixed. Specifically, we anal-yse whether stochastic tokenisation of the context questions, 
+
+vi ∼ P (· | xi; αICL ), increases robustness to stochastic tokenisations of the query, v∗ ∼ P (· | x∗; αeval ).We evaluate robustness to non-canonical tokenisations of the query for the L ANGUAGE GAME data set and general multiple-choice data sets. Table 1 reports results for a 
+
+Llama-8b model using K = 10 context examples. We compare accuracy for a canonical query and report the drop in accuracy when evaluated on non-canonical tokenisations at a normalised number of splits of αeval = 3 . Using a canonical context (first row) consistently yields lower accu-racy under non-canonical queries compared to the canonical tokenisation. Using S TOCHAS TOK for context tokenisa-tion yields notable robustness gains on L ANGUAGE GAME ,with modest improvements on the other benchmark datasets. While ICL imposes the lowest computational cost, it also yields lower robustness gains than full fine-tuning. In fine-tuning, the model is trained with 10k training samples, each tokenised with 10 random draws by S TOCHAS TOK . In con-trast, in ICL the model is presented with K = 10 examples, each with a single S TOCHAS TOK sample. Having established that S TOCHAS TOK does improve robust-ness to non-canonical tokenisations, we investigate whether further gains are possible. We explore the limitations of STOCHAS TOK ’s distribution over tokenisations and pro-pose two alternative sampling schemes (S TOCHAS TOK -UNI 
+
+and U NIFORM -K), considering both randomly sampled and adversarially selected non-canonical tokenisations. 
+
+## 5. Improving with Uniform Sampling 
+
+While training with S TOCHAS TOK generally improves ro-bustness, it comes with two key limitations. Firstly, the sam-pling distribution PST OK (v | x; α) generated by S TOCHAS -TOK is non-uniform. Among segmentations with the same number of splits, it is biased towards those constructed from subtokens with fewer alternative split pairs. Secondly, the sampling process yields a distribution with incomplete sup-port. We discuss these two limitations in detail below. 
+
+Bias. First, let us call a subtoken pair (v, v ′) ∈ V 2 valid if, when merged via a two-way merge v ◦ v′ = u, they form a token u ∈ V . Now, let us denote the set of valid subtoken pairs as: S(vi) = {(t, t ′) ∈ V 2 : t ◦ t′ = vi}.Recall, S TOCHAS TOK recursively splits tokens vi into (valid) token pairs (t, t ′). Let us consider tokenisations ob-tained by performing exactly one further split. At this point, STOCHAS TOK selects the token to be split uniformly from 
+
+{t, t ′}. Importantly, the two subtokens may have an unequal number of valid subtoken pairs, |S (t)|̸ = |S (t′)|. As the subsequent split pair is sampled uniformly from S(·), each individual tokenisation is obtained via splitting t or t′ with probability 1 
+
+> |S (t)|
+
+or 1 
+
+> |S (t′)|
+
+, respectively. Thus, the induced distribution over the tokenisations is inherently biased. 
+
+Incomplete Support. Let’s assume we have the canoni-cal token revolution Then, a potential non-canonical tokenisation with edit distance of 3 by S TOCHAS TOK is: 
+
+rev olution 
+
+ol ution 
+
+> ○
+> ○
+
+In this example, we iteratively apply 2 two-way merges to obtain the initial canonical token from the respective subtokens. Another potential tokenisation is by splitting the initial token directly into three subtokens, i.e. ,
+
+re vol ution 
+
+> ○
+
+where we note that all three subtokens, re , vol , and 
+
+ution ; are contained in the vocabulary. However, neither 
+
+revol nor volution are tokens in the vocabulary 
+
+V. Thus, S TOCHAS TOK cannot generate the tokenisation through a series of two-merges. This example illustrates the second key issue: S TOCHAS TOK does not have full support for all possible k-edit distance tokenisations of a token. 
+
+5.1. Removing Bias and Increasing Support 
+
+To address these limitations and understand their influence on the robustness to stochastic tokenisations, we propose stochastic tokenisation schemes with progressively increas-ing uniformity and support. 5Stochasticity in Tokenisation Improves Robustness 
+
+> rev-ol-u-tion
+> re-vol-u-tion
+> r-e-v-olution
+> rev-o-l-ution
+> re-vo-l-ution
+> rev-o-lu-tion
+> re-vol-uti-on
+> rev-ol-ut-ion
+> re-v-ol-ution
+> re-vo-lu-tion
+> rev-ol-uti-on
+> r-e-vol-ution
+> re-vol-ut-ion
+> r-ev-ol-ution
+> 0
+> 10
+> 20
+> Probability (%)
+
+Figure 4. Histogram of segmentation probabilities for two sam-pling schemes, STOCHAS TOK and STOCHAS TOK -UNI .STOCHAS TOK induces a biased distribution over a subset of all valid segmentations with limited support. STOCHAS TOK -UNI 
+
+(ours), on the other hand, generates samples with equal probability and has full support over the set of non-canonical tokenisations. 
+
+STOCHAS TOK -UNI . As a first step, we introduce a uni-form extension of S TOCHAS TOK that reduces sampling bias while preserving the per-token split-count distribution in-duced by S TOCHAS TOK , which we call S TOCHAS TOK -UNI .For this, we devise a two-stage procedure where (i) we gen-erate the per-token split-count vector S = ( S1, . . . , S m) for a sequence of m tokens following the distribution induced by S TOCHAS TOK , and (ii) for each token independently, we uniformly sample non-canonical tokenisations with Si
+
+splits, that is, with Si + 1 segments. First, note that S TOCHAS TOK introduces a split-count dis-tribution for a canonical token following a Beta-Binomial distribution, cf. , Sec. F.1. By doing so, S TOCHAS TOK 
+
+has a preference towards small split counts. To sample 
+
+S = ( S1, . . . , S m) with P 
+
+> i
+
+Si = N we use a Dirichlet-multinomial model, S ∼ DirMult (N, α), with symmetric concentration parameter α = 1¯.For the second step, let vc = ( vc
+
+> 1
+
+, . . . , v cm) denote the canonical token sequence. Recall that each token vci ∈ V 
+
+corresponds to a character sequence which we denote by 
+
+˜xi := κ(vci ) ∈ X ∗. Then, conditional on the split counts 
+
+S, we sample tokenisations uniformly from T Si+1  
+
+> V
+
+( ˜ xi, v ci ),that is, from the set of tokenisations consisting of Si + 1 
+
+segments. Inspired by Zheng et al. (2025), we recursively construct a tree, where each root-to-leaf path corresponds to a non-canonical tokenisation v ∈ T V ( ˜ xi). To ensure that the path length equals the number of segments Si + 1 , we remove all paths longer or shorter than Si + 1 . Next, we perform uniform sampling by descending the tree, selecting each outgoing edge with probability proportional to the number of leaves in its subtree. The sampling cost scales linearly with the number of segments, while constructing the tree scales exponentially with the sequence length of the token, 
+
+O  2| ˜x|− 1. In our case, the cost remains manageable as we only construct the tree for each token vci independently. Fig. 4 compares the empirical distribution over segmenta-tion probabilities for S TOCHAS TOK and S TOCHAS TOK -
+
+> UNI
+
+. Note that S TOCHAS TOK covers only a subset of all non-canonical tokenisations, while S TOCHAS TOK -UNI (i) provides full support and (ii) results in a uniform distribution over all tokenisations. 
+
+UNIFORM -K. Note that, while S TOCHAS TOK -UNI re-moves the key limitations of S TOCHAS TOK , it remains re-stricted to per-token level splits. Also, the tokenisations are sampled uniformly conditioned on the per-token split count. Henceforth, we now introduce U NIFORM -K, which sam-ples marginally uniformly at edit distance k from the set of non-canonical tokenisations over the entire input sequence ,
+
+i.e. v ∼ Unif  T k 
+
+> V
+
+(x, vc). Creating the tokenisation tree recursively for the entire string x, is generally infeasible due to exponential scaling w.r.t. the length |x|. To address this, we encode the tokenisations with a Multi-valued Decision Diagram (MDD) (Geh et al., 2024). By decomposing and reusing subsequences, the MDD encodes all tokenisations with a construction cost scaling linearly w.r.t. the tokeniser vocabulary and the sequence length, O(|x| · |V| ). Sampling is performed by following edges proportional to the number of tokenisations of the sub-MDD. To sample uniformly at edit distance k, Geh et al. (2025) proposed to construct a multi-rooted MDD (MRMDD), where the construction cost is upper bounded by O(|x|2 · |V| ). We adopt their MRMDD algorithm and select the edit distance k to match the total split count N of S TOCHAS TOK and S TOCHAS TOK -UNI .Note, however, that uniform sampling induces a different per-token split-count distribution (see Sec. F). By construction, U NIFORM -K can create subtokens across canonical token boundaries. Thus, providing even higher flexibility than S TOCHAS TOK -UNI . Lastly, we include full uniform sampling as a baseline, denoted U NIFORM . This offers full support over TV (x), but substantially increases computational cost and the number of splits generated. In Sec. F.1 we present empirical results for the number of splits generated by each variant. 
+
+5.2. Fine-tuning Robustness 
+
+We now analyse if increased uniformity over non-canonical tokenisations improves robustness during fine-tuning. Table 2 reports the drop in accuracy when switching from canonical queries to uniformly sampled tokenisations. As in Sec. 4.2, canonical fine-tuning results in the largest drop in accuracy ( −29 .8% ). Further note that increasing the num-ber of splits, i.e. , increasing αfine , improves robustness for all methods. Next, recall that both S TOCHAS TOK -UNI and UNIFORM -K produce uniform samples conditioned on the number of splits, but with different distributions over split-counts and different support. Despite those differences, we observe that both approaches generally result in a smaller drop in accuracy than S TOCHAS TOK , indicating that in-creased uniformity is beneficial. 6Stochasticity in Tokenisation Improves Robustness                                         
+
+> Table 2. Accuracy (%) of Llama-1b for (i) canonical query to-kenisation ( v∗=τ(x)) or (ii) a randomly sampled non-canonical query tokenisation ( Uniform( TV(x)) ) trained on L ANGUAGE
+> GAME under various fine-tuning strategies.
+> Fine-tuning αfine
+> Accuracy
+> v∗canonical v∗uniform ∆
+> Canonical 094 .0−29 .8
+> STOCHAS TOK 0.1 94 .8−11 .7
+> 0.5 94 .8−0.5
+> 195 .0−0.301
+> STOCHAS TOK -UNI 0.1 94 .8−8.8
+> 0.5 93 .6−0.101
+> 195 .0+1 .401
+> UNIFORM -K0.1 93 .8−4.8
+> 0.5 96 .2−0.6
+> 194 .8+2 .8
+> UNIFORM –92 .8+6
+
+In addition to the results shown in Table 2, we note that Fig. 1, which assesses the performance for increasing levels of perturbations (normalised edit distance), further high-lights the benefits of a uniform sampling distribution. 
+
+5.3. In-context Learning Robustness 
+
+Having established that inducing a uniform sampling dis-tribution improves robustness in the case of stochastic to-kenisation, we now investigate the ICL setting. For this, we expose the model to K = 10 in-context examples for few-shot learning, with each example having a non-canonical tokenisation generated by S TOCHAS TOK , S TOCHAS TOK -
+
+> UNI
+
+, U NIFORM -K, or U NIFORM , respectively. Note that this setup is consistent with Sec. 4.3 and that, in contrast to pre-training of fine-tuning experiments, only one non-canonical tokenisation per training example is provided. Results in Table 3 show that, while stochastic tokenisa-tion during ICL generally provides mild improvements over canonical tokenisation, little difference between the stochas-tic tokenisation schemes can be observed. However, the most noticeable improvements are observed with U NIFORM ,which also provides the highest degree of stochasticity. It may be necessary to provide a substantially larger number of in-context examples to induce robustness via ICL. 
+
+## 6. Robustness to Adversarial Tokenisation 
+
+We will now provide an empirical assessment of adversarial robustness induced by stochastic tokenisation, utilising the adversarial attack mechanism presented in (Geh et al., 2025), and following the approach outlined in Sec. 2. Fig. 5 shows the results for the Llama-1b model fine-tuned canonically (C ANON .) or using a stochastic tokeni-sation scheme and evaluated either on canonical tokens or under adversarial attacks. We see that non-canonical tokeni-sation during fine-tuning substantially improves adversarial robustness, i.e. , accuracy under canonical fine-tuning drops from 94% to 6.1% (almost 90 percentage points), while under U NIFORM -K we only observe a drop to 69 .6% . Fur-ther, we observe that increased uniformity at the same split budget provides increased robustness to adversarial tokeni-sations. In Sec. G.2.1 we provide additional results for 
+
+Tiny-LLM and for the C UTE dataset. In Sec. G.2.4 we provide a comparison with BPE-D ROPOUT for Llama-1b 
+
+and Qwen-0.6b models. In both cases, the findings are consistent with those presented here. Lastly, we evaluate whether stochastic tokenisation during ICL provides any robustness to adversarial attacks. Table 12 summarises the experiments and indicates that, surprisingly, ICL with stochastic tokenisation can provide mild robust-ness to adversarial tokenisation. 
+
+6.1. Theoretical Analysis 
+
+Beyond the empirical results outlined in the previous section, we aim to theoretically characterise how tokenisation affects the robustness of the resulting model. In this perspective, we focus on evasion attacks, i.e. , adversarial perturbations applied at test time. In this direction, let’s consider a trained classifier f : V → Y and let v ∈ V be an input with its associated label y ∈ Y , such that f (v) = y. The goal of an attacker is to craft a small additional perturbation to the input, such as to generate a point ˜v whose prediction f (˜ v) is different from the original one. We note that in our setting, the function f represents the LLM after the tokeniser, com-prising the embedding function and subsequent transformer blocks with self-attention. As the generated adversarial perturbation should be “similar” to the original input, we consider a similarity budget ε (the maximum possible changes to the input), comprising the set of valid adversarial perturbations defined by a neigh-bourhood B(x, ε ). In our setting B(x, ε ) = T k 
+
+> V
+
+(x) with edit distance at most k. Now, the adversarial aim is to find, within B(x, ε ), points that result in the worst prediction (the model’s adversarial risk ), which can be formulated as: 
+
+Rε[f ] = E
+
+> x∈D X
+
+"
+
+sup 
+
+> ˜x∈B (x,ε )
+
+dY (f (˜ x) , f (x)) 
+
+#
+
+. (3) From a defence perspective, the objective is to ensure that the risk remains small, thereby keeping predictions within the same output region and making it harder to find a valid perturbation. This goal can be formulated as: 
+
+Definition 6.1 (Adversarial Robustness) . The classifier f is said to be (ε, γ )-robust if its adversarial risk with respect to the classifier f satisfies: Rε[f ] ≤ γ. 
+
+7Stochasticity in Tokenisation Improves Robustness 
+
+Table 3. Accuracy (%) under canonical versus uniformly sampled query tokenisation across data sets, with K = 10 few shot examples.                                                                                                 
+
+> Context tokenisation αICL
+> LANGUAGE GAME ARC-E COPA CSQA HELLA SWAG PIQA SOCIAL IQA
+> canon. unif. canon. unif. canon. unif. canon. unif. canon. unif. canon. unif. canon. unif.
+> Canonical -83 .970 .378 .171 .392 .084 .668 .363 .054 .850 .281 .479 .552 .445 .1
+> STOCHAS TOK 1.0 87 .781 .877 .474 .091 .387 .067 .163 .954 .450 .981 .980 .053 .847 .5
+> STOCHAS TOK -UNI 1.0 87 .181 .377 .373 .891 .687 .366 .763 .954 .251 .081 .980 .153 .447 .7
+> UNIFORM -K1.0 87 .280 .877 .173 .791 .187 .267 .664 .054 .350 .981 .980 .052 .848 .9
+> UNIFORM -85 .081 .777 .675 .290 .287 .062 .363 .854 .151 .081 .980 .451 .449 .8
+
+Definition 6.1 uses an upper-bound perspective ( γ) as com-puting the exact risk is generally intractable. A smaller value of γ indicates stronger robustness guarantees. Consequently, comparing the resulting bounds provides a principled way to assess and contrast the model’s robustness. Without loss of generality, we consider a 1-layer Transformer-based model in which all activation functions are assumed to be 
+
+1-Lipschitz, which is the case for many common activations, 
+
+e.g. , tanh and sigmoid (Virmaux & Scaman, 2018). We additionally assume the output of the embedding function to be bounded in terms of its norm ( e.g. , [0 , 1] n×d, with n
+
+being the number of tokens and d the hidden dimension). In this setting, the model’s underlying robustness, γ, can be derived and is given by the following. 
+
+Theorem 6.2. Let f : X → Y be a classifier following our considered problem setup, then f is (ε, γ )-robust , with: 
+
+γ = √2 ∥W ∥
+
+ dd − 1
+
+2
+
+C1C2
+
+√k , (4) 
+
+where W is the weight matrix of the embedding layer and 
+
+C1C2 is proportional to the Lipschitz constant of the atten-tion block (Ennadir et al., 2025). 
+
+Details and proof of Theorem 6.2 are given in Sec. E. The resulting upper bound, as with any Lipschitz-like analy-sis, depends on the weight norms and, additionally, on the factor k, which is linked to the tokenisation. Thus, it un-derscores the importance of tokenisation for the model’s robustness. Additionally, the bound explicitly on the per-turbation neighbourhood, defined through the token-level edit distance, linking it to the support of the sampling dis-tribution. Specifically, canonical tokenisation concentrates the model’s sensitivity on a single tokenisation, making it vulnerable to adversarial attacks. Stochastic tokenisation, however, provides the model with a distribution over to-kenisation, effectively smoothing the embedding space and reducing its vulnerability. In connection to this, we empirically evaluated the sensitiv-ity of each layer by comparing unit-normalised embeddings for 50 neighbouring non-canonical tokenisations of the top 
+
+10 k most frequent canonical tokens. Fig. 22 shows the average distance for canonical and stochastic tokenisation schemes. We find that stochastic tokenisation results in                   
+
+> -0.1 0.5 1.0
+> CANON .
+> UNI .
+> ST OK
+> ST OK -UNI
+> UNI -K
+> 94 .0
+> 92 .8
+> 95 .094 .895 .0
+> 94 .893 .895 .0
+> 93 .896 .494 .8
+> αfine
+> Canonical Tokenisation
+> -0.1 0.5 1.0
+> 6.1
+> 61 .8
+> 26 .651 .862 .0
+> 32 .859 .261 .6
+> 35 .064 .469 .6
+> αfine
+> Adversarial Tokenisation
+
+Figure 5. Accuracy (%) under canonical and adversarial tokenisa-tion for Llama-1b trained on L ANGUAGE GAME under various fine-tuning strategies. 
+
+smaller mean normalised distances, indicating smaller local Lipschitz constants and suggesting reduced vulnerability. 
+
+## 7. Conclusion & Discussion 
+
+In this paper, we address the fundamental question: Can stochastic tokenisation improve robustness? and find that stochastic tokenisation during training can provide robust-ness against random perturbations and adversarial attacks on tokens. To this end, we first examined the robustness of STOCHAS TOK (Sims et al., 2026) and found that it provides some robustness, but the sampling distribution is both bi-ased and incomplete, making it vulnerable to adversarial at-tacks. Hence, we develop alternative sampling mechanisms, specifically S TOCHAS TOK -UNI and U NIFORM -K, both of which ensure a uniform sampling distribution (conditional in the case of S TOCHAS TOK -UNI ) with support spanning all non-canonical tokenisations within some neighbourhood. We find uniform sampling often performs favourably com-pared to S TOCHAS TOK and provides stronger adversarial robustness. Lastly, we provided a theoretical analysis of the expected adversarial risk, further confirming that stochastic tokenisation reduces it. 
+
+Practitioner Guide. We found that canonical tokenisation results in a brittle model that is vulnerable to non-canonical tokenisations or attacks. Further, we found that fine-tuning with stochastic tokenisation substantially increases robust-ness, without additional cost during inference. This indi-cates that fine-tuning should generally be performed with stochastic tokenisation instead of canonical tokenisation. 8Stochasticity in Tokenisation Improves Robustness 
+
+Limitations. Our analysis is currently limited to question-answering tasks, and an interesting next step would be to extend the assessment to natural language generation tasks. While our theoretical analysis provides links to stochastic tokenisation, further analysis is needed to fully characterise the optimal design of a stochastic tokenisation scheme. 
+
+## Acknowledgements 
+
+This work was partially supported by the Wallenberg AI, Au-tonomous Systems and Software Program (WASP) funded by the Knut and Alice Wallenberg Foundation. RL and AS acknowledge funding from the Research Council of Finland (grant numbers 339730 and 362408). We acknowledge the computational resources provided by the Aalto Science-IT project. 
+
+## Impact Statement 
+
+This work is concerned with the robustness of large-language models (LLMs) to non-canonical tokenisations and adversarial attacks on the tokenisation of the input. Henceforth, our results and findings directly impact not only the community in machine learning research, such as indicating that stochastic tokenisation during training is a promising direction in providing robustness against such settings, but also raise awareness of the vulnerability to non-canonical tokenisations existing in LLMs. Consequently, while we do not believe that our work has direct ethical implications, it does provide societal impact in the long run. In particular, it provides a guide that stochastic tokenisation during training of LLMs can substantially improve the ro-bustness of LLMs to various attacks and therefore reduces the risk imposed on society by LLMs. 
+
+## References 
+
+Achiam, J., Adler, S., Agarwal, S., Ahmad, L., Akkaya, I., Aleman, F. L., Almeida, D., Altenschmidt, J., Altman, S., Anadkat, S., et al. GPT-4 technical report. arXiv preprint arXiv:2303.08774 , 2023. Agarwal, R., Vieillard, N., Zhou, Y., Stanczyk, P., Garea, S. R., Geist, M., and Bachem, O. On-policy distillation of language models: Learning from self-generated mistakes. In The Twelfth International Conference on Learning Representations (ICLR) , 2024. Altınta¸ s, G. S., Ehghaghi, M., Lester, B., Liu, F., Zhao, W., Ciccone, M., and Raffel, C. Toksuite: Measuring the impact of tokenizer choice on language model behavior. 
+
+arXiv preprint arXiv:2512.20757 , 2025. Bauwens, T., Kaczér, D., and De Lhoneux, M. GRaMPa: Subword regularisation by skewing uniform segmenta-tion distributions with an efficient path-counting markov model. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 24228–24257, 2025. Bisk, Y., Zellers, R., Gao, J., Choi, Y., et al. PIQA: Reason-ing about physical commonsense in natural language. In 
+
+Proceedings of the AAAI Conference on Artificial Intelli-gence , volume 34, pp. 7432–7439, 2020. Brown, T., Mann, B., Ryder, N., Subbiah, M., Kaplan, J. D., Dhariwal, P., Neelakantan, A., Shyam, P., Sastry, G., Askell, A., et al. Language models are few-shot learners. In Advances in Neural Information Processing Systems 33 (NeurIPS) , 2020. Chai, Y., Fang, Y., Peng, Q., and Li, X. Tokenization falling short: On subword robustness in large language mod-els. In Findings of the Association for Computational Linguistics (EMNLP) , pp. 1582–1599, 2024. Clark, P., Cowhey, I., Etzioni, O., Khot, T., Sabharwal, A., Schoenick, C., and Tafjord, O. Think you have solved question answering? Try ARC, the AI2 reasoning chal-lenge. arXiv preprint arXiv:1803.05457 , 2018. Cognetta, M., Zouhar, V., and Okazaki, N. Distributional properties of subword regularization. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pp. 10753–10763, 2024. Deng, B., Wang, W., Feng, F., Deng, Y., Wang, Q., and He, X. Attack prompt generation for red teaming and defending large language models. In Findings of the Association for Computational Linguistics (EMNLP) , pp. 2176–2189, 2023. Dong, Z., Zhou, Z., Yang, C., Shao, J., and Qiao, Y. Attacks, defenses and evaluations for LLM conversation safety: A survey. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Com-putational Linguistics: Human Language Technologies (Volume 1: Long Papers) , pp. 6734–6747, 2024. Edman, L., Schmid, H., and Fraser, A. CUTE: Measuring LLMs’ understanding of their tokens. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pp. 3017–3026, 2024. Ennadir, S., Zólyomi, L., Smirnov, O., Wang, T., Pertoft, J., Cornell, F., and Cao, L. Pool me wisely: On the effect of pooling in transformer-based models. In Advances in Neural Information Processing Systems 39 (NeurIPS) ,2025. Feucht, S., Atkinson, D., Wallace, B. C., and Bau, D. Token erasure as a footprint of implicit vocabulary items in llms. In Proceedings of the 2024 Conference on Empirical 
+
+9Stochasticity in Tokenisation Improves Robustness 
+
+Methods in Natural Language Processing (EMNLP) , pp. 9727–9739, 2024. Gage, P. A new algorithm for data compression. The C Users Journal , 12(2):23–38, 1994. Geh, R., Zhang, H., Ahmed, K., Wang, B., and Van den Broeck, G. Where is the signal in tokenization space? In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pp. 3966–3979, 2024. Geh, R., Shao, Z., and Van den Broeck, G. Adversarial tokenization. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pp. 20738–20765, 2025. Grattafiori, A., Dubey, A., Jauhri, A., Pandey, A., Kadian, A., Al-Dahle, A., Letman, A., Mathur, A., Schelten, A., Vaughan, A., et al. The Llama 3 herd of models. arXiv preprint arXiv:2407.21783 , 2024. Hillier, D., Guertler, L., Tan, C., Agrawal, P., Ruirui, C., and Cheng, B. Super tiny language models. arXiv preprint arXiv:2405.14159 , 2024. Hiraoka, T. and Inui, K. Spelling-out is not straightforward: LLMs capability of tokenization from token to characters. 
+
+arXiv preprint arXiv:2506.10641 , 2025. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., and Chen, W. LoRA: Low-rank adaptation of large language models. In The Tenth International Conference on Learning Representations (ICLR) , 2022. Itzhak, I. and Levy, O. Models in a spelling bee: Lan-guage models implicitly learn the character composition of tokens. In Proceedings of the 2022 Conference of the North American Chapter of the Association for Compu-tational Linguistics: Human Language Technologies , pp. 5061–5068, 2022. Kaplan, G., Oren, M., Reif, Y., and Schwartz, R. From tokens to words: On the inner lexicon of LLMs. In 
+
+The Thirteenth International Conference on Learning Representations (ICLR) , 2025. Kaushal, A. and Mahowald, K. What do tokens know about their characters and how do they know it? In Proceedings of the 2022 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies , pp. 2487–2507, 2022. Kudo, T. Subword regularization: Improving neural network translation models with multiple subword candidates. In 
+
+Proceedings of the 56th Annual Meeting of the Associ-ation for Computational Linguistics (Volume 1: Long Papers) , pp. 66–75, 2018. Levenshtein, V. Binary codes capable of correcting dele-tions, insertions, and reversals. In Dokl. Akad. Nauk SSSR ,volume 163, pp. 845–848, 1965. Li, M. Q. and Fung, B. C. Security concerns for large lan-guage models: A survey. Journal of Information Security and Applications , 95:104284, 2025. Perez, E., Huang, S., Song, F., Cai, T., Ring, R., Aslanides, J., Glaese, A., McAleese, N., and Irving, G. Red teaming language models with language models. In Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing (EMNLP) , pp. 3419–3448, 2022. Provilkov, I., Emelianenko, D., and Voita, E. BPE-dropout: Simple and effective subword regularization. In Proceed-ings of the 58th Annual Meeting of the Association for Computational Linguistics , pp. 1882–1892, 2020. Rafailov, R., Sharma, A., Mitchell, E., Manning, C. D., Ermon, S., and Finn, C. Direct preference optimization: Your language model is secretly a reward model. In 
+
+Advances in Neural Information Processing Systems 36 (NeurIPS) , 2023. Roemmele, M., Bejan, C. A., and Gordon, A. S. Choice of plausible alternatives: An evaluation of commonsense causal reasoning. In AAAI spring symposium: logical formalizations of commonsense reasoning , pp. 90–95, 2011. Sennrich, R., Haddow, B., and Birch, A. Neural machine translation of rare words with subword units. In Proceed-ings of the 54th annual meeting of the association for computational linguistics (Volume 1: Long papers) , pp. 1715–1725, 2016. Sims, A., Foster, T., Kaleb, K., Nguyen, T.-D. H., Lee, J., Foerster, J. N., Teh, Y. W., and Lu, C. StochasTok: Improving fine-grained subword understanding in LLMs. In The Fourteenth International Conference on Learning Representations (ICLR) , 2026. Song, F., Yu, B., Li, M., Yu, H., Huang, F., Li, Y., and Wang, H. Preference ranking optimization for human alignment. In Proceedings of the AAAI Conference on Artificial In-telligence , volume 38, pp. 18990–18998, 2024. Talmor, A., Herzig, J., Lourie, N., and Berant, J. Com-monsenseQA: A question answering challenge targeting commonsense knowledge. In Proceedings of the 2019 Conference of the North American Chapter of the Associ-ation for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers) , pp. 4149–4158, 2019. 10 Stochasticity in Tokenisation Improves Robustness 
+
+Team, G., Anil, R., Borgeaud, S., Alayrac, J.-B., Yu, J., Sori-cut, R., Schalkwyk, J., Dai, A. M., Hauth, A., Millican, K., et al. Gemini: A family of highly capable multimodal models. arXiv preprint arXiv:2312.11805 , 2023. Virmaux, A. and Scaman, K. Lipschitz regularity of deep neural networks: Analysis and efficient estimation. In 
+
+Advances in Neural Information Processing Systems 31 (NeurIPS) , 2018. Wei, J., Bosma, M., Zhao, V. Y., Guu, K., Yu, A. W., Lester, B., Du, N., Dai, A. M., and Le, Q. V. Finetuned language models are zero-shot learners. In The Tenth International Conference on Learning Representations (ICLR) , 2022. Wu, Y., Schuster, M., Chen, Z., Le, Q. V., Norouzi, M., Macherey, W., Krikun, M., Cao, Y., Gao, Q., Macherey, K., et al. Google’s neural machine translation system: Bridging the gap between human and machine translation. 
+
+arXiv preprint arXiv:1609.08144 , 2016. Yin, Q., He, X., Leong, C. T., Wang, F., Yan, Y., Shen, X., and Zhang, Q. Deeper insights without updates: The power of in-context learning over fine-tuning. In Find-ings of the Association for Computational Linguistics (EMNLP) , pp. 4138–4151, 2024. Zellers, R., Holtzman, A., Bisk, Y., Farhadi, A., and Choi, Y. HellaSwag: Can a machine really finish your sentence? In Proceedings of the 57th Annual Meeting of the Asso-ciation for Computational Linguistics , pp. 4791–4800, 2019. Zheng, B. S., Liu, A., Ahia, O., Hayase, J., Choi, Y., and Smith, N. A. Broken tokens? Your language model can secretly handle non-canonical tokenizations. arXiv preprint arXiv:2506.19004 , 2025. 11 Stochasticity in Tokenisation Improves Robustness 
+
+## A. Training Details 
+
+§ The code for the experiments is available at: https://github.com/stegsoph/ stochastic-tokenisation-robustness .For LLMs trained from scratch, we use the architecture proposed in Hillier et al. (2024) and used in Sims et al. (2026). The architectural details are summarised in Table 4. The pre-training setup is summarised in Table 5. The fine-tuning step uses full parameter updating, with details specified in Table 6. Additionally, we use pre-trained weights and architectures from Hugging Face for GPT2-xl (https: //huggingface.co/openai-community/gpt2-xl ), Llama-1b (https://huggingface.co/ meta-llama/Llama-3.2-1B ), Llama-8b (https://huggingface.co/meta-llama/Llama-3.1-8B ), 
+
+Qwen-0.6b (https://huggingface.co/Qwen/Qwen3-0.6B ), and Gemma-1b (https://huggingface. co/google/gemma-3-1b-pt ). For the fine-tuning step, we train LoRA adapters with the training setup as specified in Table 7.   
+
+> Table 4. Model architecture of Tiny-LLM .
+
+Model architecture ( Tiny-LLM )
+
+Number of layers 8Hidden dimension 512 Attention heads 16 (grouped, group size 4) Feed-forward network SwiGLU, dimension 1320 Normalization RMSNorm (no bias) Positional encoding Rotary positional embeddings (RoPE) Context length 512 Tokeniser type GPT Vocabulary size 50,257 Embedding tying Input/output embeddings tied    
+
+> Table 5. Pre-training setup for Tiny-LLM on OpenWebText.
+
+Pre-training ( Tiny-LLM )
+
+Training objective Autoregressive language modeling Data set OpenWebText Tokenisation Canonical, S TOCHAS TOK (αpre ∈ { 0.1, 0.5})Training steps 30,000 Batch size 480 Optimizer AdamW Learning rate 6 × 10 −4 (min. 6 × 10 −5)Adam parameters β1 = 0 .9, β2 = 0 .95 
+
+Weight decay 0.1 Learning-rate schedule Linear warmup (5k steps) + linear decay Gradient clipping 1.0 Dropout 0.1 12 Stochasticity in Tokenisation Improves Robustness    
+
+> Table 6. Supervised fine-tuning setup for Tiny-LLM using stochastic tokenisation.
+
+Supervised fine-tuning ( Tiny-LLM )
+
+Training objective Supervised fine-tuning Tokenisation mode Canonical, S TOCHAS TOK , S TOCHAS TOK -UNI , U NIFORM -K, U NIFORM ,BPE-D ROPOUT 
+
+Training steps 3,000 Batch size 480 Optimizer AdamW Learning rate 1 × 10 −4 (min. 1 × 10 −5)Adam parameters β1 = 0 .9, β2 = 0 .95 
+
+Weight decay 0.05 Warmup steps 500 Dropout 0.1  
+
+> Table 7. Supervised fine-tuning configuration for Hugging Face models.
+
+Supervised fine-tuning ( GPT2-xl , Llama-1b , Llama-8b , Qwen-0.6b , Gemma-1b )
+
+Training objective Supervised fine-tuning Tokenisation mode Canonical, S TOCHAS TOK , S TOCHAS TOK -UNI , U NIFORM -K, U NIFORM ,BPE-D ROPOUT 
+
+Training steps 1,500 Optimizer AdamW Learning rate 1 × 10 −4 (min. 1 × 10 −5)Adam parameters β1 = 0 .9, β2 = 0 .95 
+
+Weight decay 0.01 Warmup steps 150 LoRA rank ( r) 8LoRA scaling ( α) 32 LoRA dropout 0.05 Task type Causal language modeling 
+
+## B. Experimental Details 
+
+In this section, we describe our evaluation setup in detail. 
+
+B.1. Normalised Number of Splits 
+
+Assume a string sequence x = ( x1, . . . , x s) and its canonical token sequence vc = ( vc
+
+> 1
+
+, . . . , v cm). Let v ∼ P (· | x)
+
+be a non-canonical tokenisation of x, where v = ( v1, . . . , v p) ∈ T V (x). We define the per-token split-count vector 
+
+S = ( S1, . . . , S m) that describes the number of splits induced in each canonical token. We define the normalised number of splits for a token sequence as 
+
+α(v, vc) := 
+
+P 
+
+> i
+
+Si
+
+|vc| , (5) which corresponds to the average number of splits per canonical token. 
+
+B.2. Average Tokenisation Robustness 
+
+We quantify average accuracy given stochastic tokenisations in a multiple-choice setting. For each input question string 
+
+x, we have answer options {ac}Cc=1 and correct index y ∈ { 1, . . . , C }. Assume the stochastic tokenisation of the query 
+
+v ∼ P (· | x; αeval ), and canonical tokenisation of the answer options {vac }Cc=1 . The model predicts the answer with the 13 Stochasticity in Tokenisation Improves Robustness 
+
+highest conditional probability 
+
+ˆy  v, {vac }Cc=1 
+
+ = arg max 
+
+> c∈{ 1,...,C }
+
+p(vac | v). (6) We approximate the expected accuracy under stochastic tokenisation by Monte Carlo sampling. We draw M = 10 
+
+tokenisations {v(m)}Mm=1 and compute 
+
+Acc = 1
+
+M
+
+> M
+
+X
+
+> m=1
+
+1
+
+
+
+ˆy
+
+
+
+v(m), {vac }Cc=1 
+
+
+
+= y
+
+
+
+. (7) We report the average accuracy over N = 500 data samples, 
+
+Acc = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+1
+
+M
+
+> M
+
+X
+
+> m=1
+
+1
+
+
+
+ˆy
+
+
+
+v(m) 
+
+> n
+
+, {vac,n }Cc=1 
+
+
+
+= yn
+
+
+
+. (8) 
+
+B.3. Adversarial Tokenisation Robustness 
+
+To evaluate adversarial tokenisation robustness, we use the greedy search algorithm by Geh et al. (2025), summarised in Alg. 2. For a given input string x, the attacker selects an initial tokenisation. Unless stated otherwise, we use the canonical tokenisation as a default initialisation. In ablation experiments, we report results for randomly drawn initial tokenisation. Let vadv  
+
+> n
+
+denote the adversarial tokenisation for input string xn.We compare the clean average accuracy on the canonical tokenisation 
+
+Acc clean = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+1 ˆy  τ (xn), {vac,n }Cc=1 
+
+ = yn
+
+ (9) and the adversarial accuracy 
+
+Acc adv = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+1 ˆy  vadv  
+
+> n
+
+, {vac,n }Cc=1 
+
+ = yn
+
+ . (10) 
+
+B.4. In-context Learning 
+
+Let (vi, vai )Ki=1 be K tokenised context examples and let v∗ be a test query with answer options {v∗ 
+
+> ac
+
+}Cc=1 . To evaluate in-context learning robustness, we sample stochastic tokenisations for each context example vi ∼ P (vi | xi; αICL ), and test whether this improves robustness to stochastic tokenisations of the query v∗ ∼ P (v∗ | x∗; αeval ). We denote the number of solved examples presented in the context by K. We report the average accuracy over N = 500 data samples 
+
+Acc = 1
+
+N
+
+> N
+
+X
+
+> n=1
+
+1 ˆy  (v1, va1 , . . . , vK , vaK , v∗
+
+> n
+
+), {v∗
+
+> ac,n
+
+}Cc=1 
+
+ = y∗
+
+> n
+
+ (11) where y∗ 
+
+> n
+
+denotes the ground-truth index and ˆy(·) the predicted answer index. For the adversarial attack, we define the adversarial objective as maximising the margin of the conditional probability assigned to each answer option c
+
+¯zc(v∗) = p(vac | v1, va1 , . . . , vK , vaK , v∗) . (12) 
+
+B.5. Distances of Representations 
+
+We analyse how training with different stochastic tokenisation schemes affects the internal representations of the same word with different non-canonical tokenisations by measuring the distance between its hidden states. We consider the 1,000 most common English words. For each word x, we draw 50 tokenisations uniformly from TV (x).14 Stochasticity in Tokenisation Improves Robustness 
+
+Let hℓ(v) ∈ Rd denote the hidden representation at model layer ℓ for tokenisation v, obtained via last-token pooling. For each layer ℓ, we report the L2 distance between the canonical tokenisation vc and a sampled tokenisation v, where the length of both vectors has been scaled to have unit norm: 
+
+dℓ(v, vc) = hℓ(v)
+
+∥hℓ(v)∥2
+
+− hℓ(vc)
+
+∥hℓ(vc)∥2 2
+
+(13) We report the average of dℓ(v, vc) across words and sampled tokenisations. 
+
+## C. Data Sets 
+
+C.1. Language Games LANGUAGE GAME (Sims et al., 2026) consists of six question types that require subword understanding (count letter, contains letter, starts with string, ends with string, longest word, shortest word). For the training set we randomly sample from the top 1k English words. Below, we illustrate the effect of our stochastic tokenisation schemes for questions of the L ANGUAGE GAME data set tokeniser with a Llama 3 tokeniser. Hyphens (“-“) indicate token boundaries. CANONICAL :
+
+• Which-choice-has-the-most-letter-’-b-’s-?-These-are-the-possible-option-words-:-[-up-,-baby-,-rain-,-glad-].-Answer-:--baby-
+
+• Which-option-ends-with-’o’-?-The-possible-option-strings-:-[-no-,-hard-,-by-,-happen-].-Answer-:--no-
+
+• What-word-is-the-shortest-?-The-available-option-strings-are-:-[-row-,-suffix-,-gather-,-energy-].-Answer-:--row-
+
+STOCHAS TOK (α = 1 ): 
+
+• Wh-i-ch-choice-has-the-most-le-t-t-er-’-b-’s-?-These-are-the-possible-option-words-:-[-up-,-baby-,-rain-,-g-lad-].-A-n-sw-er-:--baby-
+
+• Which-option-end-s-with-’o’-?-The-possible-option-s-tring-s-:-[-no-,-hard-,-b-y-,-happen-].-Answer-:--no-
+
+• Wh-at-word-i-s-the-shortest-?-The-available-option-string-s-are-:-[-r-o-w-,-suffix-,-g-ather-,-e-n-ergy-].-Ans-wer-:--row-
+
+STOCHAS TOK -UNI (α = 1 ): 
+
+• W-hic-h-choice-has-the-mo-s-t-letter-’-b-’-s-?-The-se-are-the-possible-opt-ion-words-:-[-u-p-,-baby-,-rain-,-g-la-d-].-Answer-:--baby-
+
+• Which-op-ti-on-en-ds-w-i-t-h-’o’-?-The-possible-op-tion-strings-:-[-no-,-h-a-r-d-,-by-,-happen-].-Answer-:--no-
+
+• What-wo-rd-is-th-e-shortest-?-The-available-o-p-tion-strings-a-r-e-:-[-row-,-su-ff-ix-,-gather-,-ener-gy-].-Answer-:--row-
+
+UNIFORM -K (α = 1 ): 
+
+• Which-c-h-o-ic-e-has-th-e-mos-t-letter-’-b-’s-?-The-se-are-the-poss-ible-op-tion-wo-r-ds-:-[-up-,-ba-by-,-rain-,-glad-].-An-s-we-r-:--baby-
+
+• W-h-ic-h-option-end-s-w-ith-’o’-?-T-he-possible-option-str-ing-s-:-[-no-,-h-ard-,-by-,-happen-].-An-sw-er-:--no-
+
+• What-w-o-rd-is-the-s-hort-est-?-The-a-vailable-option-s-t-r-i-n-gs-are-:-[-row-,-suffix-,-ga-ther-,-energy-].-Ans-w-er-:--row-
+
+15 Stochasticity in Tokenisation Improves Robustness 
+
+UNIFORM :
+
+• Wh-i-c-h-cho-i-c-e-h-as-t-h-e-m-o-st-le-tte-r-’-b-’s-?-Th-es-e-a-r-e-t-he-po-ssi-b-l-e-op-t-ion-words-:-[-u-p-,-b-a-b-y-,-r-ain-,-g-lad-].-A-ns-w-e-r-:--baby-
+
+• W-h-i-ch-op-ti-on-ends-wi-t-h-’o’-?-T-h-e-po-s-s-ible-option-s-tr-i-n-g-s-:-[-no-,-ha-rd-,-b-y-,-ha-p-pe-n-].-Ans-w-er-:--no-
+
+• W-hat-word-i-s-th-e-s-ho-r-t-e-st-?-Th-e-a-v-a-i-l-abl-e-op-t-i-o-n-s-t-ring-s-a-re-:-[-row-,-s-u-ff-i-x-,-g-a-th-er-,-e-n-er-g-y-].-An-s-wer-:--row-
+
+CUTE (Edman et al., 2024) tests the Character-level Understanding of Tokens of models. The original data sets was intended for zero-shot evaluation, providing only a test split. Thus, we follow Sims et al. (2026) in generating a custom C UTE data set for training and evaluating the smaller scale LLMs. We generate questions for seven subword tasks (contains letter, delete letter, insert letter, orthography, spelling, inverse spelling, substitute letter). For the training set we randomly sample from the top 1k English words. CANONICAL :
+
+• Spell-out-the-word-"-stood-".-Answer-:-s-t-o-o-d-
+
+• Is-there-a-"-e-"-in-"-salt-"?-Answer-:-No-
+
+• Delete-every-instance-of-"-c-"-in-"-molecule-".-Answer-:-m-ole-ule-
+
+C.2. General Benchmarks ARC-E (Clark et al., 2018) consists of natural, grade-school science questions with four answer options. CANONICAL :
+
+• Which-factor-will-most-likely-cause-a-person-to-develop-a-fever-?-a-bacterial-population-in-the-bloodstream-
+
+• L-ich-ens-are-symb-iotic-organisms-made-of-green-algae-and-fungi-.-What-do-the-green-algae-supply-to-the-fungi-in-this-symb-iotic-relationship-?-food-
+
+• When-a-switch-is-used-in-an-electrical-circuit-,-the-switch-can-stop-and-start-the-flow-of-current-.-
+
+COPA (Roemmele et al., 2011) contains multiple-choice questions that test causaul reasoning with two answer options. CANONICAL :
+
+• My-body-cast-a-shadow-over-the-grass-.-cause-?-The-sun-was-rising-.-
+
+• The-woman-tolerated-her-friend-’s-difficult-behavior-.-cause-?-The-woman-knew-her-friend-was-going-through-a-hard-time-.-
+
+• The-women-met-for-coffee-.-cause-?-They-wanted-to-catch-up-with-each-other-.-
+
+CSQA (Talmor et al., 2019) contains multiple-choice questions that test commonsense knowledge with five answer options. CANONICAL :
+
+• The-sanctions-against-the-school-were-a-punishing-blow-,-and-they-seemed-to-what-the-efforts-the-school-had-made-to-change-?-ignore-
+
+• Sam-my-wanted-to-go-to-where-the-people-were-.-Where-might-he-go-?-populated-areas-
+
+16 Stochasticity in Tokenisation Improves Robustness 
+
+• To-locate-a-ch-oker-not-located-in-a-jewelry-box-or-boutique-where-would-you-go-?-jewelry-store-
+
+HELLA SWAG (Zellers et al., 2019) contains multiple-choice questions that test the most natural continuation given four answer options. CANONICAL :
+
+• [--header--]-How-to-dry-pant-yh-ose-in-a-hurry-[--title--]-Lay-the-pant-yh-ose-flat-on-your-towel-.-[--step--]-Use-a-dry-bath-towel-for-best-results-.-The-thicker-the-towel-is-,-the-more-effective-this-method-will-be-.-If-you-do-not-have-a-thick-towel-,-repeat-the-method-using-two-separate-towels-.-[--title--]-Roll-pant-yh-ose-into-your-thick-towel-.-
+
+• [--header--]-How-to-make-german-style-meat-lo-af-[--title--]-Combine-beef-,-pork-,-onions-,-beaten-eggs-,-bread-crumbs-,-3-tablespoons-water-,-parsley-,-pap-rika-,-prepared-mustard-and-salt-.-[--step--]-Mix-well-.-[--title--]-Press-the-mixture-into-the-8-"-baking-pan-.-[--step--]-Place-the-3-hard-cooked-eggs-in-a-row-down-the-middle-of-the-meat-mixture-,-then-fold-up-both-sides-,-so-you-have-a-loaf-.-[--title--]-Pre--heat-the-oven-to-375-.-
+
+• [--header--]-How-to-feel-full-without-eating-[--title--]-Chew-a-piece-of-gum-.-[--step--]-Ch-ewing-a-piece-of-gum-will-trigger-your-brain-and-stomach-to-believe-you-are-about-to-eat-or-feeling-full-.-This-will-not-only-stimulate-your-mind-to-feel-full-,-but-will-also-make-sure-that-your-mouth-is-too-busy-to-eat-.-[--sub--steps--]-Make-sure-to-chew-sugar-less-gum-so-that-you-don-’t-get-unnecessary-calories-.-Ch-ewing-gum-can-even-burn-11-calories-an-hour-.-
+
+PIQA (Bisk et al., 2020) contains multiple-choice questions that test knowledge about the physical world with two answer options. CANONICAL :
+
+• When-boiling-butter-,-when-it-’s-ready-,-you-can-Pour-it-into-a-jar-
+
+• To-permanently-attach-metal-legs-to-a-chair-,-you-can-Weld-the-metal-together-to-get-it-to-stay-firmly-in-place-
+
+• how-do-you-indent-something-?-leave-a-space-before-starting-the-writing-
+
+SOCIAL IQA contains multiple-choice questions that test social commonsense knowledge with three answer options. CANONICAL :
+
+• Choose-the-most-likely-answer-.-Context-:-After-weeks-apart-from-one-another-Austin-invited-their-boyfriend-to-dinner-.-Question-:-Why-did-Austin-do-this-?-reconnect-
+
+• Choose-the-most-likely-answer-.-Context-:-Lee-spent-extra-time-to-explain-clearly-the-topic-purpose-to-the-students-.-Question-:-How-would-you-describe-Lee-?-careful-
+
+• Choose-the-most-likely-answer-.-Context-:-The-man-and-woman-were-too-tired-to-cook-,-so-Bailey-made-their-breakfast-.-Question-:-How-would-Bailey-feel-afterwards-?-helpful-
+
+17 Stochasticity in Tokenisation Improves Robustness 
+
+## D. Pseudocodes 
+
+Algorithm 1 STOCHAS TOK : stochastic tokenisation via random pairwise splits 
+
+Require: String x ∈ X ∗; token vocabulary V; canonical tokenizer τ ; split map S; expansion proportion α ≥ 0; max splits 
+
+Kmax 
+
+1: v ← τ (x) {canonical tokenisation} 
+
+2: K ← min  Kmax , ⌈α · | v|⌉ 
+
+3: for k = 1 to K do 
+
+4: i ← randomInteger (1 , |v|)
+
+5: t ← vi
+
+6: if S(t)̸ = ∅ then 
+
+7: (a, b ) ← randomChoice (S(t)) 
+
+8: v ← (v1, . . . , v i−1, a, b, v i+1 , . . . , v |v|)
+
+9: end if 
+
+10: end for 
+
+11: return v
+
+Algorithm 2 Greedy adversarial tokenisation (radius-2 neighbourhood) 
+
+Require: string x, correct option y, scoring function zc(v), start tokenisation v0 ∈ T V (x), max steps S
+
+1: v ← v0
+
+2: for s = 1 , . . . , S do 
+
+3: N ← Ne( v) = T 2 
+
+> V
+
+(x, v)
+
+4: v⋆ ← arg max u∈N (max c̸=y zc(u) − zy (u)) 
+
+5: if max c̸=y zc(v⋆) − zy (v⋆) ≤ max c̸=y zc(v) − zy (v) then 
+
+6: break {local optimum} 
+
+7: end if 
+
+8: v ← v⋆
+
+9: end for 
+
+10: return v
+
+18 Stochasticity in Tokenisation Improves Robustness 
+
+## E. Proof of Theorem 6.2 
+
+Beyond the empirical results outlined in the previous section, we aim to theoretically characterise how tokenisation affects the robustness of the resulting model. In this perspective, we focus on evasion attacks, i.e. , adversarial perturbations applied at test time. This threat model is particularly relevant in practical settings, where attackers typically have access only to the deployed model during inference. In this direction, let’s consider a trained classifier f : V → Y and let v ∈ V be an input with its associated label y ∈ Y , such that f (v) = y. The goal of an attacker is to craft a small additional perturbation to the input, such as to generate a point ˜v whose prediction f (˜ v) is different from the original one. We note that in our setting, the function f represents the LLM after the tokeniser, comprising the embedding function and subsequent transformer blocks with self-attention. As the generated adversarial perturbation should be “similar” to the original input, we consider a similarity budget ε (the maximum possible changes to the input), comprising the set of valid adversarial perturbations defined by a neighbourhood 
+
+B(x, ε ). In our setting B(x, ε ) = T k 
+
+> V
+
+(x) with edit distance at most k. Now, the adversarial aim is to find, within B(x, ε ),points that not only satisfy the adversarial aim of flipping the classification but also result in the worst prediction. In this direction, given our model f , the model’s adversarial risk can be formulated as: 
+
+Rε[f ] = E
+
+> x∈D X
+
+"
+
+sup 
+
+> ˜x∈B (x,ε )
+
+dY (f (˜ x) , f (x)) 
+
+#
+
+. (14) From a defence perspective, the objective is to ensure that the risk remains small, thereby keeping predictions within the same output region and making it harder to find a valid perturbation. This goal can be formulated as: 
+
+Definition E.1 (Adversarial Robustness) . The classifier f is said to be (ε, γ )-robust if its adversarial risk with respect to the classifier f satisfies: Rε[f ] ≤ γ. 
+
+Definition E.1 uses an upper-bound perspective ( γ) as computing the exact risk is generally intractable. A smaller value of 
+
+γ indicates stronger robustness guarantees. Consequently, comparing the resulting bounds provides a principled way to assess and contrast the model’s robustness. Without loss of generality, we consider a 1-layer Transformer-based model in which all activation functions are assumed to be 1-Lipschitz, which is the case for many common activations, e.g. , tanh 
+
+and sigmoid (Virmaux & Scaman, 2018). We additionally assume the output of the embedding function to be bounded in terms of its norm ( e.g. , [0 , 1] n×d, with n being the number of tokens and d the hidden dimension). In this setting, the model’s underlying robustness, γ, can be derived and is given by the following. 
+
+Theorem. Let f : X → Y be a classifier following our considered problem setup, then f is (ε, γ )-robust , with: 
+
+γ = √2 ∥W ∥
+
+ dd − 1
+
+2
+
+C1C2
+
+√k , 
+
+with C1 = 1 + ∥WO ∥√H max 
+
+> h
+
+∥W V,h ∥ 4
+
+pd/H ∥W Q,h ∥∥ W K,h ∥+1  ,C2 =  1 + ∥WF F N ∥∥Wout ∥.
+
+Proof. We recall our considered problem setup, in which f is a classifier (a large-language model). In the following analysis, we will ignore the reliance on the tokeniser τ and focus on the remaining function, i.e. ,
+
+f = A ◦ E, (15) where: • E : V∗ → Rd×n an embedding function, mapping from tokens to a continuous space. • A : Rd×n → Rm an attention-block, mapping from a set of tokens to a classification, for instance. Note that we consider the pooling operation within this block. 19 Stochasticity in Tokenisation Improves Robustness 
+
+Now recall that X denotes the space of raw inputs ( e.g. , strings or words), V is the token vocabulary, and let V∗ be the set of finite token sequences where n is the length of the sequence, which depends on the input’s length and the considered tokenisation. Further, let d be the embedding dimension. We now consider that each space within our components is equipped with an appropriate metric or distance, i.e. , dV∗ (edit distance) on token sequences, and the L2 norm in Euclidean spaces. Given a character sequence x, we denote: 
+
+s1 ∈ V ∗, s2 ∈ T k 
+
+> V∗
+
+(x, s 1), (16) where s1 is, for example, the canonical tokenisation of a string, and s2 denotes an adversarially perturbed counterpart within the k-neighbourhood of s1. Consequently, the adversarial perturbation induces at most k token-level changes, which can be written as: 
+
+dV∗ (s1, s 2) ≤ k. (17) The effect of the perturbation can first be shown within the embedding level, and we therefore start by writing the effect of this perturbation. Let H(s) ∈ { 0, 1}|V|× n denote the one-hot representation of a token sequence s = ( v1, . . . , v n), so that the embedding function can be written as 
+
+E(s) = W H (s), (18) where W ∈ Rd×|V| is the learned embedding matrix. Each token substitution affects exactly one column of the matrix H(s), replacing a one-hot vector by another one-hot vector. Therefore, if s1 and s2 differ in at most k token positions, the matrix H(s1) − H(s2) has at most k non-zero columns, each with ℓ2-norm √2 . We can consequently formulate the following: 
+
+∥H(s1) − H(s2)∥≤ √2k . (19) And consequently, we can also derive the following: 
+
+∥E(s1) − E(s2)∥ = ∥W (H(s1) − H(s2)) ∥ ≤ ∥ W ∥ ∥ H(s1) − H(s2)∥ ≤ √2 ∥W ∥ √k . (20) Now, let’s consider the second part, which relates to the self-attention block. Let ze (corresponding to s1) and ˜ze (the perturbed version corresponding to s2) be the input to this specific part of the model. In practice an additional linear head is added at the end to get the final predictions, in our case we consider it to be Wout .Additionally, as specific in Section 6.1, we consider that the output of the embedding function to be bounded in terms of its norm ( e.g. , [0 , 1] n×d, with n being the number of tokens and d the hidden dimension). Consequently, based on the previous assumptions and following previous work (Ennadir et al., 2025), we have the following inequality: 
+
+∥A(ze) − A( ˜ ze)∥≤ ∥ ze − ˜ze∥
+
+ dd − 1
+
+2
+
+C1C2 (21) with 
+
+C1 = 1 + ∥WO ∥√H max 
+
+> h
+
+"
+
+W V,h 4 n
+
+pd/H W Q,h W K,h + 1 
+
+!# 
+
+(22) 
+
+C2 = (1 + WF F N )∥Wout ∥. (23) Hence, after simple substitution we have: 
+
+∥f (s1) − f (s2)∥ ≤ ∥ A(E(s1)) − A(E(s2)) ∥ (24) 
+
+≤ √2 ∥W ∥
+
+ dd − 1
+
+2
+
+C1C2
+
+√k . (25) 20 Stochasticity in Tokenisation Improves Robustness 
+
+## F. Distributional Properties of Stochastic Tokenisations 
+
+Let x = ( x1, . . . , x s) be a string sequence and vc = ( vc
+
+> 1
+
+, . . . , v cm) its canonical tokenisation. We sample a non-canonical tokenisation v ∼ P (· | x) from a stochastic tokenisation scheme, where v = ( v1, . . . , v p) ∈ T V (x). We define a per-token split-count vector S = ( S1, . . . , S m) that describes the number of splits induced in each canonical token. The split vector S
+
+is a random variable. In the following, we discuss the probability distribution of S for each of our considered stochastic tokenisation schemes. 
+
+STOCHAS TOK STOCHAS TOK applies N token-level splits in an iterative sampling process (see Alg. 1). At each step, a token vi is selected uniformly at random and replaced by a pair of subtokens (t1, t 2) ∈ V 2 with t1 ◦ t2 = v1. In the next step, a token from this extended token sequence is selected uniformly. Now, there are two possibilities to select a token that corresponds to the original token vi. This procedure corresponds exactly to a Polya-urn model. Thus, the number of times each original token is split follows a Dirichlet–multinomial distribution with symmetrical concentration parameter 
+
+S ∼ DirMult (N, α), with α = 1¯. (26) 
+
+STOCHAS TOK -UNI We construct S TOCHAS TOK -UNI to follow the per-token split-count distribution S of S TOCHAS TOK .We draw S ∼ DirMult (N, 1¯), and sample the tokenisations for each canonical token vi with the specified split count Si.Recall that each token vci ∈ V corresponds to a character sequence, which we denote by ˜xi := κ(vci ) ∈ X ∗. Thus, we sample vi ∼ Unif 
+
+
+
+T Si+1  
+
+> V
+
+(vci )
+
+
+
+.
+
+UNIFORM -K UNIFORM -K selects a non-canonical tokenisation uniformly at random from the set of all possible valid segmentations with edit distance k, i.e. v ∼ Unif  T k 
+
+> V
+
+(x) .
+
+Next, we want to describe the distribution over the per-token split-count S = ( S1, . . . , S m) this scheme induces. To simplify, we consider only splits within canonical token boundaries. For a canonical token vci , let Ai(s) = |T s 
+
+> V
+
+(vci )| denote the number of non-canonical tokenisations of vci with exactly s splits. Using these counts, we construct a polynomial 
+
+Gi(x) = X
+
+> s≥0
+
+Ai(s) x s. (27) The total number of tokenisations of vc with exactly k splits can be computed via the product 
+
+G(x) = 
+
+> m
+
+Y
+
+> i=1
+
+Gi(x) (28) via the k-th coefficient [xk]G(x). To obtain the probability of canonical token vci having exactly Si = s splits, we define 
+
+Hi(x) = Y 
+
+> j̸=i
+
+Gj (x), (29) and obtain 
+
+P
+
+Si = s | X
+
+> j
+
+Sj = k
+
+ = Ai(s) [ xk−s] Hi(x)[xk] G(x) . (30) 
+
+UNIFORM UNIFORM samples tokenisations uniformly from all valid non-canonical tokenisations, v ∼ Unif (TV (x)) .For simplification, assume an infinite vocabulary V. Let Si be the number of splits within vci . Then, Si follows a binomial 
+
+distribution 
+
+Si ∼ Binom (|vci | − 1, 1/2) (31) as U NIFORM corresponds to flipping a fair coin at every internal boundary. 21 Stochasticity in Tokenisation Improves Robustness 
+
+F.1. Empirical distribution over Per-token Split-counts 
+
+We test whether our theoretical distributions for the per-token split-count distributions match the empirical distribution for the different stochastic tokenisation schemes. We take an example input sequence x =(revolution is a rapid, fundamental transformation of a society’s class, state, ethnic or religious structures ). We sample D = 50 , 000 draws of tokenisations v ∼ P (· | x) and report the empirical distribution over the number of splits S1 for the first token v1 =
+
+revolution .
+
+0 2 4 6 8
+
+0
+
+20 
+
+40 
+
+Number of splits S1
+
+> Probability (%)
+
+Simulation Theoretical  
+
+> (a) STOCHAS TOK
+
+0 2 4 6 8
+
+0
+
+20 
+
+40 
+
+Number of splits S1
+
+> Probability (%)
+
+Simulation 
+
+Theoretical  
+
+> (b) STOCHAS TOK -UNI
+
+0 2 4 6 8
+
+0
+
+20 
+
+40 
+
+60 
+
+Number of splits S1
+
+> Probability (%)
+
+Simulation 
+
+Theoretical  
+
+> (c) UNIFORM -K
+
+0 5 10 
+
+0
+
+20 
+
+40 
+
+Number of splits S1
+
+> Probability (%)
+
+Simulation 
+
+Theoretical  
+
+> (d) UNIFORM
+
+22 Stochasticity in Tokenisation Improves Robustness 
+
+F.2. Different Tokenisers and Their Effect on Stochastic Tokenisation Schemes 
+
+GPT2’s BPE tokeniser (Sennrich et al., 2016) has a vocabulary of 50,257 tokens, whereas Llama3’s tokeniser has a vocabulary size of 128,k. The Llama3 tokeniser is BPE based with the difference that it ignores merge rules if a string is part of the vocabulary. 
+
+GPT2 
+
+> rev-olution
+
+0
+
+50 
+
+100 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+> re-vol-ution
+> r-ev-olution
+> re-v-olution
+> rev-ol-ution
+
+0
+
+20 
+
+40 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+> rev-o-l-ution
+> re-vo-lu-tion
+> rev-o-lu-tion
+> r-ev-ol-ution
+> r-e-v-olution
+> re-vo-l-ution
+> rev-ol-uti-on
+> re-vol-ut-ion
+> re-vol-u-tion
+> r-e-vol-ution
+> re-v-ol-ution
+> re-vol-uti-on
+> rev-ol-u-tion
+> rev-ol-ut-ion
+
+0
+
+10 
+
+20 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+> rev-ol-ut-io-n
+> rev-o-l-u-tion
+> rev-o-l-uti-on
+> r-ev-ol-uti-on
+> re-v-o-l-ution
+> r-e-vol-u-tion
+> rev-o-l-ut-ion
+> rev-ol-u-t-ion
+> rev-o-lu-ti-on
+> re-v-ol-uti-on
+> r-e-v-ol-ution
+> rev-ol-u-ti-on
+> r-ev-ol-ut-ion
+> re-vo-lu-t-ion
+> re-vo-l-uti-on
+> re-vol-uti-o-n
+> re-vol-u-ti-on
+> r-e-vol-ut-ion
+> re-v-o-lu-tion
+> re-v-ol-u-tion
+> r-ev-ol-u-tion
+> r-e-vo-l-ution
+> r-e-vol-uti-on
+> re-vol-u-t-ion
+> re-vol-ut-io-n
+> r-ev-o-l-ution
+> re-vo-l-ut-ion
+> re-vo-l-u-tion
+> r-e-vo-lu-tion
+> rev-ol-ut-i-on
+> r-ev-o-lu-tion
+> re-vol-ut-i-on
+> re-vo-lu-ti-on
+> rev-o-lu-t-ion
+> re-v-ol-ut-ion
+> rev-ol-uti-o-n
+
+0
+
+10 
+
+20 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+Figure 7. Histogram comparison of segmentation probabilities for two sampling schemes (U NIFORM vs. S TOCHAS TOK ). 
+
+23 Stochasticity in Tokenisation Improves Robustness 
+
+Llama 3 
+
+> rev-olution
+> re-volution
+
+0
+
+20 
+
+40 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+> re-vol-ution
+> re-v-olution
+> r-ev-olution
+> rev-ol-ution
+> rev-olut-ion
+> r-e-volution
+> rev-olu-tion
+
+0
+
+10 
+
+20 
+
+30 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+> re-vo-l-ution
+> r-e-vol-ution
+> r-ev-olut-ion
+> re-v-olut-ion
+> re-vol-uti-on
+> rev-ol-u-tion
+> rev-olu-ti-on
+> rev-ol-ut-ion
+> rev-olut-io-n
+> re-vo-lu-tion
+> r-e-v-olution
+> rev-o-lu-tion
+> rev-olut-i-on
+> re-v-ol-ution
+> rev-ol-uti-on
+> re-vol-ut-ion
+> rev-olu-t-ion
+> rev-o-lut-ion
+> re-v-olu-tion
+> r-ev-olu-tion
+> re-vo-lut-ion
+> re-vol-u-tion
+> r-ev-ol-ution
+> rev-o-l-ution
+
+0
+
+10 
+
+20 
+
+30 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+> rev-o-l-ut-ion
+> r-ev-olu-t-ion
+> r-e-vol-uti-on
+> rev-ol-u-t-ion
+> re-vol-ut-i-on
+> rev-olu-ti-o-n
+> re-vo-l-uti-on
+> r-e-v-olut-ion
+> r-ev-ol-uti-on
+> r-e-v-olu-tion
+> re-vol-ut-io-n
+> re-v-o-l-ution
+> re-v-ol-u-tion
+> r-e-vol-u-tion
+> re-vo-lut-io-n
+> rev-olu-t-io-n
+> re-vo-l-u-tion
+> re-v-olu-ti-on
+> re-vol-u-ti-on
+> rev-ol-u-ti-on
+> re-vo-lut-i-on
+> r-e-vo-lu-tion
+> r-ev-olut-io-n
+> r-e-vo-l-ution
+> rev-o-lu-t-ion
+> re-v-ol-uti-on
+> r-ev-o-lu-tion
+> re-v-olu-t-ion
+> re-vo-lu-ti-on
+> rev-o-lut-i-on
+> re-v-olut-i-on
+> r-ev-o-l-ution
+> rev-o-lu-ti-on
+> rev-o-l-u-tion
+> rev-ol-ut-i-on
+> rev-olut-i-o-n
+> re-vol-u-t-ion
+> rev-o-lut-io-n
+> r-ev-ol-u-tion
+> rev-olu-t-i-on
+> re-vo-l-ut-ion
+> r-ev-olu-ti-on
+> re-vol-uti-o-n
+> r-e-v-ol-ution
+> rev-ol-uti-o-n
+> re-v-o-lu-tion
+> rev-ol-ut-io-n
+> r-ev-olut-i-on
+> r-e-vo-lut-ion
+> r-ev-o-lut-ion
+> r-ev-ol-ut-ion
+> r-e-vol-ut-ion
+> rev-o-l-uti-on
+> re-v-olut-io-n
+> re-vo-lu-t-ion
+> re-v-o-lut-ion
+> re-v-ol-ut-ion
+
+0
+
+5
+
+10 
+
+> Probability (%)
+
+UNIFORM STOCHAS TOK 
+
+Figure 8. Histogram comparison of segmentation probabilities for two sampling schemes (U NIFORM vs. S TOCHAS TOK ). 
+
+24 Stochasticity in Tokenisation Improves Robustness 
+
+## G. Additional Experiments and Ablations 
+
+G.1. Additional Results for Stochastic Pre-Training 
+
+G.1.1. L ANGUAGE MODELLING AND GENERAL BENCHMARK PERFORMANCE 
+
+We report perplexity PPL( x1: T ) = exp 
+
+
+
+− 1
+
+> T
+
+PTt=1 log p(xt | x<t )
+
+
+
+on a validation subset of OpenWebText for our pre-trained Tiny-LLM models in Table 8. Stochastic pre-training leads to higher perplexity on canonical validation data. This is consistent with the training objective: during stochastic pre-training, the model is trained to also predict non-canonical 
+
+token sequences. At the same time, perplexity is substantially reduced for non-canonically tokenised validation data. 
+
+Table 8. Perplexity on an OpenWebText validation subset for canonically and non-canonically tokenised inputs. 
+
+αpre canonical αeval = 0 .1 αeval = 0 .5
+
+0.0 29.77 98.08 474.72 0.5 53.06 43.89 30.28 In addition, we report the multiple-choice accuracy of the Tiny-LLM models on standard benchmark datasets in Table 9. Increasing αpre slightly worsens the fit to the canonical distribution, but improves robustness to non-canonical tokenisations. Importantly, during stochastic pre-training, the model is trained to predict non-canonical token sequences. This can reduce accuracy in standard MCQ evaluations, where we compare the log-likelihood of canonically tokenised answer continuations. In subsequent fine-tuning stages, however, we can perturb the input while keeping the prediction targets canonical. This encourages robustness to perturbed input tokenisations without requiring the model to generate non-canonical outputs. 
+
+Table 9. MCQ accuracy of pre-trained Tiny-LLM models on standard benchmarks under canonical and non-canonical tokenisation at evaluation time. 
+
+ARC-E BLIMP COPA HELLA SWAG 
+
+αpre canon. αeval = 0 .5 canon. αeval = 0 .5 canon. αeval = 0 .5 canon. αeval = 0 .5
+
+0.0 0.3780 0.2720 0.8480 0.6900 0.6600 0.4900 0.3160 0.2740 0.5 0.3300 0.3120 0.8300 0.8040 0.6100 0.5900 0.2960 0.3060 G.1.2. E VALUATION ON TOK SUITE 
+
+Lastly, we evaluate the Tiny-LLM models on T OK SUITE (Altınta¸ s et al., 2025), which probes a variety of tokenisation-sensitive tasks. Under canonical evaluation, stochastic pre-training with αpre = 0 .5 leads to a small drop in overall accuracy compared to canonical pre-training, from 0.3746 to 0.3623 . For individual subsets, the largest decreases are observed for  
+
+> CONTRACTIONS
+
+(from 0.5854 to 0.4146 ), ABBREVIATIONS (from 0.3784 to 0.2703 ), WEB SEARCH QUERIES (from 0.3514 
+
+to 0.2432 ), SIMILAR WORDS (from 0.5405 to 0.4595 ), and COLLOQUIAL VARIANTS (from 0.4250 to 0.3500 ). However, we also observe improvements on several subsets, including SPELLED -OUT TEXT (from 0.2667 to 0.4667 ), HISTORICAL SPELLING (from 0.3500 to 0.5000 ), KEYBOARD PROXIMITY ERRORS (from 0.2927 to 0.4146 ), and DATE FORMATS (from 
+
+0.1667 to 0.2778 ). Under stochastic evaluation with S TOCHAS TOK perturbations at αeval = 0 .5, however, stochastic pre-training improves overall accuracy from 0.2974 to 0.3535 . The largest gains are observed for CHARACTER SUBSTITUTION (from 0.2500 
+
+to 0.4375 ), HISTORICAL SPELLING (from 0.3000 to 0.4500 ), OCR ERRORS (from 0.2381 to 0.3810 ), ORTHOGRAPHIC ERRORS (from 0.3250 to 0.4375 ), SPELLED -OUT TEXT (from 0.4000 to 0.5333 ), and SPACED STYLING (from 0.1000 
+
+to 0.2250 ). We still observe decreases on a few subsets, such as COLLOQUIAL VARIANTS (from 0.4250 to 0.3250 ),  
+
+> ABBREVIATIONS
+
+(from 0.3243 to 0.2973 ), and SCRIPTED TEXT (from 0.2750 to 0.2250 ). Overall, this is consistent with our findings on the other benchmarks: stochastic pre-training slightly worsens the fit to the canonical distribution, but improves robustness to non-canonical tokenisations. 25 Stochasticity in Tokenisation Improves Robustness 
+
+G.2. Additional Results for Stochastic Fine-Tuning 
+
+G.2.1. A DDITIONAL RESULTS FOR Tiny-LLM 
+
+Data set : L ANGUAGE GAME 
+
+Model : Tiny-LLM     
+
+> 00.1 0.5 13
+> 20 % 40 % 60 % 80 % 100 %
+
+αeval     
+
+> Avg. test accuracy  →
+> Canon. αfine = 0 .1αfine = 0 .5
+
+(a) αpre = 0     
+
+> 00.1 0.5 13
+> 20 % 40 % 60 % 80 % 100 %
+
+αeval     
+
+> Avg. test accuracy  →
+> Canon. αfine = 0 .1αfine = 0 .5
+
+(b) αpre = 0 .1    
+
+> 00.1 0.5 13
+> 20 % 40 % 60 % 80 % 100 %
+
+αeval     
+
+> Avg. test accuracy  →
+> Canon. αfine = 0 .1αfine = 0 .5
+
+(c) αpre = 0 .5
+
+Figure 9. Average test accuracy of Tiny-LLM on L ANGUAGE GAME under stochastic tokenisation during fine-tuning, for different levels of stochasticity during pre-training. Stochastic fine-tuning improves robustness to random perturbations during testing across pre-training settings. 
+
+Data set : C UTE 
+
+Model : Tiny-LLM     
+
+> 00.1 0.5 13
+> 20 % 40 % 60 % 80 % 100 %
+
+αeval     
+
+> Avg. test accuracy  →
+> Canon. αfine = 0 .1αfine = 0 .5
+
+(a) αpre = 0     
+
+> 00.1 0.5 13
+> 20 % 40 % 60 % 80 % 100 %
+
+αeval     
+
+> Avg. test accuracy  →
+> Canon. αfine = 0 .1αfine = 0 .5
+
+(b) αpre = 0 .1    
+
+> 00.1 0.5 13
+> 20 % 40 % 60 % 80 % 100 %
+
+αeval     
+
+> Avg. test accuracy  →
+> Canon. αfine = 0 .1αfine = 0 .5
+
+(c) αpre = 0 .5
+
+Figure 10. Average test accuracy of Tiny-LLM on C UTE under stochastic tokenisation during fine-tuning, for different levels of stochasticity during pre-training. Stochastic fine-tuning improves robustness to random perturbations during testing across pre-training settings. 
+
+26 Stochasticity in Tokenisation Improves Robustness 
+
+Data set : L ANGUAGE GAME 
+
+Model : Tiny-LLM 
+
+Pre-training perturbation: αpre = 0 
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.58 
+
+0.47 
+
+0.67 0.59 0.47 
+
+0.68 0.57 0.50 
+
+0.66 0.70 0.60 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.08 
+
+0.09 
+
+0.02 0.09 0.13 
+
+0.00 0.07 0.10 
+
+0.00 0.04 0.10 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+- 0.1 0.5 1.0 
+
+0.00 
+
+0.06 
+
+0.00 0.01 0.03 
+
+0.00 0.01 0.04 
+
+0.00 0.01 0.03 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 random 
+
+Pre-training perturbation: αpre = 0 .1
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.81 
+
+0.83 
+
+0.81 0.78 0.82 
+
+0.82 0.79 0.81 
+
+0.82 0.81 0.84 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.13 
+
+0.52 
+
+0.17 0.34 0.37 
+
+0.16 0.36 0.48 
+
+0.19 0.41 0.56 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+- 0.1 0.5 1.0 
+
+0.01 
+
+0.47 
+
+0.04 0.08 0.14 
+
+0.04 0.21 0.41 
+
+0.05 0.31 0.51 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 random 
+
+Pre-training perturbation: αpre = 0 .5
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.85 
+
+0.77 
+
+0.84 0.80 0.82 
+
+0.84 0.82 0.81 
+
+0.85 0.85 0.80 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.30 
+
+0.42 
+
+0.30 0.38 0.43 
+
+0.29 0.47 0.45 
+
+0.35 0.50 0.50 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+- 0.1 0.5 1.0 
+
+0.04 
+
+0.41 
+
+0.14 0.26 0.29 
+
+0.15 0.42 0.45 
+
+0.20 0.49 0.53 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 random 
+
+Figure 11. Effect of perturbation strength αpre , αfine , and different training schemes on adversarial robustness for the L ANGUAGE GAME 
+
+data set. 
+
+27 Stochasticity in Tokenisation Improves Robustness 
+
+Data set : C UTE 
+
+Model : Tiny-LLM 
+
+Pre-training perturbation: αpre = 0 
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.62 
+
+0.68 
+
+0.66 0.68 0.71 
+
+0.65 0.70 0.70 
+
+0.64 0.72 0.74 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.07 
+
+0.40 
+
+0.14 0.31 0.39 
+
+0.14 0.32 0.38 
+
+0.11 0.32 0.43 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+- 0.1 0.5 1.0 
+
+0.02 
+
+0.38 
+
+0.07 0.25 0.33 
+
+0.06 0.27 0.34 
+
+0.06 0.27 0.38 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 random 
+
+Pre-training perturbation: αpre = 0 .1
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.73 
+
+0.79 
+
+0.74 0.81 0.80 
+
+0.76 0.81 0.81 
+
+0.75 0.80 0.82 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.27 
+
+0.59 
+
+0.36 0.55 0.60 
+
+0.37 0.57 0.61 
+
+0.33 0.58 0.62 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+- 0.1 0.5 1.0 
+
+0.09 
+
+0.57 
+
+0.23 0.48 0.55 
+
+0.25 0.52 0.57 
+
+0.21 0.53 0.58 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 random 
+
+Pre-training perturbation: αpre = 0 .5
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.79 
+
+0.83 
+
+0.83 0.86 0.87 
+
+0.81 0.86 0.86 
+
+0.82 0.85 0.86 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.21 
+
+0.65 
+
+0.52 0.67 0.68 
+
+0.53 0.68 0.68 
+
+0.49 0.67 0.71 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+- 0.1 0.5 1.0 
+
+0.09 
+
+0.64 
+
+0.44 0.62 0.65 
+
+0.45 0.65 0.65 
+
+0.41 0.63 0.67 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 random 
+
+Figure 12. Effect of perturbation strength αpre , αfine , and different training schemes on adversarial robustness for the C UTE data set. 
+
+28 Stochasticity in Tokenisation Improves Robustness 
+
+G.2.2. A DDITIONAL RESULTS FOR GPT2-xl     
+
+> 00.1 0.5 13
+> 40 % 60 % 80 %
+
+αeval 
+
+> Avg. test accuracy  →
+
+Canon. αfine = 0 .1 αfine = 0 .5 αfine = 1 
+
+(a) LANGUAGE GAME     
+
+> 00.1 0.5 13
+> 40 % 60 % 80 %
+
+αeval 
+
+> Avg. test accuracy  →
+
+Canon. αfine = 0 .1 αfine = 0 .5 αfine = 1 
+
+(b) CUTE 
+
+Figure 13. Average accuracy of GPT2-xl for stochastic tokenisation during evaluation and fine-tuning on L ANGUAGE GAME and C UTE .Stochastic fine-tuning improves robustness to random perturbations during evaluation. 
+
+Data set: LANGUAGE GAME 
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.83 
+
+0.50 
+
+0.87 0.87 0.85 
+
+0.86 0.85 0.86 
+
+0.87 0.87 0.83 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.07 
+
+0.04 
+
+0.03 0.18 0.30 
+
+0.02 0.20 0.32 
+
+0.03 0.22 0.33 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+Data set: CUTE 
+
+- 0.1 0.5 1.0 
+
+Canonical 
+
+UNIFORM 
+
+STOCHAS TOK 
+
+STOCHAS TOK -UNI 
+
+UNIFORM -K
+
+0.85 
+
+0.78 
+
+0.84 0.84 0.81 
+
+0.85 0.82 0.81 
+
+0.85 0.85 0.83 
+
+αfine 
+
+Canonical tokenisation 
+
+- 0.1 0.5 1.0 
+
+0.10 
+
+0.44 
+
+0.37 0.50 0.48 
+
+0.37 0.52 0.51 
+
+0.28 0.54 0.57 
+
+αfine 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+Figure 14. Accuracy of GPT2-xl under canonical and adversarial tokenisation on L ANGUAGE GAME and C UTE . Stochastic fine-tuning consistently improves robustness to perturbations during evaluation, with highest gains for methods that address support and sampling bias (S TOCHAS TOK -UNI , U NIFORM -K.
+
+29 Stochasticity in Tokenisation Improves Robustness 
+
+G.2.3. A BLATION ON TOKENISATION SUPPORT 
+
+STOCHAS TOK induces a distribution over tokenisations that is biased and with incomplete support. We showed that addressing both issues with S TOCHAS TOK -UNI results in increased robustness to adversarial tokenisations. In this ablation, we study which of the two extensions (uniformity or support) is the main driver of the improvements. Thus, we construct two additional stochastic tokenisation schemes. On the one hand, we use the same S TOCHAS TOK algorithm as in Alg. 1, but build the dictionary of possible expansions with 2-way and 3-way merges. This still results in a biased distribution, but increases the support of possible tokenisations. On the other hand, we restrict S TOCHAS TOK -UNI to sample only tokenisations that are reachable with S TOCHAS TOK , i.e. achievable via 2-way merges. We test the robustness to adversarial tokenisation attacks for three different attack settings. Each attack consists of 10 
+
+iterations. First, we vary the initial tokenisation v0: canonical v0 = τ (x), or uniform v0 ∼ Unif (TV (x)) . Second, we increase the neighbourhood of tokenisations for the greedy search in each iteration step by increasing the edit distance 
+
+dk = {2, 4}. Fig. 15a shows the results for 10 LoRA fine-tuned Llama-1b models on L ANGUAGE GAME with our stochastic tokenisation schemes for different expansion proportions αfine . The first case ( dk = 2 , v0 = τ (x)) corresponds to the easiest setting. Within the tokenisation neighbourhood with edit distance dk = 2 , all methods perform equally well. However, when increasing the neighbourhood to dk = 4 or starting from a random initial tokenisation, methods with increased support exhibit higher robustness. The same trend, albeit to a smaller extend is visible for the C UTE dataset in Fig. 15b.   
+
+> 0.1 0.5 1.0
+> 0%
+> 20 %
+> 40 %
+> 60 %
+> 80 %
+> 100 %
+
+αfine 
+
+> Adv. accuracy
+
+dk = 2 , v0 = τ (x)        
+
+> STOCHAS TOK (2-way merges) STOCHAS TOK -UNI (2-way merges)
+> STOCHAS TOK (2- and 3-way merges) STOCHAS TOK -UNI (all merges)
+> 0.1 0.5 1.0
+> 0%
+> 20 %
+> 40 %
+> 60 %
+> 80 %
+> 100 %
+
+αfine 
+
+dk = 4 , v0 = τ (x)  
+
+> 0.1 0.5 1.0
+> 0%
+> 20 %
+> 40 %
+> 60 %
+> 80 %
+> 100 %
+
+αfine 
+
+dk = 2 , v0 ∼ Unif (TV (x)) 
+
+(a) LANGUAGE GAME dataset   
+
+> 0.1 0.5 1.0
+> 0%
+> 20 %
+> 40 %
+> 60 %
+> 80 %
+> 100 %
+
+αfine 
+
+> Adv. accuracy
+
+dk = 2 , v0 = τ (x)        
+
+> STOCHAS TOK (2-way merges) STOCHAS TOK -UNI (2-way merges)
+> STOCHAS TOK (2- and 3-way merges) STOCHAS TOK -UNI (all merges)
+> 0.1 0.5 1.0
+> 0%
+> 20 %
+> 40 %
+> 60 %
+> 80 %
+> 100 %
+
+αfine 
+
+dk = 4 , v0 = τ (x)  
+
+> 0.1 0.5 1.0
+> 0%
+> 20 %
+> 40 %
+> 60 %
+> 80 %
+> 100 %
+
+αfine 
+
+dk = 2 , v0 ∼ Unif (TV (x)) 
+
+(b) CUTE dataset 
+
+Figure 15. Adversarial accuracy (%) of 10 LoRA fine-tuned Llama-1b models versus fine-tuning stochasticity αfine for three attack settings (defined by neighbourhood radius dk and initial tokenisation v0). Methods with larger support over TV (x) (S TOCHAS TOK (2-and 3-way merges), S TOCHAS TOK -UNI (all merges)) are more robust. Increasing uniformity on the same support (S TOCHAS TOK -UNI 
+
+(2-way merges)) yields no significant improvements. 
+
+30 Stochasticity in Tokenisation Improves Robustness 
+
+G.2.4. C OMPARISON TO BPE-DROPOUT 
+
+BPE-dropout (Provilkov et al., 2020) is a popular stochastic tokenisation method for BPE tokenisers. It introduces stochasticity in the tokenisation process by randomly skipping merge rules with a specified dropout probability pdrop .However, a direct comparison to our methods is not straightforward: The perturbation strength is controlled indirectly via the dropout rate pdrop , and the resulting number of induced splits further depends on the input string and tokeniser’s merge structure. In contrast, the methods considered in the main text allow explicit control over the number of induced splits. To illustrate this, we apply BPE-dropout to the example string from Sec. F.1, namely “revolution is a rapid, fundamental transformation of a society’s class, state, ethnic or religious structures” . We sample 50 ,000 stochastic tokenisations with BPE-dropout using the Llama 3 tokeniser and track the resulting non-canonical segmentations. First, Table 10 reports the statistics of the total number of induced splits for different values of pdrop . The effective perturbation strength varies substantially even for a fixed value of pdrop . Second, Fig. 16 summarises the distribution over the non-canonical tokenisations of the first token ( “revolution” ). This reflects the findings of (Cognetta et al., 2024) that BPE-dropout has a strong sampling bias, which may lead to certain non-canonical tokenisations to be underrepresented.   
+
+> Table 10. Induced number of splits under BPE-dropout for different dropout rates pdrop .
+
+pdrop mean std min max 0.10 0.75 0.90 0 60.25 3.01 1.89 0 14 0.50 22.41 4.62 6 44 0.75 53.06 6.13 29 78 Next, we empirically evaluate the performance of BPE-dropout compared to our methods for Llama-1b fine-tuned on LANGUAGE GAME and C UTE . Fig. 17 shows average accuracy under canonical and stochastic evaluation with S TOCHAS TOK 
+
+tokenisation. We observe that BPE-D ROPOUT improves robustness to non-canonical tokenisations compared to canonical fine-tuning. Fig. 18 reports robustness under adversarial tokenisation. The greedy search for the adversarial tokenisation is performed for 10 iterations, dk = 2 neighbours, starting from canonical initial tokenisations v0. Here, BPE-dropout again improves robustness over canonical fine-tuning, while more uniform stochastic tokenisation schemes remain competitive or stronger at comparable perturbation strengths. As above, note that a direct comparison between pdrop and αfine is not possible. In Fig. 19 and Fig. 20 we repeated the experiments for the Qwen-3 tokeniser and LoRA fine-tune a Qwen-0.6b model. 31 Stochasticity in Tokenisation Improves Robustness 
+
+Llama 3 
+
+> rev-olution
+> re-volution
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+> Probability (%)
+
+UNIFORM BPE-D ROPOUT 
+
+> re-vol-ution
+> re-v-olution
+> r-ev-olution
+> rev-ol-ution
+> rev-olut-ion
+> r-e-volution
+> rev-olu-tion
+
+0
+
+20 
+
+40 
+
+60 
+
+> Probability (%)
+
+UNIFORM BPE-D ROPOUT 
+
+> re-vo-l-ution
+> r-e-vol-ution
+> r-ev-olut-ion
+> re-v-olut-ion
+> re-vol-uti-on
+> rev-ol-u-tion
+> rev-olu-ti-on
+> rev-ol-ut-ion
+> rev-olut-io-n
+> re-vo-lu-tion
+> r-e-v-olution
+> rev-o-lu-tion
+> rev-olut-i-on
+> re-v-ol-ution
+> rev-ol-uti-on
+> re-vol-ut-ion
+> rev-olu-t-ion
+> rev-o-lut-ion
+> re-v-olu-tion
+> r-ev-olu-tion
+> re-vo-lut-ion
+> re-vol-u-tion
+> r-ev-ol-ution
+> rev-o-l-ution
+
+0
+
+20 
+
+40 
+
+60 
+
+> Probability (%)
+
+UNIFORM BPE-D ROPOUT 
+
+> rev-o-l-ut-ion
+> r-ev-olu-t-ion
+> r-e-vol-uti-on
+> rev-ol-u-t-ion
+> re-vol-ut-i-on
+> rev-olu-ti-o-n
+> re-vo-l-uti-on
+> r-e-v-olut-ion
+> r-ev-ol-uti-on
+> r-e-v-olu-tion
+> re-vol-ut-io-n
+> re-v-o-l-ution
+> re-v-ol-u-tion
+> r-e-vol-u-tion
+> re-vo-lut-io-n
+> rev-olu-t-io-n
+> re-vo-l-u-tion
+> re-v-olu-ti-on
+> re-vol-u-ti-on
+> rev-ol-u-ti-on
+> re-vo-lut-i-on
+> r-e-vo-lu-tion
+> r-ev-olut-io-n
+> r-e-vo-l-ution
+> rev-o-lu-t-ion
+> re-v-ol-uti-on
+> r-ev-o-lu-tion
+> re-v-olu-t-ion
+> re-vo-lu-ti-on
+> rev-o-lut-i-on
+> re-v-olut-i-on
+> r-ev-o-l-ution
+> rev-o-lu-ti-on
+> rev-o-l-u-tion
+> rev-ol-ut-i-on
+> rev-olut-i-o-n
+> re-vol-u-t-ion
+> rev-o-lut-io-n
+> r-ev-ol-u-tion
+> rev-olu-t-i-on
+> re-vo-l-ut-ion
+> r-ev-olu-ti-on
+> re-vol-uti-o-n
+> r-e-v-ol-ution
+> rev-ol-uti-o-n
+> re-v-o-lu-tion
+> rev-ol-ut-io-n
+> r-ev-olut-i-on
+> r-e-vo-lut-ion
+> r-ev-o-lut-ion
+> r-ev-ol-ut-ion
+> r-e-vol-ut-ion
+> rev-o-l-uti-on
+> re-v-olut-io-n
+> re-vo-lu-t-ion
+> re-v-o-lut-ion
+> re-v-ol-ut-ion
+
+0
+
+10 
+
+20 
+
+> Probability (%)
+
+UNIFORM BPE-D ROPOUT 
+
+Figure 16. Histogram comparison of segmentation probabilities for two sampling schemes (U NIFORM vs. BPE-D ROPOUT with 
+
+pdrop = 0 .5). 
+
+32 Stochasticity in Tokenisation Improves Robustness    
+
+> 00.1 0.5 1
+> 60 % 70 % 80 % 90 %
+
+αeval 
+
+> Avg. test accuracy  →
+
+pdrop = 0 .0 pdrop = 0 .1
+
+pdrop = 0 .25 pdrop = 0 .5
+
+(a) LANGUAGE GAME    
+
+> 00.1 0.5 1
+> 60 % 70 % 80 % 90 %
+
+αeval 
+
+> Avg. test accuracy  →
+
+pdrop = 0 .0 pdrop = 0 .1
+
+pdrop = 0 .25 pdrop = 0 .5
+
+(b) CUTE 
+
+Figure 17. Average accuracy of Llama-1b fine-tuned with BPE-D ROPOUT and evaluated on L ANGUAGE GAME under canonical and STOCHAS TOK tokenisation. BPE-D ROPOUT improves robustness to non-canonical tokenisations. However, choosing an appropriate dropout rate pdrop is less intuitive, since the resulting number of splits depends on the underlying input text and its merge structure. 
+
+Data set: LANGUAGE GAME 
+
+- 0.1 0.25 0.5 
+
+Canonical 
+
+UNIFORM -K
+
+BPE-D ROPOUT 
+
+STOCHAS TOK -UNI 
+
+0.95 
+
+0.95 0.96 0.96 
+
+0.96 0.96 0.96 
+
+0.95 0.96 0.95 
+
+αfine /p drop 
+
+Canonical tokenisation 
+
+- 0.1 0.25 0.5 
+
+0.10 
+
+0.80 0.73 0.76 
+
+0.42 0.53 0.71 
+
+0.62 0.64 0.70 
+
+αfine /p drop 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+Data set: CUTE 
+
+- 0.1 0.25 0.5 
+
+Canonical 
+
+UNIFORM -K
+
+BPE-D ROPOUT 
+
+STOCHAS TOK -UNI 
+
+0.90 
+
+0.89 0.91 0.91 
+
+0.89 0.91 0.90 
+
+0.91 0.91 0.91 
+
+αfine /p drop 
+
+Canonical tokenisation 
+
+- 0.1 0.25 0.5 
+
+0.30 
+
+0.71 0.78 0.82 
+
+0.68 0.76 0.81 
+
+0.71 0.79 0.79 
+
+αfine /p drop 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+Figure 18. Accuracy of Llama-1b under canonical and adversarial tokenisation on L ANGUAGE GAME and C UTE for stochastic fine-tuning with BPE-D ROPOUT , S TOCHAS TOK -UNI , and U NIFORM -K. All stochastic fine-tuning methods improve robustness compared to canonical fine-tuning. Note that αfine and pdrop cannot be compared directly as they induce different number of splits. 
+
+33 Stochasticity in Tokenisation Improves Robustness 
+
+Data set: LANGUAGE GAME    
+
+> 00.1 0.5 1
+> 60 % 70 % 80 % 90 %
+
+αeval 
+
+> Avg. test accuracy  →
+
+pdrop = 0 .0 pdrop = 0 .1
+
+pdrop = 0 .25 pdrop = 0 .5
+
+Figure 19. Average perturbation robustness of Qwen-0.6b fine-tuned on L ANGUAGE GAME .
+
+- 0.1 0.25 0.5 
+
+Canonical 
+
+UNIFORM -K
+
+BPE-D ROPOUT 
+
+STOCHAS TOK -UNI 
+
+0.95 
+
+0.95 0.95 0.93 
+
+0.95 0.95 0.93 
+
+0.94 0.95 0.94 
+
+αfine /p drop 
+
+Clean tokenisation 
+
+- 0.1 0.25 0.5 
+
+0.18 
+
+0.66 0.75 0.75 
+
+0.62 0.73 0.71 
+
+0.63 0.70 0.75 
+
+αfine /p drop 
+
+Adversarial tokenisation 
+
+v0 canonical 
+
+Figure 20. Canonical and adversarial perturbation robustness of Qwen-0.6b fine-tuned on L ANGUAGE GAME .
+
+34 Stochasticity in Tokenisation Improves Robustness 
+
+G.2.5. A DDITIONAL RESULTS FOR GEMMA 3   
+
+> 00.1 0.5 1
+> 20 % 40 % 60 % 80 % 100 %
+
+αeval        
+
+> Avg. test accuracy  →
+> αfine = 0 .0αfine = 0 .1αfine = 0 .2αfine = 0 .5
+
+Figure 21. Average perturbation robustness of Gemma-1b (vocabulary size of 262k) fine-tuned and evaluated with S TOCHAS TOK on LANGUAGE GAME .
+
+G.2.6. A BLATION ON EMBEDDING DISTANCES 
+
+We measure the mean normalised distance between the hidden representations of canonical and non-canonical tokenisations of the same word across layers. We use the 1,000 most frequent English words and uniformly sample 50 non-canonical tokenisations for each word. Fig. 22 shows the results for Llama-1b after canonical and stochastic fine-tuning on LANGUAGE GAME . While canonical fine-tuning does not reduce these distances compared to the zero-shot model, stochastic fine-tuning consistently yields smaller distances, especially in deeper layers. This indicates reduced local sensitivity to tokenisation changes and is consistent with the improved robustness to adversarial tokenisation observed in the main paper.    
+
+> 0510 15
+> 0.6 0.8 1 1.2
+
+Layer index 
+
+> Mean Normalized Distance
+
+Figure 22. Canonical fine-tuning ( ) does not affect the distances of alternative tokenisations compared to the zero-shot Llama-1b 
+
+( ). Stochastic tokenisation (S TOCHAS TOK , S TOCHAS TOK -UNI , U NIFORM -K ) reduce distances in deeper layers. 
+
+35 Stochasticity in Tokenisation Improves Robustness 
+
+G.3. Additional results for in-context learning 
+
+G.3.1. E XAMPLE PROMPT FOR LANGUAGE GAME 
+
+Canonical context + perturbed question ( αquery = 1 ). 
+
+Below- are- solved- examples-.- For- the- final- question-,- predict- the-correct- option.-Which- choice- has- the- most- letter- ’-b-’s-?- These- are- the- possible-option- words-:- [- up-,- baby-,- rain-,- glad-].- Answer-:- - baby-Which-option-ends-with-’o’-?-The-possible-option-strings-:-[-no-,-hard-,-by-,-happen-].-Answer-:--no-What-word-is-the-shortest-?-The-available-option-strings-are-:-[-row-,-suffix-,-gather-,-energy-].-Answer-:--row-
+
+T-h-e-possible-option-words-a-re-:-[-straight-,-ca-r-r-y-,-di-ffer-,-h-alf-].-Which-of-the-p-ossible-option-words-has-the-most-let-te-r-’-t-’s-?-Ans-we-r-:-
+
+Perturbed context ( αcontext = 1 ) + perturbed question ( αquery = 1 ). 
+
+Below-are-solved-examples-.-For-the-final-question-,-predict-the-correct-option.-Wh-i-ch-choice-has-the-most-le-t-t-er-’-b-’s-?-These-are-the-possible-option-words-:-[-up-,-baby-,-rain-,-g-lad-].-A-n-sw-er-:--baby-Which-option-end-s-with-’o’-?-The-possible-option-s-tring-s-:-[-no-,-hard-,-b-y-,-happen-].-Answer-:--no-Wh-at-word-i-s-the-shortest-?-The-available-option-string-s-are-:-[-r-o-w-,-suffix-,-g-ather-,-e-n-ergy-].-Ans-wer-:--row-
+
+T-h-e-possible-option-words-a-re-:-[-straight-,-ca-r-r-y-,-di-ffer-,-h-alf-].-Which-of-the-p-ossible-option-words-has-the-most-let-te-r-’-t-’s-?-Ans-we-r-:-
+
+36 Stochasticity in Tokenisation Improves Robustness 
+
+Table 11. Accuracy (%) of Llama-8b under canonical versus uniformly sampled query tokenisation across data sets, with K = 10 
+
+few-shot examples. 
+
+Context tokenisation αICL 
+
+LANGUAGE GAME ARC-E COPA CSQA HELLA SWAG PIQA SOCIAL IQA 
+
+canon. unif. canon. unif. canon. unif. canon. unif. canon. unif. canon. unif. canon. unif. 
+
+Canonical - 83 .9 70 .3 78 .1 71 .3 92 .0 84 .6 68 .3 63 .0 54 .8 50 .2 81 .4 79 .5 52 .4 45 .1
+
+STOCHAS TOK 0.1 84 .6 75 .6 76 .7 71 .7 92 .0 86 .0 68 .8 63 .4 55 .0 50 .9 81 .7 79 .6 52 .8 46 .3
+
+STOCHAS TOK 0.5 85 .9 80 .2 77 .5 73 .2 91 .1 86 .8 67 .8 64 .1 54 .3 50 .9 81 .9 79 .7 53 .7 47 .4
+
+STOCHAS TOK 1.0 87 .7 81 .8 77 .4 74 .0 91 .3 87 .0 67 .1 63 .9 54 .4 50 .9 81 .9 80 .0 53 .8 47 .5
+
+STOCHAS TOK -UNI 0.1 85 .1 75 .6 76 .4 71 .5 92 .0 85 .8 68 .6 63 .5 55 .1 50 .8 81 .6 79 .5 53 .0 46 .2
+
+STOCHAS TOK -UNI 0.5 86 .8 80 .4 77 .1 73 .1 91 .1 87 .0 67 .4 63 .7 54 .2 50 .8 82 .0 79 .8 53 .6 47 .3
+
+STOCHAS TOK -UNI 1.0 87 .1 81 .3 77 .3 73 .8 91 .6 87 .3 66 .7 63 .9 54 .2 51 .0 81 .9 80 .1 53 .4 47 .7
+
+UNIFORM -K 0.1 85 .1 74 .5 77 .3 71 .5 92 .0 85 .2 68 .7 63 .4 54 .8 50 .5 81 .4 79 .5 52 .7 46 .2
+
+UNIFORM -K 0.5 86 .2 79 .0 77 .1 72 .5 91 .4 87 .1 68 .0 63 .7 54 .4 51 .0 81 .8 79 .8 53 .0 47 .8
+
+UNIFORM -K 1.0 87 .2 80 .8 77 .1 73 .7 91 .1 87 .2 67 .6 64 .0 54 .3 50 .9 81 .9 80 .0 52 .8 48 .9
+
+UNIFORM - 85 .0 81 .7 77 .6 75 .2 90 .2 87 .0 62 .3 63 .8 54 .1 51 .0 81 .9 80 .4 51 .4 49 .8
+
+Table 12. Accuracy (%) on L ANGUAGE GAME using Llama-8b under canonical and adversarial tokenisations, with 5 context examples. CANONICAL STOCHAS TOK STOCHAS TOK -UNI UNIFORM -K UNIFORM 
+
+Canonical 83 .8 89 .2 89 .6 88 .6 84 .0
+
+Adversarial 18 .8 50 .4 51 .0 49 .2 45 .4
+
+37
