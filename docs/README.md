@@ -6,76 +6,43 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-04-21
-- 运行时间：2026-04-21 20:43:49 UTC
+- 最新运行日期：2026-04-22
+- 运行时间：2026-04-22 20:31:25 UTC
 - 运行状态：成功
-- 本次总论文数：18
-- 精读区：10
-- 速读区：8
+- 本次总论文数：7
+- 精读区：6
+- 速读区：1
 
 ### 今日简报（AI）
-今日深挖 18 篇安全领域力作，重点聚焦主动式越狱检测与硬件级大模型安全评估。
-SafeDream 凭借“安全世界模型”实现越狱预警，同时研究揭示了良性微调竟能瓦解音频大模型的安全对齐。
-建议优先关注多模态与多智能体系统的防御盲区，从底层硬件到上层协议构建全栈安全。
-- 详情：[/202604/21/README](/202604/21/README)
+今日深度复盘 7 篇 AI 论文，聚焦稀疏自编码器鲁棒性与大模型安全对齐的最新突破。
+满分论文揭示了 SAE 的鲁棒性机理，Cat-DPO 则为不同类别的安全对齐提供了更精准的优化方案。
+建议优先研读 SAE 鲁棒性研究以提升模型可解释性，并关注 LLM 教学场景中的对抗攻击防范。
+- 详情：[/202604/22/README](/202604/22/README)
 
 ### 精读区论文标签
-1. [SafeDream: Safety World Model for Proactive Early Jailbreak Detection](/202604/21/2604.16824v1-safedream-safety-world-model-for-proactive-early-jailbreak-detection)  
+1. [Towards Understanding the Robustness of Sparse Autoencoders](/202604/22/2604.18756v1-towards-understanding-the-robustness-of-sparse-autoencoders)  
    标签：评分：10.0/10、query:jb-def
-   evidence：主动早期越狱检测框架
-2. [HarmChip: Evaluating Hardware Security Centric LLM Safety via Jailbreak Benchmarking](/202604/21/2604.17093v1-harmchip-evaluating-hardware-security-centric-llm-safety-via-jailbreak-benchmarking)  
+   evidence：针对越狱攻击的防御机制
+2. [Cat-DPO: Category-Adaptive Safety Alignment](/202604/22/2604.17299v2-cat-dpo-category-adaptive-safety-alignment)  
    标签：评分：9.0/10、query:jb-def
-   evidence：针对硬件安全的越狱基准测试
-3. [CASCADE: A Cascaded Hybrid Defense Architecture for Prompt Injection Detection in MCP-Based Systems](/202604/21/2604.17125v1-cascade-a-cascaded-hybrid-defense-architecture-for-prompt-injection-detection-in-mcp-based-systems)  
+   evidence：通过DPO实现类别自适应的安全对齐
+3. [An Empirical Study of Multi-Generation Sampling for Jailbreak Detection in Large Language Models](/202604/22/2604.18775v1-an-empirical-study-of-multi-generation-sampling-for-jailbreak-detection-in-large-language-models)  
    标签：评分：9.0/10、query:jb-def
-   evidence：用于提示词注入检测的分层防御架构
-4. [Guardrails in Logit Space: Safety Token Regularization for LLM Alignment](/202604/21/2604.17210v1-guardrails-in-logit-space-safety-token-regularization-for-llm-alignment)  
+   evidence：基于多生成采样的越狱检测研究
+4. [ARES: Adaptive Red-Teaming and End-to-End Repair of Policy-Reward System](/202604/22/2604.18789v1-ares-adaptive-red-teaming-and-end-to-end-repair-of-policy-reward-system)  
    标签：评分：9.0/10、query:jb-def
-   evidence：通过安全标记正则化在微调过程中保持安全对齐
-5. [Continual Safety Alignment via Gradient-Based Sample Selection](/202604/21/2604.17215v1-continual-safety-alignment-via-gradient-based-sample-selection)  
+   evidence：缓解策略和奖励模型中的双重漏洞
+5. [Reasoning Structure Matters for Safety Alignment of Reasoning Models](/202604/22/2604.18946v1-reasoning-structure-matters-for-safety-alignment-of-reasoning-models)  
    标签：评分：9.0/10、query:jb-def
-   evidence：基于梯度的样本选择以维持安全对齐
-6. [Cat-DPO: Category-Adaptive Safety Alignment](/202604/21/2604.17299v1-cat-dpo-category-adaptive-safety-alignment)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：通过约束优化实现类别自适应的安全对齐
-7. [SafeAgent: A Runtime Protection Architecture for Agentic Systems](/202604/21/2604.17562v1-safeagent-a-runtime-protection-architecture-for-agentic-systems)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：智能体运行时保护架构与安全护栏
-8. [SafeAnchor: Preventing Cumulative Safety Erosion in Continual Domain Adaptation of Large Language Models](/202604/21/2604.17691v1-safeanchor-preventing-cumulative-safety-erosion-in-continual-domain-adaptation-of-large-language-models)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：引入了一种在持续适配过程中锚定安全护栏以防止侵蚀的框架
-9. [Different Paths to Harmful Compliance: Behavioral Side Effects and Mechanistic Divergence Across LLM Jailbreaks](/202604/21/2604.18510v1-different-paths-to-harmful-compliance-behavioral-side-effects-and-mechanistic-divergence-across-llm-jailbreaks)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：大语言模型越狱的机制差异研究
-10. [LLM Safety From Within: Detecting Harmful Content with Internal Representations](/202604/21/2604.18519v1-llm-safety-from-within-detecting-harmful-content-with-internal-representations)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：利用内部表示检测有害内容的防御模型
+   evidence：针对恶意查询的推理模型安全对齐
+6. [HarDBench: A Benchmark for Draft-Based Co-Authoring Jailbreak Attacks for Safe Human-LLM Collaborative Writing](/202604/22/2604.19274v1-hardbench-a-benchmark-for-draft-based-co-authoring-jailbreak-attacks-for-safe-human-llm-collaborative-writing)  
+   标签：评分：8.0/10、query:llm
+   evidence：针对草稿协同写作越狱攻击的基准测试
 
 ### 速读区论文标签
-1. [Conjunctive Prompt Attacks in Multi-Agent LLM Systems](/202604/21/2604.16543v1-conjunctive-prompt-attacks-in-multi-agent-llm-systems)  
-   标签：评分：8.0/10、query:llm
-   evidence：多智能体LLM系统中的联合提示词攻击
-2. [SafeLM: Unified Privacy-Aware Optimization for Trustworthy Federated Large Language Models](/202604/21/2604.16606v1-safelm-unified-privacy-aware-optimization-for-trustworthy-federated-large-language-models)  
-   标签：评分：8.0/10、query:llm
-   evidence：联邦大模型的统一安全框架
-3. [Benign Fine-Tuning Breaks Safety Alignment in Audio LLMs](/202604/21/2604.16659v1-benign-fine-tuning-breaks-safety-alignment-in-audio-llms)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：音频大模型的安全对齐漏洞
-4. [When Choices Become Risks: Safety Failures of Large Language Models under Multiple-Choice Constraints](/202604/21/2604.16916v1-when-choices-become-risks-safety-failures-of-large-language-models-under-multiple-choice-constraints)  
-   标签：评分：8.0/10、query:llm
-   evidence：识别了结构化决策任务中的安全失效和类越狱绕过行为
-5. [Reverse Constitutional AI: A Framework for Controllable Toxic Data Generation via Probability-Clamped RLAIF](/202604/21/2604.17769v1-reverse-constitutional-ai-a-framework-for-controllable-toxic-data-generation-via-probability-clamped-rlaif)  
-   标签：评分：8.0/10、query:llm
-   evidence：用于红队测试和安全研究的可控毒性数据生成
-6. [Please refuse to answer me! Mitigating Over-Refusal in Large Language Models via Adaptive Contrastive Decoding](/202604/21/2604.17132v1-please-refuse-to-answer-me-mitigating-over-refusal-in-large-language-models-via-adaptive-contrastive-decoding)  
-   标签：评分：7.0/10、query:jb-def
-   evidence：缓解安全对齐模型中的过度拒绝
-7. [Bit-Flip Vulnerability of Shared KV-Cache Blocks in LLM Serving Systems](/202604/21/2604.17249v1-bit-flip-vulnerability-of-shared-kv-cache-blocks-in-llm-serving-systems)  
+1. [Evaluating Answer Leakage Robustness of LLM Tutors against Adversarial Student Attacks](/202604/22/2604.18660v1-evaluating-answer-leakage-robustness-of-llm-tutors-against-adversarial-student-attacks)  
    标签：评分：7.0/10、query:llm
-   evidence：LLM推理系统中的安全漏洞
-8. [GuardPhish: Securing Open-Source LLMs from Phishing Abuse](/202604/21/2604.17313v1-guardphish-securing-open-source-llms-from-phishing-abuse)  
-   标签：评分：7.0/10、query:llm
-   evidence：保护开源大模型免受对抗性钓鱼提示词攻击
+   evidence：评估大语言模型针对对抗性学生攻击的鲁棒性
 
 
 <div class="dpr-home-promo-card">
