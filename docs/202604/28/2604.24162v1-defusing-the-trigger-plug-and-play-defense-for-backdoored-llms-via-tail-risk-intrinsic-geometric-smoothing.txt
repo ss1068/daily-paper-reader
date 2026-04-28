@@ -1,0 +1,2255 @@
+Title: Defusing the Trigger: Plug-and-Play Defense for Backdoored LLMs via Tail-Risk Intrinsic Geometric Smoothing
+
+URL Source: https://arxiv.org/pdf/2604.24162v1
+
+Published Time: Tue, 28 Apr 2026 01:53:22 GMT
+
+Number of Pages: 25
+
+Markdown Content:
+# Defusing the Trigger: Plug-and-Play Defense for Backdoored LLMs via Tail-Risk Intrinsic Geometric Smoothing 
+
+# Kaisheng Fan 
+
+fankaisheng@stu.hit.edu.cn School of Cyber Science and Technology Harbin Institute of Technology Harbin, China 
+
+# Weizhe Zhang 
+
+wzzhang@hit.edu.cn School of Cyber Science and Technology Harbin Institute of Technology Harbin, China Department of New Networks Peng Cheng Laboratory Shenzhen, China 
+
+# Yishu Gao 
+
+gaoyishu@stu.hit.edu.cn School of Cyber Science and Technology Harbin Institute of Technology Harbin, China 
+
+# Tegawendé F. Bissyandé 
+
+tegawende.bissyande@uni.lu SnT University of Luxembourg Luxembourg City, Luxembourg 
+
+# Xunzhu Tang ∗
+
+xunzhu.tang@uni.lu SnT University of Luxembourg Luxembourg City, Luxembourg 
+
+## Abstract 
+
+Defending against backdoor attacks in large language models re-mains a critical practical challenge. Existing defenses mitigate these threats but typically incur high preparation costs and degrade utility via offline purification, or introduce severe latency via complex on-line interventions. To overcome this dichotomy, we present Tail-risk Intrinsic Geometric Smoothing (TIGS), a plug-and-play inference-time defense requiring no parameter updates, external clean data, or auxiliary generation. TIGS leverages the observation that successful backdoor triggers consistently induce localized attention collapse within the semantic content region. Operating entirely within the native forward pass, TIGS first performs content-aware tail-risk screening to identify suspicious attention heads and rows using sample-internal signals. It then applies intrinsic geometric smooth-ing: a weak content-domain correction preserves semantic anchor-ing, while a stronger full-row contraction disrupts trigger-dominant routing. Finally, a controlled full-row write-back reconstructs the attention matrix to ensure inference stability. Extensive evaluations demonstrate that TIGS substantially suppresses attack success rates while strictly preserving clean reasoning and open-ended seman-tic consistency. Crucially, this favorable security-utility-latency equilibrium persists across diverse architectures, including dense, reasoning-oriented, and sparse mixture-of-experts models. By struc-turally disrupting adversarial routing with marginal latency over-head, TIGS establishes a highly practical, deployment-ready defense standard for state-of-the-art LLMs. 
+
+## Keywords 
+
+large language models, backdoor defense, inference-time security, transformer attention 
+
+> ∗Corresponding author.
+
+## 1 Introduction 
+
+Large language models (LLMs) are increasingly deployed in high-stakes settings, where hidden training-time backdoors pose a grow-ing security threat. By poisoning the training pipeline, adversaries can inject triggers that hijack model behavior at inference time while maintaining benign performance on clean inputs [ 13 , 16 ]. Defending deployed models has become urgent, especially as mod-ern LLMs often inherit third-party weights or are trained on par-tially curated corpora, making them vulnerable to sophisticated attacks such as reasoning-aware poisoning and embedding-level cross-triggers [40, 42, 46]. Deploying backdoor defenses in production LLMs remains chal-lenging. Offline purification edits parameters to erase malicious behavior [ 4, 9 , 20 , 23 , 51 , 53 ], but it is expensive, requires clean data, and can degrade utility. Test-time mitigations avoid parameter updates through causal rewriting [ 21 ], clean demonstrations [ 24 ], or input transformations [ 26 ], but often add substantial inference latency. Both settings are difficult to reconcile with the deployment constraints of modern LLM serving. Real-world LLM deployments therefore favor defenses that op-erate without parameter updates, external calibration data, or large overhead. Across the threat models evaluated here, successful back-door activation consistently coincides with localized attention col-lapse within the semantic content region. As Figure 1 shows, trig-gers abruptly dominate a sparse subset of attention heads rather than remaining diffuse as in benign models. Because Transformers also exhibit benign low-entropy sinks on initial tokens [ 43 , 52 ], the key is to separate content-dependent abnormal collapse from structural concentration. To exploit this distinction, we propose Tail-Risk Intrinsic Geo-metric Smoothing (TIGS) , a plug-and-play defense that modu-lates attention during the forward pass. TIGS has three stages. First, 
+
+tail-risk anomaly screening identifies suspicious rows and heads while filtering benign structural sinks. Second, intrinsic geomet-ric smoothing maps the screening signal to a bounded dual-scale        
+
+> 1
+> arXiv:2604.24162v1 [cs.CR] 27 Apr 2026 Conference’17, July 2017, Washington, DC, USA K. Fan et al. 15913 17 21 25
+
+Attention Head Index      
+
+> 15
+> 17
+> 19
+> 21
+> 23
+> 25
+> 27
+> Layer Index
+> 0.0 0.2 0.4 0.6 0.8 1.0
+
+Trigger Attention Intensity       
+
+> (a) Attention Pattern in Benign Model 15913 17 21 25
+
+Attention Head Index 
+
+> 15
+> 17
+> 19
+> 21
+> 23
+> 25
+> 27
+> Layer Index
+> (b) Attention Pattern in Backdoored Model
+
+Figure 1: Trigger-induced attention collapse. Attention-rank heatmaps for a typical lexical trigger token in Qwen2.5 [ 47 ]. The x-axis is the Transformer layer index (15–28), and the y-axis is the attention head index. Darker cells indicate higher rank. (a) Benign: diffuse attention. (b) Backdoored: concen-trated trigger attention. 
+
+correction: weak content-domain smoothing preserves semantic anchoring, while stronger full-row contraction disrupts trigger-dominant competition. Third, a controlled full-row write-back oper-ator reconstructs a valid attention matrix. This detector-executor design suppresses extreme attention spikes with limited disruption to normal generation. By selectively weakening the dynamic mechanism of trigger attention capture, TIGS provides a readily deployable mitigation with limited impact on benign generation. We evaluate TIGS across dense, reasoning-oriented, and sparse mixture-of-experts model families. Across these settings, TIGS lowers attack success rates while preserving useful clean-task performance and keeping deploy-ment overhead substantially below prompt-expansion and multi-pass online defenses, as the intervention is confined to the prefill stage without modifying subsequent token decoding. Our main contributions are summarized as follows: 
+
+• We propose TIGS , a plug-and-play inference-time mitigation that intervenes directly in the attention computation, without pa-rameter updates, offline optimization, or external clean reference data. 
+
+• Building on the observation that the evaluated backdoor attacks often induce abnormal content-region attention collapse, we derive a detector-executor design that combines content-domain screening with intrinsic geometric smoothing for attacks with detectable attention-side routing abnormalities. 
+
+• We show empirically that, across dense, reasoning-oriented, and sparse mixture-of-experts LLM families, TIGS offers a favorable deployment-time security–utility–latency trade-off rather than requiring heavyweight offline repair or multi-pass online inter-vention. 
+
+## 2 Threat Model and Problem Setting 2.1 Attack Surface and Deployment Assumptions 
+
+We consider the increasingly common setting in which an LLM is obtained from a third-party release, adapted on partially curated data, or integrated into a downstream application without end-to-end control over the original training pipeline. In this setting, the deployed model may already contain a hidden backdoor introduced during instruction tuning, editing, or poisoning. The defender has white-box inference access to the victim model and may instrument the forward pass, but does not retrain the model, does not assume access to a trusted clean dataset, and must preserve standard serving throughput. This setting differs from standard model-repair assumptions. In many production deployments, the operator can patch kernels, in-spect activations, or wrap the serving stack, but still cannot launch a new clean-data curation cycle, perform expensive post-hoc un-learning, or insert multi-round prompting into a latency-sensitive application. We therefore treat inference-time controllability and deployment-time constraints as part of the threat model itself rather than as an implementation detail. The objective is immediate risk reduction on a model that must continue serving traffic. 
+
+## 2.2 Adversary Capabilities 
+
+At a high level, we consider adversaries that seek targeted malicious behavior at inference time while preserving benign performance on clean inputs. Trigger delivery may arise through edited parameters, prompt-side injection, intermediate reasoning traces, or embedding-space perturbations. This scope covers both explicit and implicit trigger conditions, including cases that avoid simple lexical anomaly signatures. The concrete attack instantiations used in our evaluation are deferred to Section 5. Our threat model intentionally spans triggers that surface at different semantic levels. Some appear as rare lexical or stylistic cues visible in the prompt, whereas others are embedded in intermediate reasoning traces or input embeddings. This distinction matters because many test-time defenses implicitly assume that malicious behavior is tied to prompt-surface anomalies or can be neutralized by adding external context. That assumption becomes fragile once the trigger is internalized by the model’s own reasoning process. TIGS instead targets the downstream activation dynamics induced by these triggers, irrespective of whether the trigger itself is lexically obvious, semantically diffuse, or only expressed through a latent pathway.  
+
+> 2Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+## 2.3 Defense Goal and Non-Goals 
+
+Our goal is to suppress backdoor activation during inference while preserving clean-task utility and keeping deployment overhead minimal. TIGS is designed to operate within a single forward pass and to remain compatible with standard autoregressive serving stacks. It does not aim to remove malicious behavior from model parameters or to cover every adaptive adversary. Residual-, value-, and MLP-side pathways may also contribute to backdoor behavior in some attacks. This paper focuses on attention-side intervention as an inference-time control point that yields meaningful mitigation in the evaluated setting. A sufficiently capable adversary could still distribute trigger activation across multiple heads to reduce anom-aly salience, so TIGS is positioned as a deployment-time mitigation that raises adversary cost while preserving service quality. The key evaluation criteria follow directly from this goal: low At-tack Success Rate under diverse trigger families, limited degradation on clean reasoning and generation tasks, and low serving overhead under realistic prefill and decode workloads. These criteria also explain our comparison methodology. We therefore compare TIGS both to strong suppression baselines and to methods operating under realistic deployment constraints. 
+
+## 3 Observation and TIGS Overview 3.1 Trigger-Induced Attention Collapse 
+
+TIGS is motivated by a simple observation: in the evaluated attacks, successful backdoor activation frequently manifests as localized at-tention collapse during the forward pass. A sparse subset of attention rows becomes abnormally sharp, concentrating probability mass on trigger-relevant positions and amplifying their downstream in-fluence. At the same time, benign Transformer inference can also produce low-entropy attention, especially around initial tokens or other structural placeholders that act as natural sinks [ 43 , 52 ]. Therefore, low entropy alone is not an actionable defense signal. The key challenge is to distinguish content-dependent abnormal collapse from structurally benign concentration . This distinction is consistent with the trigger-dominance view of attention: when a trigger acquires an abnormal logit advantage over competing content tokens, the affected row becomes sharply concentrated, whereas structural sinks may remain low-entropy without exert-ing malicious semantic control. We accordingly use this collapse pattern as an actionable screening signal for the attack families we study. A formal analysis of this trigger-dominance effect is deferred to Appendix A.1. 
+
+## 3.2 Content-Restricted Tail Events 
+
+These observations directly motivate the design of TIGS. First, screening should be restricted to the semantic content region rather than raw attention, so that structural sinks are filtered out before measuring collapse. Second, because trigger activation is often sparse, aggregation should emphasize tail events rather than layer-wide averages, which can dilute a few high-impact abnormal rows. Third, intervention should be selective : abnormality is sparse both across heads and within heads, so the defense should localize cor-rection instead of applying global smoothing. Finally, correction should be prior-free and minimally distortive : rather than pulling attention toward an external benign template, it should stay close to the current row while weakening abnormal concentration. TIGS instantiates these principles through a detector-executor split: col-lapse is screened in the content domain, while the main corrective pressure is executed at the full-row level. 
+
+## 3.3 Overview of TIGS 
+
+TIGS instantiates these principles through three stages. Stage 1 
+
+performs content-domain collapse screening to identify suspicious rows and heads. Stage 2 applies intrinsic geometric smoothing, us-ing weak content-domain correction for semantic anchoring and stronger full-row contraction for execution. Stage 3 performs con-trolled full-row write-back so that the modified row is seamlessly reintegrated into the original attention computation. Figure 2 sum-marizes the overall workflow. 
+
+## 4 Method 4.1 Preliminaries and Notation 
+
+For an attention head (𝑙, ℎ ), let a(𝑙,ℎ ) 
+
+> 𝑖
+
+denote the attention row for query token 𝑖 , namely the probability distribution over all key positions. Let s(𝑙,ℎ ) 
+
+> 𝑖
+
+denote the corresponding pre-softmax attention logits, so that 
+
+a(𝑙,ℎ ) 
+
+> 𝑖
+
+= Softmax (s(𝑙,ℎ ) 
+
+> 𝑖
+
+).
+
+Let C𝑖 denote the semantic content region for row 𝑖 after mask-ing out structural tokens such as BOS/EOS markers, padding, and punctuation-heavy placeholders. In practice, C𝑖 is constructed with a fixed token-identity heuristic shared across all evaluated architec-tures: special markers, and tokens whose decoded string is empty, whitespace-only, or punctuation-only, are excluded; ordinary lexi-cal tokens and their subword pieces are retained. TIGS does not assume knowledge of the trigger pattern, poisoned annotations, or clean calibration data at inference time. It instead diagnoses suspicious rows from the attention geometry induced by the current input alone. The method relies on detectable attention-side routing abnormalities rather than claiming coverage of all possible internal backdoor pathways. A key design choice is to separate the detection domain from the execution domain : collapse is detected within the semantic content region, but the main corrective action is applied at the full-row level. 
+
+## 4.2 Method Overview 
+
+TIGS operates as a lightweight inference-time intervention over the standard attention computation (Figure 2). It attaches directly to the forward pass and mitigates backdoor behavior without altering model parameters or requiring external clean data. During infer-ence, TIGS performs three sequential operations: (i) content-domain collapse screening (Section 4.3), which measures anomalous collapse inside the semantic content region and identifies suspicious atten-tion rows; (ii) intrinsic geometric smoothing (Section 4.4), which converts the detected collapse signal into a bounded smoothing strength and applies the main corrective action at the full-row level while retaining a weaker content-domain correction; and (iii) a 
+
+controlled full-row write-back (Section 4.5), which reconstructs a valid attention row and writes the corrected distribution back into the attention matrix. Once the corrected rows are written back,  
+
+> 3Conference’17, July 2017, Washington, DC, USA K. Fan et al.
+
+Figure 2: TIGS pipeline. Stage 1 screens content-domain collapse after masking structural sinks. Stage 2 applies dual-scale smoothing: weak content-domain correction for semantic anchoring and stronger full-row contraction. Stage 3 reconstructs and writes back the corrected attention row. 
+
+the remaining Transformer computation proceeds unchanged; full pseudocode is provided in Appendix B. TIGS separates detection from execution. Content-domain col-lapse determines where and how strongly to intervene, while row-level correction weakens trigger-dominant routing in the full com-petition structure of the row. 
+
+## 4.3 Content-Domain Collapse Screening 
+
+For each attention row a(𝑙,ℎ ) 
+
+> 𝑖
+
+in head (𝑙, ℎ ), corresponding to the attention distribution of token 𝑖 over all positions, we restrict it to its semantic content region C𝑖 and renormalize: 
+
+𝑝 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+= 𝑎 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+· 1( 𝑗 ∈ C 𝑖 )
+
+Í𝑘 𝑎 (𝑙,ℎ ) 
+
+> 𝑖,𝑘
+
+· 1(𝑘 ∈ C 𝑖 ) + 𝜖 . (1) This renormalization removes attention assigned to non-content tokens, so collapse is measured only within the semantic content region. We then compute the content-domain entropy 
+
+𝐻 (𝑙,ℎ ) 
+
+> 𝑖
+
+= −∑︁ 
+
+> 𝑗
+
+𝑝 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+log  𝑝 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
++ 𝜖 , (2) and define the corresponding row-wise collapse score 
+
+𝐶 (𝑙,ℎ ) 
+
+> 𝑖
+
+= log |C 𝑖 | − 𝐻 (𝑙,ℎ ) 
+
+> 𝑖
+
+. (3) Larger values indicate stronger localized collapse inside the content region. Since collapse is typically sparse, TIGS summarizes each head using the extreme tail of its row-wise collapse scores rather than a full-row average. Specifically, 
+
+𝑅 (𝑙,ℎ ) = 1
+
+𝑘 ∑︁ 𝑖 ∈TopK (𝐶 (𝑙,ℎ ) )
+
+𝐶 (𝑙,ℎ ) 
+
+> 𝑖
+
+. (4) where TopK (𝐶 (𝑙,ℎ ) ) denotes the set of rows with the 𝑘 largest col-lapse scores in head (𝑙, ℎ ). This tail-focused statistic preserves rare but high-risk collapse events that would otherwise be diluted by mean pooling. We then normalize the head-level tail-risk across heads in layer 
+
+𝑙 as 
+
+𝑍 (𝑙,ℎ ) = 𝑅 (𝑙,ℎ ) − 𝜇 𝑙 
+
+𝜎 𝑙 + 𝜖 .
+
+where 𝜇 𝑙 and 𝜎 𝑙 are the mean and standard deviation of {𝑅 (𝑙,ℎ ′ ) }ℎ′
+
+within layer 𝑙 . TIGS combines a relative anomaly score and an absolute tail-risk score through a parallel head gate: 
+
+𝑔 (𝑙,ℎ ) 
+
+> head
+
+= 1 − Sigmoid  𝜂 ℎ (𝜏 ℎ −𝑍 (𝑙,ℎ ) ) · Sigmoid  𝜂 𝑅 (𝜏 𝑅 −𝑅 (𝑙,ℎ ) ), (5) where 𝜏 ℎ, 𝜏 𝑅 are head-level thresholds and 𝜂 ℎ, 𝜂 𝑅 control the transi-tion sharpness. At the row level, TIGS uses the content-domain collapse score itself: 
+
+𝑔 (𝑙,ℎ ) 
+
+> row ,𝑖
+
+= Sigmoid  𝜂 𝑐 (𝐶 (𝑙,ℎ ) 
+
+> 𝑖
+
+− 𝜏 𝑐 ), (6) where 𝜏 𝑐 and 𝜂 𝑐 are the row-level threshold and slope. The final smoothing strength for row 𝑖 is then 
+
+𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+= 𝛽 · 𝑔 (𝑙,ℎ ) 
+
+> head
+
+· 𝑔 (𝑙,ℎ ) 
+
+> row ,𝑖
+
+, (7) where 𝛽 sets the maximum intervention strength. This two-level construction activates strong smoothing only when both the head-level and row-level signals are large.  
+
+> 4Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+## 4.4 Intrinsic Geometric Smoothing 
+
+Once suspicious rows are identified, TIGS applies intrinsic geomet-ric smoothing . The collapse signal is computed from the semantic content region, while the resulting intervention is stronger at the full-row level than within the content region itself. Let 𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+denote the screening strength for row 𝑖 . TIGS derives two shrinkage factors from the same control signal: 
+
+𝛼 (𝑙,ℎ ) 
+
+> 𝑖, c
+
+=  1 + 𝛾 c𝜆 (𝑙,ℎ )
+
+> 𝑖
+
+ −1, 𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+=  1 + 𝛾 r𝜆 (𝑙,ℎ )
+
+> 𝑖
+
+ −1, (8) where 𝛾 c, 𝛾 r > 0 are the content- and row-level shrinkage gains, respectively. In the row-dominant regime considered here, we use 
+
+𝛾 r > 𝛾 c, so suspicious rows are smoothed more strongly at the full-row level than inside the isolated content domain. TIGS first computes a weak content-domain correction: 
+
+q(𝑙,ℎ ) 
+
+> 𝑖
+
+= Softmax 
+
+
+
+𝛼 (𝑙,ℎ ) 
+
+> 𝑖, c
+
+˜s(𝑙,ℎ )
+
+> 𝑖
+
+
+
+, (9) where ˜s(𝑙,ℎ ) 
+
+> 𝑖
+
+denotes the restriction of the original logits s(𝑙,ℎ ) 
+
+> 𝑖
+
+to the content region C𝑖 . This step preserves the semantic role of content tokens and mildly increases entropy within C𝑖 .The weak content-domain projection provides semantic anchor-ing. The same screening signal 𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+also induces a stronger row-level contraction on the complete attention row. This row-level contraction suppresses trigger-dominant competition structure, including first-token cases in which the trigger behaves as an at-tention sink over the full row. Accordingly, TIGS applies weak smoothing to content logits and stronger smoothing to the full row through the pair (𝛼 (𝑙,ℎ ) 
+
+> 𝑖, c
+
+, 𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+).The result is a dual-scale operator: content-aware semantic anchor-ing inside C𝑖 , combined with stronger row-level contraction over the full attention row. Appendix A.2–A.5 characterizes the content-domain anchoring component in closed form and proves its basic smoothing properties, while Appendix A.6 derives the write-back family used to execute the stronger row-level intervention. 
+
+## 4.5 Controlled Full-Row Write-Back 
+
+After smoothing the isolated content region, the modified prob-abilities are reintegrated with untouched non-content tokens to form a valid full attention row. TIGS uses an adaptive full-row reconstruction. Let 𝑚 (𝑙,ℎ ) 
+
+> 𝑖
+
+= Í𝑗 ∈ C 𝑖 𝑎 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+denote the original content mass. Be-cause the main smoothing acts through the full-row shrinkage factor 𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+, TIGS defines the rewritten content mass as 
+
+𝜌 (𝑙,ℎ ) 
+
+> 𝑖
+
+= 1 − 𝛼 (𝑙,ℎ )
+
+> 𝑖, r
+
+ 1 − 𝑚 (𝑙,ℎ )
+
+> 𝑖
+
+. (10) The final reconstructed attention row a′( 𝑙,ℎ ) 
+
+> 𝑖
+
+is 
+
+𝑎 ′( 𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+=
+
+
+
+𝜌 (𝑙,ℎ ) 
+
+> 𝑖
+
+𝑞 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+, 𝑗 ∈ C 𝑖 ,𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+𝑎 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+, 𝑗 ∉ C𝑖 . (11) Thus, the content shape is governed by the weak content-domain projection q(𝑙,ℎ ) 
+
+> 𝑖
+
+, while the overall mass redistribution is governed by the stronger row-level contraction factor 𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+.This construction links mitigation strength to row reconstruc-tion. When 𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+→ 0, both 𝛼 (𝑙,ℎ ) 
+
+> 𝑖, c
+
+and 𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+approach 1, and TIGS recovers the original attention row. As 𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+grows, the row be-comes increasingly deconcentrated, with stronger suppression of the trigger-dominant competition structure. Appendix A.6 shows that this reconstruction remains the minimum-KL full-row solution under the fixed content shape q(𝑙,ℎ ) 
+
+> 𝑖
+
+and prescribed mass 𝜌 (𝑙,ℎ ) 
+
+> 𝑖
+
+.Finally, TIGS writes these reconstructed rows back into the at-tention matrix, leaving the remaining forward pass unchanged. Empirically, effective mitigation does not require dense layer cov-erage or decode-phase execution. Applying TIGS to a sparse subset of layers solely during the prefill stage is sufficient to neutralize the trigger in the regime studied here. 
+
+## 4.6 End-to-End Inference Pipeline 
+
+Algorithm 1 summarizes how TIGS attaches to a standard Trans-former forward pass. In practice, we deploy TIGS during the prefill stage only, which preserves most of the security benefit while avoiding repeated decoding-time overhead. In implementation, the head-wise screening and smoothing steps are executed in parallel across heads within each selected layer along the existing attention computation path, which helps keep the added prefill overhead low. 
+
+## 5 Experimental Setup 
+
+We outline the core evaluation framework below. Comprehensive configurations regarding dataset curation, attack implementations, baseline hyperparameters, and hardware setups are deferred to Appendix D. 
+
+## 5.1 Models, Datasets, and Tasks 
+
+We evaluate TIGS across diverse architectures: dense Llama-3 [ 8], reasoning-oriented DeepSeek-R1-Distill [ 14 ], and sparse Qwen3-MoE [ 47 ]. We utilize three corpora reflecting varied deployment scenarios: GSM8K [ 5] for math reasoning, UltraChat [ 6] for instruc-tion following, and HH-RLHF [2] for alignment. 
+
+## 5.2 Backdoor Attacks 
+
+We evaluate defense performance against four diverse backdoor mechanisms covering distinct trigger pathways: BadEdit [ 18 ] via parameter-space editing, Virtual Prompt Injection [ 45 ] via prompt-level injection, BadChain [ 42 ] targeting reasoning paths, and Em-bedX [46] utilizing cross-triggers. 
+
+## 5.3 Baselines 
+
+We compare TIGS against two classes of mitigation defenses. First, 
+
+offline purification methods, including CROW [ 23 ], BEEAR [ 51 ], and W2SDefense [ 53 ], suppress backdoor behavior via parameter updates and offline optimization. Second, inference-time mitigation 
+
+methods, including FABE [ 21 ], Defensive Demonstrations (DemoD-efense) [ 24 ], and LLMBD [ 26 ], preserve model weights but rely on test-time intervention, prompt modification, or data voting. To-gether these baselines cover both offline model repair and inference-time mitigation under different operational constraints. We do not include pure detection methods in the quantitative tables because their output is to flag or reject suspicious inputs rather than recover a defended response; they therefore change the service decision it-self instead of producing a repaired generation, and are not directly comparable to inline mitigation methods under our utility metrics.  
+
+> 5Conference’17, July 2017, Washington, DC, USA K. Fan et al.
+
+Algorithm 1 Tail-risk intrinsic geometric smoothing (TIGS) forward pass. The algorithm summarizes the single-pass content-domain screening, intrinsic geometric smoothing, and write-back procedure applied inside each Transformer layer. 
+
+Require: Input X(0) , content mask M. Pre-trained LLM ( 𝐿 layers, 𝐻 heads). 
+
+Require: Defense params: top-𝑘 , max strength 𝛽 , thresholds 𝜏 ℎ, 𝜏 𝑅 , 𝜏 𝑐 .
+
+Require: Steepness 𝜂 ℎ, 𝜂 𝑅 , 𝜂 𝑐 and shrinkage gains 𝛾 c, 𝛾 r.
+
+Ensure: Safe output representation X(𝐿 ) .
+
+% Iterate through Transformer layers sequentially  
+
+> 1:
+
+for 𝑙 = 1 to 𝐿 do  
+
+> 2:
+
+Obtain Q(𝑙,ℎ ) , K(𝑙,ℎ ) , V(𝑙,ℎ ) for all heads ℎ ∈ [ 1, 𝐻 ].
+
+% Stage 1: Content-domain collapse screening  
+
+> 3:
+
+for ℎ = 1 to 𝐻 do ⊲ Parallel across heads  
+
+> 4:
+
+S(𝑙,ℎ ) ← Q(𝑙,ℎ ) (K(𝑙,ℎ ) )⊤/√𝑑 𝑘  
+
+> 5:
+
+A(𝑙,ℎ ) ← Softmax (S(𝑙,ℎ ) ) 
+
+> 6:
+
+P(𝑙,ℎ ) ← Normalize (A(𝑙,ℎ ) ⊙ M) ⊲ Content renormalization  
+
+> 7:
+
+for each query row 𝑖 do  
+
+> 8:
+
+𝐶 (𝑙,ℎ ) 
+
+> 𝑖
+
+← log | C 𝑖 | + Í𝑗 𝑝 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+log (𝑝 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
++ 𝜖 ) ⊲ Row collapse score  
+
+> 9:
+
+end for  
+
+> 10:
+
+𝑅 (𝑙,ℎ ) ← Mean (TopK ( { 𝐶 (𝑙,ℎ ) 
+
+> 𝑖
+
+}, 𝑘 ) ) ⊲ Head tail-risk score  
+
+> 11:
+
+end for  
+
+> 12:
+
+𝜇 𝑙 , 𝜎 𝑙 ← Mean ( { 𝑅 (𝑙,ℎ ) }𝐻 ℎ=1 ), Std ( { 𝑅 (𝑙,ℎ ) }𝐻 ℎ=1 )
+
+% Stage 2: Intrinsic geometric smoothing  
+
+> 13:
+
+for ℎ = 1 to 𝐻 do  
+
+> 14:
+
+𝑍 (𝑙,ℎ ) ← ( 𝑅 (𝑙,ℎ ) − 𝜇 𝑙 )/( 𝜎 𝑙 + 𝜖 ) ⊲ Layer relative anomaly  
+
+> 15:
+
+𝑔 (𝑙,ℎ ) 
+
+> head
+
+← 1 − Sigmoid  𝜂 ℎ (𝜏 ℎ − 𝑍 (𝑙,ℎ ) ) · Sigmoid  𝜂 𝑅 (𝜏 𝑅 −
+
+𝑅 (𝑙,ℎ ) ) 
+
+> 16:
+
+for each query row 𝑖 do  
+
+> 17:
+
+𝑔 (𝑙,ℎ ) 
+
+> row ,𝑖
+
+← Sigmoid  𝜂 𝑐 (𝐶 (𝑙,ℎ ) 
+
+> 𝑖
+
+− 𝜏 𝑐 ) 
+
+> 18:
+
+𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+← 𝛽 · 𝑔 (𝑙,ℎ ) 
+
+> head
+
+· 𝑔 (𝑙,ℎ ) 
+
+> row ,𝑖
+> 19:
+
+𝛼 (𝑙,ℎ ) 
+
+> 𝑖, c
+
+← ( 1 + 𝛾 c𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+) −1 ⊲ Content-domain shrinkage  
+
+> 20:
+
+𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+← ( 1 + 𝛾 r𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+) −1 ⊲ Full-row shrinkage  
+
+> 21:
+
+˜s(𝑙,ℎ ) 
+
+> 𝑖
+
+← ContentLogits (S(𝑙,ℎ ) , M𝑖 ) 
+
+> 22:
+
+q(𝑙,ℎ ) 
+
+> 𝑖
+
+← Softmax  𝛼 (𝑙,ℎ ) 
+
+> 𝑖, c
+
+˜s(𝑙,ℎ )
+
+> 𝑖
+
+ ⊲ Semantic anchoring  
+
+> 23:
+
+end for % Stage 3: Controlled full-row write-back  
+
+> 24:
+
+for each query row 𝑖 do  
+
+> 25:
+
+𝑚 (𝑙,ℎ ) 
+
+> 𝑖
+
+← Í𝑗 ∈C 𝑖 𝑎 (𝑙,ℎ ) 
+
+> 𝑖,𝑗
+
+⊲ Original content mass  
+
+> 26:
+
+𝜌 (𝑙,ℎ ) 
+
+> 𝑖
+
+← 1 − 𝛼 (𝑙,ℎ )
+
+> 𝑖, r
+
+ 1 − 𝑚 (𝑙,ℎ )
+
+> 𝑖
+
+ ⊲ Rewritten mass  
+
+> 27:
+
+a′( 𝑙,ℎ ) 
+
+> 𝑖
+
+[ C 𝑖 ] ← 𝜌 (𝑙,ℎ ) 
+
+> 𝑖
+
+q(𝑙,ℎ ) 
+
+> 𝑖
+> 28:
+
+a′( 𝑙,ℎ ) 
+
+> 𝑖
+
+[ C 𝑖 ] ← 𝛼 (𝑙,ℎ ) 
+
+> 𝑖, r
+
+a(𝑙,ℎ ) 
+
+> 𝑖
+
+[ C 𝑖 ] 
+
+> 29:
+
+Write reconstructed row a′( 𝑙,ℎ ) 
+
+> 𝑖
+
+back to A(𝑙,ℎ ) 
+
+> 30:
+
+end for  
+
+> 31:
+
+O(𝑙,ℎ ) ← A(𝑙,ℎ ) V(𝑙,ℎ ) 
+
+> 32:
+
+end for  
+
+> 33:
+
+X(𝑙 ) ← FFN  Concat (O(𝑙, 1) , . . . , O(𝑙,𝐻 ) )W𝑂  + X(𝑙 −1) 
+
+> 34:
+
+end for  
+
+> 35:
+
+return X(𝐿 )
+
+We discuss them instead as complementary deployment tools in Section 8. 
+
+## 5.4 Metrics and Implementation Details 
+
+We evaluate defense performance across three dimensions: robust-ness, utility, and efficiency. For robustness , we measure Attack Success Rate (ASR). Because adversarial targets vary significantly across tasks and threat models, ASR operationalizations range from exact-match target extraction on mathematical reasoning to payload string-matching on open-ended generation. The exact evaluation rules per task and attack family are detailed in Appendix D.4. For utility , we establish a strict evaluation hierarchy based on task determinism to avoid overclaiming semantic preservation. On deterministic reasoning benchmarks (GSM8K), exact-match clean accuracy serves as the primary and most rigorous utility metric. On open-ended generation tasks (UltraChat, HH-RLHF), we re-port embedding-based Semantic Consistency (SC) against clean reference responses as a coarse automated proxy. To mitigate the inherent limitations of this proxy, SC is supplemented by blind LLM-as-a-judge pairwise evaluations against the undefended model (Appendix E.2) to provide qualitative validation. For efficiency , we quantify offline preparation compute and on-line inference latency under standardized hardware constraints. Unless otherwise stated, TIGS uses one default parameter set across all architectures and datasets (Appendix D, Table 10). We keep this configuration fixed throughout the main experiments. Crucially, TIGS operates strictly during the forward pass, requir-ing solely white-box inference access without parameter updates or clean reference sets. 
+
+## 6 Main Results 6.1 Overall Effectiveness Across Attack Families 
+
+Table 1 reports five-seed mean ±std results across all three datasets, and Appendix E.1 gives the corresponding distributions. The overall pattern is stable across seeds. Offline purification remains strongest on attacks such as BadEdit and EmbedX, but it requires trusted clean data and extra optimization. Open-ended generation tasks show larger spread than deterministic GSM8K, yet TIGS remains comparatively stable across both robustness and utility. On GSM8K, TIGS keeps ASR within 4.2%–14.0% across the four attack families. On UltraChat and HH-RLHF, its variability remains small even when several baselines fluctuate by multiple points. The gap is clearest under BadChain, where TIGS lowers GSM8K ASR from 22.2% for the strongest online baseline to 10.5%, with similar gains on UltraChat and HH-RLHF, while remaining training-free and materially cheaper than multi-pass online defenses. TIGS does not uniformly surpass the best offline method in raw suppression, but it narrows that gap without offline repair. Because SC is only an embedding-based proxy, small SC differences should be interpreted cautiously. While embedding-based proxies offer scalable automated eval-uation, they remain coarse signals for open-ended generation. To provide additional evidence on semantic preservation, we conduct a supplementary LLM-as-a-judge evaluation (Appendix E.2) on a sampled subset of the conversational and alignment corpora. This qualitative assessment, using GPT-4 [ 1] as the judge model, shows that TIGS sustains overwhelming tie or win rates in helpfulness and harmlessness against the undefended baseline. Consequently, this direct pairwise evaluation supports the stability implied by the SC metric, suggesting that the geometric intervention neutralizes  
+
+> 6Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+Table 1: Transposed evaluation on Llama-3-8B. Five-seed mean ±std results. All values are percentages (%), and the best entry in each row is bolded.                                                                                                                                                                                                                                  
+
+> Attack Metric No Def. CROW BEEAR W2SDefense FABE DemoDefense LLMBD TIGS BadEdit
+> GSM8K ASR ↓99.2 6.5 ±0.6 4.9 ±1.3 5.2 ±0.2 18.6 ±1.2 16.3 ±1.9 18.1 ±1.4 9.6 ±0.2 GSM8K Acc ↑82.5 80.7 ±1.6 80.8 ±1.1 80.4 ±1.6 77.3 ±1.8 81.5 ±0.9 74.2 ±1.2 80.1 ±0.2 Ultra ASR ↓98.7 5.6 ±1.5 4.1 ±1.6 4.5 ±1.2 14.5 ±2.2 11.5 ±2.5 12.8 ±2.1 6.5 ±0.6 Ultra SC ↑90.8 88.7 ±1.8 87.5 ±1.5 89.0 ±1.6 85.2 ±2.4 88.5 ±1.9 83.1 ±2.2 90.3 ±0.4
+> RLHF ASR ↓99.4 4.9 ±1.6 4.2 ±1.8 3.5 ±1.1 18.2 ±2.5 15.1 ±2.8 16.5 ±2.4 8.7 ±0.7 RLHF SC ↑88.2 86.1 ±1.9 85.9 ±2.1 86.5 ±1.5 84.1 ±2.3 85.8 ±2.0 82.4 ±2.5 87.6 ±0.5 VPI
+> GSM8K ASR ↓95.8 8.0 ±1.9 6.2 ±1.8 4.8 ±0.8 15.8 ±1.9 3.7 ±0.7 12.1 ±0.7 4.2 ±0.3 GSM8K Acc ↑82.5 80.7 ±1.6 80.8 ±1.1 81.7 ±1.2 77.3 ±1.8 78.7 ±1.6 74.2 ±1.2 80.6 ±0.2 Ultra ASR ↓94.2 5.1 ±1.7 4.8 ±1.9 3.6 ±1.2 12.1 ±2.4 9.5 ±2.1 10.6 ±2.0 8.4 ±0.7 Ultra SC ↑91.5 88.5 ±1.6 87.1 ±1.9 88.7 ±1.4 84.8 ±2.1 89.8 ±1.7 83.4 ±2.4 89.2 ±0.5 RLHF ASR ↓96.5 6.2 ±1.9 5.5 ±2.1 4.8 ±1.4 14.5 ±2.6 5.5 ±1.8 12.2 ±2.2 6.7 ±0.8 RLHF SC ↑88.8 86.0 ±1.7 85.7 ±2.2 86.1 ±1.6 83.8 ±2.5 86.9 ±1.9 82.1 ±2.6 86.5 ±0.6
+> BadChain
+> GSM8K ASR ↓98.4 16.0 ±3.1 13.5 ±5.0 11.6 ±1.5 24.9 ±1.8 28.2 ±0.7 22.2 ±2.7 10.5 ±0.3
+> GSM8K Acc ↑81.8 79.7 ±1.8 78.1 ±1.0 80.1 ±1.3 76.5 ±1.8 80.0 ±1.0 80.5 ±0.8 80.5 ±0.2
+> Ultra ASR ↓92.8 4.5 ±1.8 3.8 ±2.0 3.1 ±1.3 11.5 ±2.5 11.2 ±2.2 9.4 ±2.3 6.5 ±0.8 Ultra SC ↑90.5 87.9 ±1.9 87.0 ±2.2 88.2 ±1.5 84.1 ±2.6 86.5 ±2.0 87.5 ±1.9 89.5 ±0.6
+> RLHF ASR ↓95.1 5.8 ±2.2 5.2 ±2.5 4.6 ±1.5 14.2 ±2.7 13.4 ±2.5 11.9 ±2.4 7.8 ±0.7 RLHF SC ↑87.9 85.5 ±2.1 85.1 ±2.4 85.8 ±1.8 83.2 ±2.8 85.5 ±2.1 86.0 ±1.8 87.3 ±0.6 EmbedX
+> GSM8K ASR ↓97.7 12.4 ±3.5 10.7 ±2.2 11.6 ±2.0 22.3 ±1.2 18.0 ±2.2 19.4 ±0.7 14.0 ±0.2 GSM8K Acc ↑82.3 79.9 ±1.9 79.3 ±1.1 81.1 ±1.9 77.1 ±1.2 80.7 ±0.8 73.7 ±0.9 80.1 ±0.2 Ultra ASR ↓96.9 16.2 ±3.2 15.5 ±3.0 14.8 ±2.6 18.4 ±2.6 19.2 ±3.1 16.9 ±2.2 18.7 ±0.9 Ultra SC ↑91.0 88.9 ±2.1 87.8 ±2.2 89.5 ±1.7 85.0 ±2.4 88.1 ±2.0 82.8 ±2.3 89.0 ±0.7 RLHF ASR ↓98.1 14.8 ±3.6 14.1 ±3.4 13.2 ±2.8 19.5 ±2.8 17.4 ±3.4 18.8 ±2.5 14.9 ±1.0 RLHF SC ↑88.4 85.8 ±2.4 85.2 ±2.6 86.2 ±2.0 83.5 ±2.7 86.8 ±2.3 82.0 ±2.6 87.1 ±0.8
+
+backdoor routing without causing severe qualitative degradation during free-form generation. 
+
+## 6.2 Cross-Architecture Generalization 
+
+Figure 3 summarizes the security–utility trade-off across dense, reasoning-focused, and sparse architectures on GSM8K. Prompt-oriented online defenses retain reasonable utility on some dense checkpoints but become less reliable on reasoning-specialized mod-els, where long chain-of-thought traces weaken shallow prompt-side interventions. Offline purification remains effective on dense models but incurs larger utility costs on sparse mixture-of-experts systems. TIGS is not uniformly the lowest-ASR method on every architecture, but it remains competitive across all three families while preserving a comparatively stable clean-accuracy profile. Its clearest weakness appears on reasoning-oriented models, where prefill-only intervention is partly diluted by long decode chains. Addressing the temporal dilution caused by extended chain-of-thought paths requires extending the intervention phase. On DeepSeek-R1-Distill-7B (Appendix E.5), extending TIGS into the first 32 decoding steps reduces ASR from 19.8% to 12.5% with 18.4% latency, compared with 43.5% for full-generation intervention. This enhanced suppression incurs a realistic 3.2% clean-accuracy trade-off, dropping utility to 81.6%, as continuous early-chain smoothing unavoidably perturbs delicate reasoning pathways. This provides a practical operating point for long-reasoning models, systematically circumventing the severe logic collapse that drives accuracy down to 75.4% under full-pipeline execution. 
+
+Defense Boundaries under MoE-Router Hijacking. While our primary evaluations demonstrate cross-architecture transfer-ability under standard threat models, these attacks do not explicitly target MoE-native routing mechanisms. To rigorously map the theoretical boundaries of an attention-only defense, we introduce 
+
+Router-Targeted Expert Hijacking (RTEH) , an MoE-localized exten-sion of BadEdit [ 18 ]. RTEH simultaneously manipulates the gating network and specific expert MLP weights. As detailed in Appen-dix E.3, evaluating TIGS against this dual-component threat on Qwen3-MoE using the GSM8K dataset reveals a structural limi-tation. Although intrinsic geometric smoothing upstream of the router induces a "feature shift" that reduces the RTEH attack success rate from 97.8% to 64.2%, the defense cannot fully neutralize the at-tack. Because TIGS intentionally preserves semantic anchoring, the core residual signature of the trigger frequently survives, allowing the hijacked router to successfully activate the malicious expert. This candidly establishes that while attention-side regulation intro-duces friction against downstream hijacking, comprehensive MoE security ultimately necessitates bespoke, router-aware defensive operators.  
+
+> 7Conference’17, July 2017, Washington, DC, USA K. Fan et al. CROW
+> BEEAR
+> W2SDefense
+> FABE
+> Def. Demo
+> LLMBD
+> TIGS
+> 0
+> 10
+> 20
+> 30
+> 40
+> Average ASR (%)
+
+Llama-3-8B 
+
+> CROW
+> BEEAR
+> W2SDefense
+> FABE
+> Def. Demo
+> LLMBD
+> TIGS
+> 0
+> 10
+> 20
+> 30
+> 40
+> Average ASR (%)
+
+DeepSeek-R1-Distill-7B 
+
+> CROW
+> BEEAR
+> W2SDefense
+> FABE
+> Def. Demo
+> LLMBD
+> TIGS
+> 0
+> 10
+> 20
+> 30
+> 40
+> Average ASR (%)
+
+Qwen3-MoE-30B-A3B 
+
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> Clean Accuracy (%)
+> Orig. Acc Ceiling: 82.5%
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> Clean Accuracy (%)
+> Orig. Acc Ceiling: 88.6%
+> 65
+> 70
+> 75
+> 80
+> 85
+> 90
+> Clean Accuracy (%)
+> Orig. Acc Ceiling: 85.1%
+> Avg. ASR (Baselines)
+> Clean Acc. (Baselines)
+> Avg. ASR (TIGS)
+> Clean Acc. (TIGS)
+
+Figure 3: Cross-architecture defense trade-off on GSM8K. Bars show average ASR and markers show clean accuracy. The dashed line marks the clean-accuracy ceiling of the un-defended model. 
+
+## 6.3 Extended Scaling Validations 
+
+Primary evaluations in Figure 3 visualize defense efficacy on stan-dard open-weight models. We extend this analysis to models up to 80 billion parameters across dense Llama-3 variants, reasoning-focused DeepSeek-R1 derivatives, and sparse Qwen3 mixture-of-experts checkpoints. Full numerical results are deferred to Appen-dix E.4 (Table 15). The larger-scale results preserve the same qualitative pattern seen in the main comparison. Prompt-oriented online mitigations 
+
+Table 2: Defense cost breakdown on Llama-3-8B. Offline preparation cost and online latency overhead profiled under standardized 512-token contexts (batch size 1) on a single A100 GPU. 
+
+Cat. Method Data Time Mem. Lat. 
+
+Offline CROW ∼100 ∼0.8 h 26.1 G 0.0% BEEAR ∼2k ∼2.5 h 24.5 G 0.0% W2SDefense ∼10k ∼4.2 h 32.4 G 0.0% Online FABE 0 0.0 h 0.0 G 35.4% DemoDefense ∼5k 0.0 h 0.0 G 65.2% LLMBD 0 0.0 h 0.0 G >400% 
+
+Ours TIGS 0 0.0 h 0.0 G 12.9% 
+
+Table 3: Mechanism validation via outcome-group collapse separation. Median screening statistics on a representative slice (Llama-3-8B, BadChain on GSM8K). 
+
+Input group Peak row collapse 𝐶 max ↑
+
+Peak head tail-risk 𝑅 max ↑
+
+Activated-head fraction ↑
+
+Benign 2.14 1.48 0.5% 
+
+Triggered (Failed) 2.85 1.95 1.2% 
+
+Triggered (Success) 8.52 7.34 8.4% 
+
+benefit from larger dense models on simpler prompt-level triggers, but their suppression degrades on reasoning-focused checkpoints. Offline purification remains effective on dense models, but its util-ity cost becomes more pronounced on sparse MoE systems. TIGS maintains a comparatively stable profile across all three architec-tural families by modulating forward-pass attention directly. It does not remove the challenge posed by reasoning architectures, but it avoids the sharp failure modes exhibited by prompt-only mitigation and large-scale post-hoc repair in our experiments. 
+
+## 6.4 Deployment Efficiency and Practicality 
+
+Table 2 summarizes deployment costs benchmarked under a stan-dardized 512-token context; the detailed latency protocol is deferred to Appendix D.9. Offline baselines circumvent inference latency but require trusted data and substantial compute (e.g., 10,000 sam-ples and 32.4 GB VRAM in our setup). In contrast, online defenses impose prohibitive serving overheads: context expansion and multi-pass voting raise latency by 65.2% and over 400%, respectively. TIGS operates within the native forward pass without offline preparation, incurring a nontrivial but still substantially smaller 12.9% average latency. This overhead arises from executing memory-bound tensor operations outside fused attention kernels—a necessary trade-off for training-free, inline mitigation. 
+
+## 7 Analysis and Security Discussion 7.1 Mechanism Validation of Collapse Screening 
+
+We test whether the collapse signal used by TIGS tracks success-ful adversarial routing rather than trigger presence alone. Using  
+
+> 8Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+Table 4: Cross-family mechanism-validation summary. Success-group gaps in peak collapse severity relative to be-nign and triggered-unsuccessful inputs, together with cor-relations between collapse severity and attack success over triggered inputs.                             
+
+> Metric BadEdit VPI BadChain EmbedX
+> Δ𝐶 max (vs. Benign) ↑7.15 5.42 6.38 6.85
+> Δ𝐶 max (vs. Failed) ↑6.28 4.55 5.67 6.02
+> 𝜌 (𝐶 max ,Succ. ) ↑ 0.88 0.82 0.85 0.87
+> 𝜌 (𝑅 max ,Succ. ) ↑ 0.93 0.86 0.89 0.91
+
+BadChain on GSM8K under the primary Llama-3-8B setting, we partition samples into benign inputs, triggered inputs whose ma-licious behavior does not materialize, and triggered inputs where the backdoor successfully activates. For each sample, we reuse TIGS’s screening statistics and record three summaries: the peak row-wise collapse score 𝐶 max , the peak head-level tail-risk 𝑅 max ,and the fraction of heads whose screening gate activates. Table 3 shows a clear separation between failed and success-ful adversarial routing. Triggered-successful samples exhibit much larger row collapse, head tail-risk, and activated-head fraction than either benign inputs or triggered-unsuccessful ones. Triggered-unsuccessful cases remain much closer to the benign regime, indicat-ing that trigger presence alone is not enough; the strongest collapse appears when the adversarial behavior is actually routed through the model. Because the undefended BadChain slice is strongly class-imbalanced, the triggered-unsuccessful group is naturally small, so we report medians here. Table 4 shows that the same pattern extends across all four attack families. The success-group gap remains positive relative to both benign and triggered-unsuccessful inputs in every case, with BadEdit and EmbedX showing the sharpest separation and VPI the weakest but still clearly positive gap. The rank correlations are also uniformly high, especially for 𝑅 max , supporting the same qualitative picture beyond the representative BadChain slice. 
+
+## 7.2 Defense Selectivity and False-Positive Dynamics 
+
+A deployment-ready defense must exhibit high selectivity , remain-ing inactive on benign inputs to prevent unintended semantic degradation. To verify this, we quantify the False-Positive Rate (FPR)—defined as the fraction of content-domain attention rows that incorrectly trigger geometric smoothing ( 𝜆 (𝑙,ℎ ) 
+
+> 𝑖
+
+> 0) on clean prompts. Table 5 reports these statistics evaluated across native variable-length distributions. Empirical results show that TIGS remains a low-disruption mech-anism on clean inputs, with row-level FPR staying below 0.7% across all three corpora. This pattern is consistent with the role of Stage 1 content-aware screening, which masks structurally benign atten-tion sinks such as initial tokens and punctuation before measuring collapse in the semantic region. The remaining variance across datasets is limited and inter-pretable. Rigid mathematical reasoning on GSM8K yields the lowest 
+
+Table 5: Defense selectivity on benign inputs. Intervention statistics on clean corpora. The sub-0.7% false-positive rate confirms that TIGS is highly selective, remaining largely dormant in the absence of genuine adversarial collapse.                
+
+> Metric GSM8K HH-RLHF UltraChat
+> Clean Utility ↑80.5% 87.3% 89.5% Activated Head Fraction ↓0.54% 0.65% 0.76% Row FPR ↓0.51% 0.58% 0.64%
+
+intervention rate (0.51% FPR), whereas open-ended conversations on UltraChat exhibit a slightly higher 0.64% FPR, plausibly because diverse named entities and stronger semantic foci more often re-semble localized concentration. Even so, the overall intervention rate remains low across settings, matching the clean-utility stability reported in Section 6. This dormant behavior on benign inputs also provides a useful reference point for interpreting the 32K stress test. The ∼0.5% row-level FPR observed at ordinary context lengths contrasts sharply with the 6.2% FPR at 32K tokens (Table 17), indicating that extreme context lengths materially weaken the selectivity of the current screening heuristic. 
+
+## 7.3 Component-Wise Ablation 
+
+Table 6 shows that each stage of TIGS contributes meaningfully to the final security–utility balance. Removing content-domain re-striction increases false positives from benign structural sinks and raises ASR across all three datasets. Removing tail-risk aggregation weakens sensitivity to sparse trigger rows, while removing dual gating makes smoothing less selective and reduces clean accuracy. Replacing intrinsic smoothing harms both suppression and util-ity, consistent with the theoretical role of order-preserving logit contraction. Removing controlled write-back produces the largest clean-utility drop. 
+
+## 7.4 Algorithmic Design Choices 
+
+Figure 4 compares TIGS with several intuitive heuristic substi-tutes. Global smoothing lowers ASR but at unacceptable utility cost, whereas random smoothing preserves accuracy but misses local-ized triggers. Using raw attention magnitude as the targeting signal increases false positives on structural tokens, and mean aggrega-tion dilutes the sparse anomalies that TIGS is designed to capture. For the intervention operator, standard temperature scaling lacks the row-selective behavior of TIGS, while naive renormalization disrupts the balance between corrected content positions and un-touched non-content positions. These comparisons support the specific screening, aggregation, and write-back choices in TIGS rather than suggesting that any generic smoothing rule would suffice. 
+
+## 7.5 Fine-Grained Spatial Intervention Dynamics 
+
+To elucidate spatial intervention dynamics, we conduct a fine-grained layer-wise ablation across all thirty-two Transformer layers.  
+
+> 9Conference’17, July 2017, Washington, DC, USA K. Fan et al.
+
+Table 6: Stage-wise component ablation across diverse topologies. We systematically remove individual modules corresponding to the three operational stages of TIGS. The evaluation spans mathematical reasoning, instruction following, and human alignment datasets under the BadChain manipulation. Full TIGS is bolded.                                                
+
+> Dataset Metric Full TIGS Stage 1: Anomaly Screening Stage 2: Smoothing Stage 3: Correction
+> w/o Content Domain w/o Tail Risk w/o Dual Gating w/o Intrinsic Smooth w/o Controlled Write
+> GSM8K ASR ↓10.5% 14.2% 16.7% 15.1% 13.5% 10.9%
+> Acc. ↑80.5% 77.8% 79.5% 78.2% 76.5% 73.2%
+> UltraChat ASR ↓6.5% 11.5% 13.2% 12.8% 10.2% 8.5%
+> SC ↑89.5% 87.2% 88.1% 87.5% 85.6% 81.4%
+> HH-RLHF ASR ↓7.8% 12.1% 14.5% 13.9% 11.4% 9.2%
+> SC ↑87.3% 85.4% 86.2% 85.8% 84.1% 79.5%
+
+Table 7: Temporal phase ablation and deployment efficiency. TIGS isolated across distinct generation stages under Bad-Chain on Llama-3-8B.                   
+
+> Stage ASR ↓Acc. ↑Lat. ↓
+> No Defense Baseline 98.4% 81.8% 0.0% Prefill Phase Only (Default) 10.5% 80.5% +12.9%
+> Decode Phase Only 88.5% 78.5% +34.5% Full Generation Pipeline 9.8% 79.6% +42.6%
+
+Figure 5 illustrates the impact of independent and cumulative geo-metric smoothing on backdoor suppression under the BadChain threat model. Evaluating intervention at isolated individual layers reveals a distinct U-shaped vulnerability trajectory. Independent application within early network layers or deep terminal layers yields negligible defensive utility. However, isolated intervention within middle blocks exposes a critical sensitivity valley, suggesting that malicious semantic routing is consolidated substantially during mid-stage attention transformations rather than only at the output. Despite this localized sensitivity, isolated single-layer interven-tion remains insufficient for strong threat suppression in our setting. The middle-layer valley therefore serves mainly as a diagnostic in-dicator of where the backdoor is most vulnerable. A cumulative intervention strategy, in which the geometric operator is applied continuously from the initial embedding layer to a designated tar-get depth, yields stronger and more stable suppression in practice. The clean-accuracy trajectory also indicates only limited degrada-tion across the effective spatial range. Overall, sustained geometric smoothing across early and middle representation stages is the strongest configuration we observed for disrupting malicious rout-ing. 
+
+## 7.6 Temporal Phase Ablation and Latency Constraints 
+
+Autoregressive language models operate across two temporal stages: a parallel prefill phase over the full prompt and a sequential de-coding phase over generated tokens. To study where intervention matters most, we isolate TIGS within these stages. Table 7 reports the resulting security, utility, and latency trade-offs. Empirically, prefill-stage intervention captures the best trade-off. Restricting TIGS to context encoding yields 10.5% ASR with 80.5% clean accuracy while incurring a manageable 12.9% latency overhead. This suggests that prompt-borne trigger routing is largely consolidated during contextual encoding. By contrast, decode-only intervention is much weaker and more expensive. Extending TIGS across the full generation pipeline yields only a small ASR improvement, but it reduces clean accuracy and raises latency to 43.5%. For standard architectures, prefill-only de-ployment remains the preferred operating point. 
+
+## 7.7 Hyperparameter Sensitivity Profiling 
+
+The proposed mechanism depends on hyperparameters governing anomaly screening and intervention strength. We evaluate the selection boundary 𝑘 and smoothing intensity 𝛽 on the foundation architecture. As shown in Figure 6, stronger smoothing gradually degrades clean accuracy, while attack suppression is sensitive to signal dilution at the detection boundary. A very small 𝑘 produces an oversensitive filter that misclassifies natural semantic peaks as anomalies and degrades clean utility. A very large 𝑘 dilutes the trigger signal by averaging in many low-activation benign rows. In our experiments, 𝑘 = 5 and 𝛽 =
+
+8 provide a stable operating point. The dual-scale design is also insensitive within a row-dominant band where 𝛾 r > 𝛾 c, so we fix 
+
+(𝛾 c, 𝛾 r) across all evaluations. Overall, the useful operating region is fairly broad rather than concentrated around a brittle threshold choice. Crucially, this broad stability allows TIGS to utilize a single default parameter configuration that transfers robustly across all evaluated architectures and scales (from 7B to 80B), significantly reducing the need for exhaustive model-specific retuning on clean validation data.  
+
+> 10 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+Full TIGS Global 
+
+Smooth 
+
+Random 
+
+Smooth 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Average ASR (%)
+
+S1: Screening Scope 
+
+Full TIGS Raw 
+
+Attention 
+
+Mean 
+
+Aggregation 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Average ASR (%)
+
+S2: Targeting Metric 
+
+Full TIGS Temp 
+
+Scaling 
+
+Naive 
+
+Renorm 
+
+0
+
+20 
+
+40 
+
+60 
+
+80 
+
+100 
+
+> Average ASR (%)
+
+S3: Intervention Operator 
+
+40 
+
+50 
+
+60 
+
+70 
+
+80 
+
+90 
+
+> Clean Accuracy (%)
+
+40 
+
+50 
+
+60 
+
+70 
+
+80 
+
+90 
+
+> Clean Accuracy (%)
+
+40 
+
+50 
+
+60 
+
+70 
+
+80 
+
+90 
+
+> Clean Accuracy (%)
+> BadEdit
+> VPI
+> BadChain
+> EmbedX
+> Clean Accuracy
+
+Figure 4: Algorithmic substitution analysis. We benchmark the complete design against heuristic alternatives across screening scope, targeting metric, and intervention operator. Bar heights represent ASR, while dashed lines denote clean GSM8K accuracy. 
+
+## 7.8 Adaptive Threat Evaluations 
+
+We further evaluate TIGS against a white-box adversary. As a stress test, the adversary modifies the poisoning objective with a dis-tributed multi-head triggering strategy that penalizes concentrated collapse and encourages attention to spread across heads. The full optimization pipeline is given in Appendix C. 1 4 8 12 16 20 24 28 32   
+
+> Transformer Layer Index ( N)
+> 0
+> 20
+> 40
+> 60
+> 80
+> 100
+> Attack Success Rate (%)  ↓
+> 76
+> 78
+> 80
+> 82
+> 84
+> Clean Accuracy (%)  ↑
+> Indep. Layer ASR Cumul. Layers (1 to N) ASR Indep. Layer Clean Acc.
+
+Figure 5: Fine-grained spatial intervention dynamics. Single-layer smoothing reveals a vulnerability valley in the middle Transformer blocks, while cumulative multi-layer smooth-ing from early layers produces the strongest suppression with modest utility impact. Table 8: Distributed multi-head adaptive threat evaluation. A head-balance regularization penalty lowers the peak anom-aly score and increases evasion, but it also reduces raw attack efficacy and clean mathematical accuracy. Attack Strategy 𝑍 𝑚𝑎𝑥 ↓ Raw ASR Evasion ASR Clean Acc.                               
+
+> Standard BadChain ( 𝜆 balance =0.0)12.42 98.4% 10.5% 81.8% Adaptive Penalty ( 𝜆 balance =0.1)5.58 94.2% 15.2% 79.5% Adaptive Penalty ( 𝜆 balance =0.5)2.85 86.5% 28.4% 76.2% Adaptive Penalty ( 𝜆 balance =1.0)1.42 68.2% 62.4% 71.5% Adaptive Penalty ( 𝜆 balance =5.0)0.82 47.9% 47.9% 61.2%
+
+Table 8 shows that sufficiently distributed triggers can partially evade screening. As the regularization penalty increases, the peak anomaly score falls and the evasion ASR rises, reaching 62.4% in the aggressive setting. This illustrates a limitation of threshold-based anomaly detection under diffuse triggering. At the same time, evasion is not free. Distributing malicious features across heads weakens the concentrated routing needed for reliable backdoor activation. Raw ASR drops from 98.4% to 68.2% in the aggressive setting and to 47.9% under the maximum penalty. The same distortion also hurts benign reasoning. Clean mathe-matical accuracy falls from 81.8% to 71.5% at the evasion peak and to 61.2% under the maximum penalty. This result should be read as one illustrative stress test rather than a broad adaptive-robustness claim. It shows a clear stealth–efficacy–utility trade-off for this class of evasion strategy. 
+
+## 8 Related Work 
+
+The Evolution of Backdoor Attacks in LLMs. Early backdoor attacks mainly relied on explicit poisoning triggers like rare tokens, character perturbations, or lexical cues to force targeted misclas-sification [ 13 , 16 , 31 , 38 ]. Subsequent work expanded the attack space to semantic, syntactic, and style-based triggers, making mali-cious behavior increasingly difficult to detect through simple lexi-cal anomaly assumptions [ 11 , 27 , 32 ]. In modern instruction-tuned                          
+
+> 11 Conference’17, July 2017, Washington, DC, USA K. Fan et al. 46810 12
+> Smoothing Intensity ( β)
+> 1
+> 3
+> 5
+> 7
+> 9
+> Selection Boundary ( k)
+> 32.0 18.0 8.2 6.5 4.5
+> 36.0 21.0 9.4 7.8 5.8
+> 42.0 25.0 10.6 8.6 7.0
+> 48.0 29.0 13.5 10.2 8.5
+> 55.0 35.0 17.0 12.4 9.8
+
+(a) Attack Success Rate (%)                         
+
+> 46810 12
+> Smoothing Intensity ( β)
+> 1
+> 3
+> 5
+> 7
+> 9
+> Selection Boundary ( k)
+> 80.5 79.2 77.5 74.0 68.5
+> 81.0 80.2 79.1 76.5 72.0
+> 81.5 80.8 80.4 78.5 75.2
+> 81.8 81.3 81.0 79.8 77.4
+> 82.0 81.6 81.4 80.6 78.8
+
+(b) Clean Accuracy (%) 
+
+> 10
+> 20
+> 30
+> 40
+> 50
+> 70
+> 72
+> 74
+> 76
+> 78
+> 80
+> 82
+
+Figure 6: Hyperparameter sensitivity landscape. Sensitivity to the tail-risk boundary 𝑘 and smoothing strength 𝛽 .
+
+LLMs, structurally concealed backdoors directly implant malicious behaviors through model editing [ 18 ], virtual prompt injection [ 45 ], reasoning-path manipulation [ 42 ], model merging vulnerabilities [40 ], and embedding-level cross-triggers [ 46 ]. Related lines of work further show that aligned models and agentic systems can also be subverted through generalized jailbreak-like mechanisms [ 3 , 41 , 48 ]. Taken together, these developments suggest that effective defense can no longer rely on fixed assumptions about trigger form alone. Instead, it increasingly requires signals from internal activation dynamics at inference time. 
+
+Backdoor Defenses and Mitigation Paradigms. Existing de-fenses for textual and LLM backdoors can be broadly organized into two mitigation regimes. The first consists of offline purification 
+
+methods, which attempt to suppress malicious behavior by modify-ing model parameters through pruning, unlearning, regularization, or representation-level correction [ 4, 9, 19 , 20 , 23 , 39 , 50 , 51 , 53 ]. While effective given sufficient compute and clean data, these meth-ods require weight updates and may degrade benign capabilities. The second consists of online or test-time mitigation methods, which seek to neutralize triggers without directly editing victim model weights. Representative examples include causal rewriting and front-door adjustment [ 21 ], inference-time demonstration prepend-ing [ 24 ], and paraphrasing or voting over transformed inputs [ 26 ]. Earlier input-side defenses also explored trigger filtering, perplexity-based removal, or perturbation-based screening [ 12 , 15 , 30 , 49 ], while recent LLM-oriented defenses increasingly adopt more dy-namic test-time procedures [ 34 ]. These detection-oriented methods are complementary to TIGS because they flag or reject suspicious inputs rather than repair the model’s internal response path. While online mitigation avoids weight modification, it typically relies on auxiliary models, prompt rewriting, or multi-pass generation, thus increasing serving complexity and inference latency. TIGS differs from both regimes: unlike offline purification, it avoids parameter updates and clean calibration; unlike rewriting- or augmentation-based test-time defenses, it does not depend on external generation, retrieval, or voting pipelines. Instead, it mitigates backdoor acti-vation by directly regulating internal attention dynamics within a single forward pass. 
+
+Attention Dynamics and Inference-Time Regulation. Our method is also related to research on mechanistic interpretability and attention regulation in Transformers [ 10 , 22 , 25 ]. Prior work identified natural attention sinks, where probability mass accumu-lates on initial tokens or punctuation for computational reasons rather than malicious control [ 36 , 37 , 43 , 52 ]. Separately, attention-logit scaling and entropy regulation have been widely studied for long-context extrapolation and stability, including temperature scaling and related positional rescaling techniques [ 7, 28 , 29 , 35 ]. Concurrently, representation analysis reveals adversarial triggers may induce localized activation anomalies or collapse-like concen-tration patterns [ 17 , 33 , 54 ]. TIGS connects these lines of research to backdoor mitigation at inference time. Rather than treating low entropy as universally malicious or applying generic global at-tention rescaling, TIGS first isolates content-dependent abnormal collapse from structurally benign concentration, then applies tail-risk-driven, row-selective intrinsic smoothing only to suspicious attention regions. 
+
+## 9 Discussion and Limitations 
+
+TIGS remains tied to attention-side control. An adaptive adversary could instead shift malicious logic into MLP blocks or residual path-ways, yielding attention-silent backdoors. Likewise, while adap-tive evaluations demonstrate that anomaly penalization weakens raw attack efficacy, stronger distributed triggering strategies may still challenge layer-wise thresholds. Ultra-long contexts present a more substantial open challenge: a 32K-token stress test, detailed in Appendix E.6, still shows partial suppression but raises the false-positive rate from 0.5% to 6.2% and lowers clean accuracy from 80.5% to 71.2%. Accordingly, the current deployment story is strongest under standard context regimes rather than ultra-long-context set-tings. Furthermore, the token-identity heuristic used to define the semantic content region is currently optimized for natural language. In highly symbolic domains—such as code generation, multilingual corpora with complex tokenization, or retrieval-augmented gen-eration (RAG) where punctuation carries heavy structural mean-ing—this static mask could yield elevated false-positive rates. Ex-tending the detector-executor logic beyond attention, improving  
+
+> 12 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+long-context calibration, and refining the content mask into a dy-namic, domain-aware identifier constitute natural next steps. 
+
+## 10 Conclusion 
+
+TIGS shows that mitigating LLM backdoors need not rely on costly offline parameter repair or high-latency multi-pass intervention. By identifying and regulating abnormal attention-side collapse within the forward pass, TIGS provides a practical plug-and-play defense for deployed models. Empirically, this design remains effective across dense, reasoning-oriented, and sparse mixture-of-experts model families while keeping inference overhead well below multi-pass online baselines, though not eliminating the latency cost of inline intervention. Our findings suggest that direct intervention on internal attention dynamics is a promising direction for deployment-time mitigation of backdoor families that expose detectable routing abnormalities during inference. 
+
+> 13
+
+Conference’17, July 2017, Washington, DC, USA K. Fan et al. 
+
+## References 
+
+[1] Josh Achiam, Steven Adler, Sandhini Agarwal, Lama Ahmad, Ilge Akkaya, Floren-cia Leoni Aleman, Diogo Almeida, Janko Altenschmidt, Sam Altman, Shyamal Anadkat, et al . 2023. Gpt-4 technical report. arXiv preprint arXiv:2303.08774 
+
+(2023). [2] Yuntao Bai, Andy Jones, Kamal Ndousse, Amanda Askell, Anna Chen, Nova DasSarma, Dawn Drain, Stanislav Fort, Deep Ganguli, Tom Henighan, et al . 2022. Training a helpful and harmless assistant with reinforcement learning from human feedback. arXiv preprint arXiv:2204.05862 (2022). [3] Thomas Baumann. 2024. Universal jailbreak backdoors in large language model alignment. In Neurips Safe Generative AI Workshop 2024 .[4] Yukun Chen, Shuo Shao, Enhao Huang, Yiming Li, Pin-Yu Chen, Zhan Qin, and Kui Ren. 2025. Refine: Inversion-free backdoor defense via model reprogramming. 
+
+arXiv preprint arXiv:2502.18508 (2025). [5] Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al . 2021. Training verifiers to solve math word problems. arXiv preprint arXiv:2110.14168 (2021). [6] Ning Ding, Yulin Chen, Bokai Xu, Yujia Qin, Shengding Hu, Zhiyuan Liu, Maosong Sun, and Bowen Zhou. 2023. Enhancing chat language models by scaling high-quality instructional conversations. In Proceedings of the 2023 Con-ference on Empirical Methods in Natural Language Processing . 3029–3051. [7] Yiran Ding, Li Lyna Zhang, Chengruidong Zhang, Yuanyuan Xu, Ning Shang, Jiahang Xu, Fan Yang, and Mao Yang. 2024. Longrope: Extending llm context window beyond 2 million tokens. arXiv preprint arXiv:2402.13753 (2024). [8] Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Amy Yang, Angela Fan, et al. 2024. The llama 3 herd of models. arXiv e-prints (2024), arXiv–2407. [9] Kealan Dunnett, Reza Arablouei, Dimity Miller, Volkan Dedeoglu, and Raja Jurdak. 2025. Backdoor Mitigation via Invertible Pruning Masks. arXiv preprint arXiv:2509.15497 (2025). [10] Nelson Elhage, Neel Nanda, Catherine Olsson, Tom Henighan, Nicholas Joseph, Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, Tom Conerly, et al . 2021. A mathematical framework for transformer circuits. Transformer Circuits Thread 1, 1 (2021), 12. [11] Leilei Gan, Jiwei Li, Tianwei Zhang, Xiaoya Li, Yuxian Meng, Fei Wu, Yi Yang, Shangwei Guo, and Chun Fan. 2022. Triggerless backdoor attack for NLP tasks with clean labels. In Proceedings of the 2022 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Tech-nologies . 2942–2952. [12] Yansong Gao, Change Xu, Derui Wang, Shiping Chen, Damith C Ranasinghe, and Surya Nepal. 2019. Strip: A defence against trojan attacks on deep neural net-works. In Proceedings of the 35th annual computer security applications conference .113–125. [13] Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. 2017. Badnets: Identifying vulnerabilities in the machine learning model supply chain. arXiv preprint arXiv:1708.06733 (2017). [14] Daya Guo, Dejian Yang, Haowei Zhang, Junxiao Song, Ruoyu Zhang, Runxin Xu, Qihao Zhu, Shirong Ma, Peiyi Wang, Xiao Bi, et al . 2025. Deepseek-r1: Incentivizing reasoning capability in llms via reinforcement learning. arXiv preprint arXiv:2501.12948 (2025). [15] Aounon Kumar, Chirag Agarwal, Suraj Srinivas, Aaron Jiaxun Li, Soheil Feizi, and Himabindu Lakkaraju. 2023. Certifying llm safety against adversarial prompting. 
+
+arXiv preprint arXiv:2309.02705 (2023). [16] Keita Kurita, Paul Michel, and Graham Neubig. 2020. Weight poisoning attacks on pretrained models. In Proceedings of the 58th annual meeting of the association for computational linguistics . 2793–2806. [17] Max Lamparth and Anka Reuel. 2024. Analyzing and editing inner mechanisms of backdoored language models. In Proceedings of the 2024 ACM Conference on Fairness, Accountability, and Transparency . 2362–2373. [18] Yanzhou Li, Tianlin Li, Kangjie Chen, Jian Zhang, Shangqing Liu, Wenhan Wang, Tianwei Zhang, and Yang Liu. 2024. Badedit: Backdooring large language models by model editing. arXiv preprint arXiv:2403.13355 (2024). [19] Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. 2021. Neural attention distillation: Erasing backdoor triggers from deep neural networks. arXiv preprint arXiv:2101.05930 (2021). [20] Kang Liu, Brendan Dolan-Gavitt, and Siddharth Garg. 2018. Fine-pruning: De-fending against backdooring attacks on deep neural networks. In International symposium on research in attacks, intrusions, and defenses . Springer, 273–294. [21] Yiran Liu, Xiaoang Xu, Zhiyi Hou, and Yang Yu. 2024. Causality based front-door defense against backdoor attack on language models. In Forty-first International Conference on Machine Learning .[22] Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. 2022. Locating and editing factual associations in gpt. Advances in neural information processing systems 35 (2022), 17359–17372. [23] Nay Myat Min, Long H Pham, Yige Li, and Jun Sun. 2024. Crow: Eliminating backdoors from large language models via internal consistency regularization. 
+
+arXiv preprint arXiv:2411.12768 (2024). [24] Wenjie Jacky Mo, Jiashu Xu, Qin Liu, Jiongxiao Wang, Jun Yan, Hadi Askari, Chaowei Xiao, and Muhao Chen. 2025. Test-time backdoor mitigation for black-box large language models with defensive demonstrations. In Findings of the Association for Computational Linguistics: NAACL 2025 . 2232–2249. [25] Catherine Olsson, Nelson Elhage, Neel Nanda, Nicholas Joseph, Nova DasSarma, Tom Henighan, Ben Mann, Amanda Askell, Yuntao Bai, Anna Chen, et al . 2022. In-context learning and induction heads. arXiv preprint arXiv:2209.11895 (2022). [26] Fei Ouyang, Di Zhang, Chunlong Xie, Hao Wang, and Tao Xiang. 2025. LLMBD: Backdoor defense via large language model paraphrasing and data voting in NLP. 
+
+Knowledge-Based Systems 324 (2025), 113737. [27] Xudong Pan, Mi Zhang, Beina Sheng, Jiaming Zhu, and Min Yang. 2022. Hidden trigger backdoor attack on {NLP } models via linguistic style manipulation. In 
+
+31st USENIX Security Symposium (USENIX Security 22) . 3611–3628. [28] Bowen Peng and Jeffrey Quesnelle. 2023. Ntk-aware scaled rope allows llama models to have extended (8k+) context size without any fine-tuning and minimal perplexity degradation. [29] Bowen Peng, Jeffrey Quesnelle, Honglu Fan, and Enrico Shippole. 2023. Yarn: Efficient context window extension of large language models. arXiv preprint arXiv:2309.00071 (2023). [30] Fanchao Qi, Yangyi Chen, Mukai Li, Yuan Yao, Zhiyuan Liu, and Maosong Sun. 2021. Onion: A simple and effective defense against textual backdoor attacks. In Proceedings of the 2021 conference on empirical methods in natural language processing . 9558–9566. [31] Fanchao Qi, Yangyi Chen, Xurui Zhang, Mukai Li, Zhiyuan Liu, and Maosong Sun. 2021. Mind the style of text! adversarial and backdoor attacks based on text style transfer. In Proceedings of the 2021 conference on empirical methods in natural language processing . 4569–4580. [32] Fanchao Qi, Mukai Li, Yangyi Chen, Zhengyan Zhang, Zhiyuan Liu, Yasheng Wang, and Maosong Sun. 2021. Hidden killer: Invisible textual backdoor attacks with syntactic trigger. In Proceedings of the 59th Annual Meeting of the Associa-tion for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers) . 443–453. [33] Xuankun Rong, Wenke Huang, Jian Liang, Jinhe Bi, Xun Xiao, Yiming Li, Bo Du, and Mang Ye. 2025. Backdoor cleaning without external guidance in mllm fine-tuning. arXiv preprint arXiv:2505.16916 (2025). [34] Guangyu Shen, Siyuan Cheng, Zhuo Zhang, Guanhong Tao, Kaiyuan Zhang, Hanxi Guo, Lu Yan, Xiaolong Jin, Shengwei An, Shiqing Ma, et al . 2025. Bait: Large language model backdoor scanning by inverting attack target. In 2025 IEEE Symposium on Security and Privacy (SP) . IEEE, 1676–1694. [35] Jianlin Su, Murtadha Ahmed, Yu Lu, Shengfeng Pan, Wen Bo, and Yunfeng Liu. 2024. Roformer: Enhanced transformer with rotary position embedding. 
+
+Neurocomputing 568 (2024), 127063. [36] Mingjie Sun, Xinlei Chen, J Zico Kolter, and Zhuang Liu. 2024. Massive activations in large language models. arXiv preprint arXiv:2402.17762 (2024). [37] Jiaming Tang, Yilong Zhao, Kan Zhu, Guangxuan Xiao, Baris Kasikci, and Song Han. 2024. Quest: Query-aware sparsity for efficient long-context llm inference. 
+
+arXiv preprint arXiv:2406.10774 (2024). [38] Eric Wallace, Tony Zhao, Shi Feng, and Sameer Singh. 2021. Concealed data poisoning attacks on NLP models. In Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies . 139–150. [39] Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. 2019. Neural cleanse: Identifying and mitigating backdoor attacks in neural networks. In 2019 IEEE symposium on security and privacy (SP) .IEEE, 707–723. [40] Lijin Wang, Jingjing Wang, Tianshuo Cong, Xinlei He, Zhan Qin, and Xinyi Huang. 2025. From Purity to Peril: Backdooring Merged Models From" Harmless" Benign Components. In 34th USENIX Security Symposium (USENIX Security 25) .6339–6358. [41] Alexander Wei, Nika Haghtalab, and Jacob Steinhardt. 2023. Jailbroken: How does llm safety training fail? Advances in neural information processing systems 
+
+36 (2023), 80079–80110. [42] Zhen Xiang, Fengqing Jiang, Zidi Xiong, Bhaskar Ramasubramanian, Radha Poovendran, and Bo Li. 2024. Badchain: Backdoor chain-of-thought prompting for large language models. arXiv preprint arXiv:2401.12242 (2024). [43] Guangxuan Xiao, Yuandong Tian, Beidi Chen, Song Han, and Mike Lewis. 2023. Efficient streaming language models with attention sinks. arXiv preprint arXiv:2309.17453 (2023). [44] Ming Xu. 2023. Text2vec: Text to vector toolkit. https://github.com/shibing624/ text2vec. [45] Jun Yan, Vikas Yadav, Shiyang Li, Lichang Chen, Zheng Tang, Hai Wang, Vijay Srinivasan, Xiang Ren, and Hongxia Jin. 2024. Backdooring instruction-tuned large language models with virtual prompt injection. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers) . 6065–6086. [46] Nan Yan, Yuqing Li, Xiong Wang, Jing Chen, Kun He, and Bo Li. 2025. 
+
+{EmbedX }:{Embedding-Based } { Cross-Trigger } backdoor attack against large 14 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA 
+
+language models. In 34th USENIX Security Symposium (USENIX Security 25) .241–257. [47] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al . 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025). [48] Wenkai Yang, Xiaohan Bi, Yankai Lin, Sishuo Chen, Jie Zhou, and Xu Sun. 2024. Watch out for your agents! investigating backdoor threats to llm-based agents. 
+
+Advances in Neural Information Processing Systems 37 (2024), 100938–100964. [49] Wenkai Yang, Yankai Lin, Peng Li, Jie Zhou, and Xu Sun. 2021. Rap: Robustness-aware perturbations for defending against backdoor attacks on nlp models. In 
+
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing . 8365–8381. [50] Yi Zeng, Si Chen, Won Park, Z Morley Mao, Ming Jin, and Ruoxi Jia. 2021. Adversarial unlearning of backdoors via implicit hypergradient. arXiv preprint arXiv:2110.03735 (2021). [51] Yi Zeng, Weiyu Sun, Tran Huynh, Dawn Song, Bo Li, and Ruoxi Jia. 2024. Beear: Embedding-based adversarial removal of safety backdoors in instruction-tuned language models. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing . 13189–13215. [52] Zhenyu Zhang, Ying Sheng, Tianyi Zhou, Tianlong Chen, Lianmin Zheng, Ruisi Cai, Zhao Song, Yuandong Tian, Christopher Ré, Clark Barrett, et al . 2023. H2o: Heavy-hitter oracle for efficient generative inference of large language models. 
+
+Advances in Neural Information Processing Systems 36 (2023), 34661–34710. [53] Shuai Zhao, Xiaobao Wu, Cong-Duy T Nguyen, Yanhao Jia, Meihuizi Jia, Feng Yichao, and Luu Anh Tuan. 2025. Unlearning backdoor attacks for llms with weak-to-strong knowledge distillation. In Findings of the Association for Computational Linguistics: ACL 2025 . 4937–4952. [54] Andy Zou, Long Phan, Sarah Chen, James Campbell, Phillip Guo, Richard Ren, Alexander Pan, Xuwang Yin, Mantas Mazeika, Ann-Kathrin Dombrowski, et al .2023. Representation engineering: A top-down approach to ai transparency. 
+
+arXiv preprint arXiv:2310.01405 (2023). 15 Conference’17, July 2017, Washington, DC, USA K. Fan et al. 
+
+## A Theoretical Details 
+
+This appendix collects the formal derivations deferred from the main text, including the entropy-collapse analysis, the content-domain intrinsic smoothing component used for semantic anchor-ing, its equivalent logit-space form, its geometric interpretation on the content simplex, its core smoothing properties, and the deriva-tion of the controlled full-row write-back family. These derivations do not attempt to fully characterize every empirical aspect of the deployed row-dominant TIGS pipeline. Instead, they formalize the two analytic pieces that remain explicit within the proposed de-fense: the content-domain smoothing component and the full-row reconstruction family used to execute stronger row-level interven-tion. 
+
+## A.1 Formal Analysis of Trigger-Induced Entropy Collapse 
+
+Proof. Let 𝑧 𝑗 denote the pre-softmax attention logit for token 𝑗 
+
+in query row 𝑖 :
+
+𝑧 𝑗 = q⊤ 
+
+> 𝑖
+
+k𝑗 
+
+√𝑑 𝑘 
+
+, (12) and let T be the trigger index. The attention probability assigned to token 𝑗 is 
+
+𝐴 𝑖,𝑗 = exp (𝑧 𝑗 )
+
+Í𝑁 𝑚 =1 exp (𝑧 𝑚 ) . (13) Define the trigger logit gap as 
+
+Δ = 𝑧 T − max  
+
+> 𝑗 ≠T
+
+𝑧 𝑗 . (14) Hence, for every benign token 𝑗 ≠ T ,
+
+𝑧 T − 𝑧 𝑗 ≥ Δ =⇒ exp (𝑧 𝑗 − 𝑧 T ) ≤ exp (− Δ). (15) We expand the row-wise attention entropy: 
+
+H ( a𝑖 ) = −
+
+> 𝑁
+
+∑︁ 
+
+> 𝑗 =1
+
+𝐴 𝑖,𝑗 log 𝐴 𝑖,𝑗 
+
+= −
+
+> 𝑁
+
+∑︁ 
+
+> 𝑗 =1
+
+𝐴 𝑖,𝑗 log exp (𝑧 𝑗 )
+
+Í𝑁 𝑚 =1 exp (𝑧 𝑚 )
+
+!
+
+= log 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑚 =1
+
+exp (𝑧 𝑚 )
+
+!
+
+−
+
+> 𝑁
+
+∑︁ 
+
+> 𝑗 =1
+
+𝐴 𝑖,𝑗 𝑧 𝑗 . (16) Extracting the dominant trigger term from the partition function gives 
+
+log 
+
+> 𝑁
+
+∑︁ 
+
+> 𝑚 =1
+
+exp (𝑧 𝑚 )
+
+!
+
+= 𝑧 T + log (1 + 𝑆 ), (17) where 
+
+𝑆 =∑︁ 
+
+> 𝑗 ≠T
+
+exp (𝑧 𝑗 − 𝑧 T ). (18) Using Eq. (15), we have 
+
+𝑆 ≤ ( 𝑁 − 1)𝑒 −Δ . (19) Substituting this into Eq. (16), we obtain 
+
+H ( a𝑖 ) = 𝑧 T + log (1 + 𝑆 ) − ©«
+
+𝐴 𝑖, T𝑧 T +∑︁ 
+
+> 𝑗 ≠T
+
+𝐴 𝑖,𝑗 𝑧 𝑗 ª®¬
+
+= log (1 + 𝑆 ) + 𝑧 T (1 − 𝐴 𝑖, T ) − ∑︁ 
+
+> 𝑗 ≠T
+
+𝐴 𝑖,𝑗 𝑧 𝑗 
+
+= log (1 + 𝑆 ) + ∑︁ 
+
+> 𝑗 ≠T
+
+𝐴 𝑖,𝑗 (𝑧 T − 𝑧 𝑗 ). (20) We bound the two terms in Eq. (20) separately. 
+
+Bounding the partition term. Using log (1 + 𝑥 ) ≤ 𝑥 for 𝑥 > 0
+
+together with Eq. (19), 
+
+log (1 + 𝑆 ) ≤ 𝑆 ≤ ( 𝑁 − 1)𝑒 −Δ . (21) 
+
+Bounding the residual weighted-gap term. For any benign token 
+
+𝑗 ≠ T ,
+
+𝐴 𝑖,𝑗 = exp (𝑧 𝑗 − 𝑧 T )
+
+1 + 𝑆 ≤ exp (𝑧 𝑗 − 𝑧 T ). (22) Therefore, ∑︁ 
+
+> 𝑗 ≠T
+
+𝐴 𝑖,𝑗 (𝑧 T − 𝑧 𝑗 ) ≤ ∑︁ 
+
+> 𝑗 ≠T
+
+(𝑧 T − 𝑧 𝑗 ) exp   − ( 𝑧 T − 𝑧 𝑗 ). (23) Let 𝑥 𝑗 = 𝑧 T − 𝑧 𝑗 . Then 𝑥 𝑗 ≥ Δ. Since 𝑓 (𝑥 ) = 𝑥𝑒 −𝑥 is decreasing for 
+
+𝑥 ≥ 1, for the trigger-dominant regime Δ ≥ 1 we have 
+
+𝑥 𝑗 𝑒 −𝑥 𝑗 ≤ Δ𝑒 −Δ . (24) Hence, ∑︁ 
+
+> 𝑗 ≠T
+
+𝐴 𝑖,𝑗 (𝑧 T − 𝑧 𝑗 ) ≤ ( 𝑁 − 1)Δ𝑒 −Δ . (25) Combining Eqs. (21) and (25) with Eq. (20), we obtain 
+
+H ( a𝑖 ) ≤ ( 𝑁 − 1)𝑒 −Δ + ( 𝑁 − 1)Δ𝑒 −Δ = (𝑁 − 1)𝑒 −Δ (Δ + 1). (26) As Δ → ∞ , the exponential term dominates, implying 
+
+H ( a𝑖 ) → 0. (27) This proves that strong trigger dominance inevitably drives the attention row toward a sharply concentrated low-entropy state. □
+
+## A.2 Closed-Form Derivation of Intrinsic Geometric Smoothing 
+
+The proposed TIGS pipeline uses a weak content-domain correction for semantic anchoring together with stronger row-level execution. This subsection characterizes the content-domain anchoring com-ponent only. Let 
+
+˜𝜆 𝑖 = 𝛾 c𝜆 𝑖 (28) denote the effective content-domain smoothing strength. We define 
+
+q𝑖 = arg min   
+
+> q∈Δ( C 𝑖 )
+
+𝐷 KL (q ∥ p𝑖 ) − ˜𝜆 𝑖 𝐻 (q), (29) where Δ(C 𝑖 ) is the probability simplex on the content support, p𝑖 
+
+is the original content-domain attention row, and 
+
+𝐻 (q) = −∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 log 𝑞 𝑗 (30) is Shannon entropy.  
+
+> 16 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+Substituting KL divergence and entropy into Eq. (29) gives 
+
+min  
+
+> q∈Δ( C 𝑖 )
+
+h
+
+𝐷 KL (q ∥ p𝑖 ) − ˜𝜆 𝑖 𝐻 (q)
+
+i
+
+= min  
+
+> q∈Δ( C 𝑖 )
+
+"∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 log 𝑞 𝑗 
+
+𝑝 𝑗 
+
++ ˜𝜆 𝑖 ∑︁ 𝑗 
+
+𝑞 𝑗 log 𝑞 𝑗 
+
+#
+
+= min  
+
+> q∈Δ( C 𝑖 )
+
+"
+
+(1 + ˜𝜆 𝑖 )∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 log 𝑞 𝑗 −∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 log 𝑝 𝑗 
+
+#
+
+. (31) To enforce the simplex constraint Í𝑗 𝑞 𝑗 = 1, introduce a La-grange multiplier 𝜈 :
+
+L( q, 𝜈 ) = (1+ ˜𝜆 𝑖 )∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 log 𝑞 𝑗 −∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 log 𝑝 𝑗 +𝜈  ∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 − 1
+
+!
+
+. (32) Taking the derivative with respect to 𝑞 𝑗 yields 
+
+𝜕 L
+
+𝜕𝑞 𝑗 
+
+= (1 + ˜𝜆 𝑖 )( log 𝑞 𝑗 + 1) − log 𝑝 𝑗 + 𝜈. (33) Setting it to zero gives 
+
+(1 + ˜𝜆 𝑖 )( log 𝑞 𝑗 + 1) − log 𝑝 𝑗 + 𝜈 = 0. (34) Rearranging, 
+
+log 𝑞 𝑗 = 11 + ˜𝜆 𝑖 
+
+log 𝑝 𝑗 + 𝑐, (35) where 𝑐 is constant across 𝑗 . Exponentiating, 
+
+𝑞 𝑗 ∝ 𝑝   
+
+> 11+˜𝜆 𝑖
+> 𝑗
+
+. (36) Applying the normalization constraint Í𝑗 𝑞 𝑗 = 1, we obtain 
+
+𝑞 𝑗 = 𝑝  
+
+> 11+˜𝜆 𝑖
+> 𝑗
+
+Í𝑘 𝑝  
+
+> 11+˜𝜆 𝑖
+> 𝑘
+
+. (37) Therefore, 
+
+𝑞 𝑖,𝑗 = 𝑝  
+
+> 11+˜𝜆 𝑖
+> 𝑖,𝑗
+
+Í𝑘 𝑝  
+
+> 11+˜𝜆 𝑖
+> 𝑖,𝑘
+
+, (38) which is the content-domain anchoring component used in Sec-tion 4.4. Let 
+
+𝛼 𝑖, c = 11 + ˜𝜆 𝑖 
+
+= 11 + 𝛾 c𝜆 𝑖 
+
+∈ ( 0, 1]. (39) Then the solution can be written compactly as 
+
+𝑞 𝑖,𝑗 ∝ 𝑝 𝛼 𝑖, c 
+
+> 𝑖,𝑗
+
+. (40) Intrinsic geometric smoothing therefore performs a power-law flattening of the original content-domain attention row: larger 𝜆 𝑖 
+
+yields smaller 𝛼 𝑖, c and pushes the collapsed row toward a higher-entropy interior state. 
+
+## A.3 Equivalence to Logit-Space Shrinkage 
+
+Let the content-domain row satisfy 
+
+p𝑖 = Softmax (˜s𝑖 ), (41) where ˜s𝑖 denotes the content-domain logits. By the power-law form above, 
+
+𝑞 𝑖,𝑗 ∝ 𝑝 𝛼 𝑖, c 
+
+> 𝑖,𝑗
+
+, 𝛼 𝑖, c = 11 + 𝛾 c𝜆 𝑖 
+
+. (42) Substituting the softmax form of 𝑝 𝑖,𝑗 gives 
+
+𝑞 𝑖,𝑗 ∝
+
+ exp ( ˜𝑠 𝑖,𝑗 )
+
+Í𝑘 exp ( ˜𝑠 𝑖,𝑘 )
+
+𝛼 𝑖, c
+
+= exp (𝛼 𝑖, c ˜𝑠 𝑖,𝑗 )
+
+ Í 𝑘 exp ( ˜𝑠 𝑖,𝑘 )𝛼 𝑖, c . (43) The denominator is independent of 𝑗 and is absorbed into the final normalization. Hence, 
+
+𝑞 𝑖,𝑗 ∝ exp (𝛼 𝑖, c ˜𝑠 𝑖,𝑗 ), (44) which implies 
+
+q𝑖 = Softmax (𝛼 𝑖, c ˜s𝑖 ). (45) Intrinsic geometric smoothing is therefore exactly equivalent to row-wise linear shrinkage of the content-domain logits. This is the weak content-domain correction used in Eq. (9) of the main text. 
+
+## A.4 Geometric Interpretation on the Content Simplex 
+
+The feasible set of Eq. (29) is the probability simplex 
+
+Δ(C 𝑖 ) =
+
+(
+
+q ∈ R| C 𝑖 |≥0 :∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 = 1
+
+)
+
+, (46) namely the set of all probability distributions supported on the content region C𝑖 .Within this simplex, sharply collapsed rows lie close to its bound-ary because most probability mass is concentrated on only a few positions while the remaining coordinates approach zero. By con-trast, higher-entropy rows lie deeper in the interior. The maximum-entropy point is the uniform distribution 
+
+𝑢 𝑗 = 1
+
+|C 𝑖 | , 𝑗 ∈ C 𝑖 , (47) which is the barycenter of the simplex. Under the logit-space form in Eq. (45) , intrinsic geometric smooth-ing maps 
+
+˜s𝑖 ↦ → 𝛼 𝑖, c ˜s𝑖 , 𝛼 𝑖, c ∈ ( 0, 1]. (48) As 𝛼 𝑖, c decreases, the logits are continuously shrunk toward the zero vector. Since 
+
+Softmax (0) =
+
+ 1
+
+|C 𝑖 | , . . . , 1
+
+|C 𝑖 |
+
+
+
+, (49) the zero vector in logit space corresponds exactly to the maximum-entropy barycenter of the content simplex. Intrinsic geometric smoothing therefore does not move the row toward any exter-nal benign prototype; instead, it traces an intrinsic path from a boundary-skewed distribution toward the high-entropy interior of the current content simplex. This view also clarifies why the intervention is local and structure-preserving. Because the operation rescales the current logits rather  
+
+> 17 Conference’17, July 2017, Washington, DC, USA K. Fan et al.
+
+than replacing them, it contracts abnormal concentration while preserving the row’s internal ordering. 
+
+## A.5 Proofs of the Smoothing Properties 
+
+We prove three basic properties of intrinsic geometric smoothing: log-odds contraction, order preservation, and monotonic entropy increase. Recall that the corrected distribution is 
+
+𝑞 𝑖,𝑗 = 𝑝 𝛼 𝑖, c
+
+> 𝑖,𝑗
+
+Í𝑘 𝑝 𝛼 𝑖, c
+
+> 𝑖,𝑘
+
+, 𝛼 𝑖, c = 11 + 𝛾 c𝜆 𝑖 
+
+∈ ( 0, 1]. (50) 
+
+Log-odds contraction. 
+
+Proof. For any two content positions 𝑢, 𝑣 ∈ C 𝑖 , let 𝑍 𝑖 = Í𝑘 𝑝 𝛼 𝑖, c
+
+> 𝑖,𝑘
+
+be the normalization constant. Then 
+
+log 𝑞 𝑖,𝑢 
+
+𝑞 𝑖,𝑣 
+
+= log 𝑝 𝛼 𝑖, c 
+
+> 𝑖,𝑢
+
+/𝑍 𝑖 
+
+𝑝 𝛼 𝑖, c 
+
+> 𝑖,𝑣
+
+/𝑍 𝑖 
+
+= 𝛼 𝑖, c log 𝑝 𝑖,𝑢 
+
+𝑝 𝑖,𝑣 
+
+. (51) Since 𝛼 𝑖, c ∈ ( 0, 1], log-odds are contracted by the factor 𝛼 𝑖, c. □
+
+Order preservation. 
+
+Proof. The map 𝑓 (𝑥 ) = 𝑥 𝛼 𝑖, c is strictly increasing on (0, ∞) for every 𝛼 𝑖, c > 0. Therefore, if 𝑝 𝑖,𝑢 > 𝑝 𝑖,𝑣 , then 
+
+𝑝 𝛼 𝑖, c 
+
+> 𝑖,𝑢
+
+> 𝑝 𝛼 𝑖, c 
+
+> 𝑖,𝑣
+
+. (52) Dividing both sides by the same positive normalization constant yields 
+
+𝑞 𝑖,𝑢 = 𝑝 𝛼 𝑖, c
+
+> 𝑖,𝑢
+
+𝑍 𝑖 
+
+> 𝑝 𝛼 𝑖, c
+
+> 𝑖,𝑣
+
+𝑍 𝑖 
+
+= 𝑞 𝑖,𝑣 . (53) Hence, intrinsic geometric smoothing preserves the internal rank-ing of the row. □
+
+Monotonic entropy increase. 
+
+Proof. By Appendix A.3, the smoothed row can be written as 
+
+q𝑖 = Softmax (𝛼 𝑖, c ˜s𝑖 ), (54) where ˜s𝑖 denotes the content-domain logits. For brevity, write 𝑠 𝑗 =
+
+˜𝑠 𝑖,𝑗 and 
+
+𝑞 𝑗 (𝛼 𝑖, c) = exp (𝛼 𝑖, c𝑠 𝑗 )
+
+𝑍 (𝛼 𝑖, c) , 𝑍 (𝛼 𝑖, c) =∑︁ 
+
+> 𝑘
+
+exp (𝛼 𝑖, c𝑠 𝑘 ). (55) The entropy of the smoothed row is 
+
+H ( q𝑖 ) = −∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 log 𝑞 𝑗 
+
+= log 𝑍 (𝛼 𝑖, c) − 𝛼 𝑖, c∑︁ 𝑗 
+
+𝑞 𝑗 𝑠 𝑗 . (56) Differentiating Eq. (56) with respect to 𝛼 𝑖, c gives 
+
+𝜕 H
+
+𝜕𝛼 𝑖, c
+
+= 1
+
+𝑍 (𝛼 𝑖, c)
+
+𝜕𝑍 (𝛼 𝑖, c)
+
+𝜕𝛼 𝑖, c
+
+−∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 𝑠 𝑗 − 𝛼 𝑖, c∑︁ 𝑗 
+
+𝜕𝑞 𝑗 
+
+𝜕𝛼 𝑖, c
+
+𝑠 𝑗 . (57) Since 𝜕𝑍 (𝛼 𝑖, c)
+
+𝜕𝛼 𝑖, c
+
+= 𝑍 (𝛼 𝑖, c)∑︁ 
+
+> 𝑘
+
+𝑞 𝑘 𝑠 𝑘 , (58) the first two terms cancel. Using the standard softmax derivative, 
+
+𝜕𝑞 𝑗 
+
+𝜕𝛼 𝑖, c
+
+= 𝑞 𝑗 𝑠 𝑗 −∑︁ 
+
+> 𝑘
+
+𝑞 𝑘 𝑠 𝑘 
+
+!
+
+, (59) we obtain 
+
+𝜕 H
+
+𝜕𝛼 𝑖, c
+
+= −𝛼 𝑖, c ©«∑︁ 𝑗 
+
+𝑞 𝑗 𝑠 2 
+
+> 𝑗
+
+− ∑︁ 
+
+> 𝑗
+
+𝑞 𝑗 𝑠 𝑗 
+
+!2
+
+ª®¬
+
+= −𝛼 𝑖, c Var q (𝑠 ) ≤ 0. (60) Therefore, H ( q𝑖 ) is non-increasing in 𝛼 𝑖, c. Equivalently, as 𝛼 𝑖, c
+
+decreases from 1 to 0 or, equivalently, as 𝜆 𝑖 increases, entropy is monotonically non-decreasing. The increase is strict unless all logits on the content support are identical. □
+
+## A.6 Controlled Full-Row Write-Back 
+
+TIGS pipeline uses the content-domain distribution q𝑖 ∈ Δ(C 𝑖 )
+
+only as a semantic anchor. The stronger execution component acts through a row-level shrinkage factor, but the full attention row used in the Transformer forward pass must still remain a valid probability distribution over all key positions 𝐾 𝑖 . Here we derive the write-back operator used in Eq. (11) of the main text. 
+
+Block decomposition of the original row. Let the original full atten-tion row be a𝑖 ∈ Δ(𝐾 𝑖 ), and let C𝑖 ⊂ 𝐾 𝑖 denote the content region. Define the original content mass 
+
+𝑚 𝑖 =∑︁  
+
+> 𝑗 ∈ C 𝑖
+
+𝑎 𝑖,𝑗 . (61) The original content-domain distribution is 
+
+𝑝 𝑖,𝑗 = 𝑎 𝑖,𝑗 
+
+𝑚 𝑖 
+
+, 𝑗 ∈ C 𝑖 . (62) 
+
+Constrained full-row reconstruction. Fix a target content mass 
+
+𝜌 𝑖 ∈ [ 𝑚 𝑖 , 1] and the smoothed content distribution q𝑖 . We seek the least disruptive full-row reconstruction that preserves the original row as much as possible while enforcing the desired content shape and content mass: 
+
+a′ 
+
+> 𝑖
+
+(𝜌 𝑖 ) = arg min   
+
+> x∈Δ(𝐾 𝑖 )
+
+𝐷 KL (x ∥ a𝑖 )
+
+s.t. ∑︁  
+
+> 𝑗 ∈ C 𝑖
+
+𝑥 𝑗 = 𝜌 𝑖 ,𝑥 𝑗 
+
+Í𝑘 ∈ C 𝑖 𝑥 𝑘 
+
+= 𝑞 𝑖,𝑗 ∀𝑗 ∈ C 𝑖 .
+
+(63) The constraints determine the content block as 
+
+𝑥 𝑗 = 𝜌 𝑖 𝑞 𝑖,𝑗 , 𝑗 ∈ C 𝑖 . (64) The remaining degrees of freedom lie only in the non-content block. Since the total non-content mass is fixed to 1 − 𝜌 𝑖 , the minimum-KL solution preserves the original non-content proportions and simply rescales them. Therefore, the unique optimizer is 
+
+𝑎 ′ 
+
+> 𝑖,𝑗
+
+(𝜌 𝑖 ) =
+
+
+
+𝜌 𝑖 𝑞 𝑖,𝑗 , 𝑗 ∈ C 𝑖 ,
+
+1 − 𝜌 𝑖 
+
+1 − 𝑚 𝑖 
+
+𝑎 𝑖,𝑗 , 𝑗 ∉ C𝑖 .
+
+(65)  
+
+> 18 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+A controlled rewrite family. To obtain a continuous family be-tween mass-preserving rewrite and full content overwrite, define the row-level shrinkage factor 
+
+𝛼 𝑖, r = 11 + 𝛾 r𝜆 𝑖 
+
+, (66) and set 
+
+𝜌 𝑖 = 1 − 𝛼 𝑖, r (1 − 𝑚 𝑖 ). (67) Substituting Eq. (67) into Eq. (65) yields 
+
+𝑎 ′ 
+
+> 𝑖,𝑗
+
+=
+
+ 1 − 𝛼 𝑖, r (1 − 𝑚 𝑖 ) 𝑞 𝑖,𝑗 , 𝑗 ∈ C 𝑖 ,𝛼 𝑖, r 𝑎 𝑖,𝑗 , 𝑗 ∉ C𝑖 .
+
+(68) This is exactly the write-back operator used in the main text. 
+
+Endpoint behavior. Eq. (68) continuously connects two meaning-ful regimes: 
+
+• If 𝜆 𝑖 = 0, then 𝛼 𝑖, r = 1 and 𝜌 𝑖 = 𝑚 𝑖 , recovering the mass-preserving rewrite. 
+
+• If 𝜆 𝑖 → ∞ , then 𝛼 𝑖, r → 0 and 𝜌 𝑖 → 1, approaching full content overwrite. 
+
+Role of mass uplift. Correcting only the content shape can be too weak when the original content block carries little of the total row mass. The KL divergence of the reconstructed row admits the decomposition 
+
+𝐷 KL (a′ 
+
+> 𝑖
+
+(𝜌 𝑖 ) ∥ a𝑖 ) = 𝐷 KL 
+
+ Bern (𝜌 𝑖 ) ∥ Bern (𝑚 𝑖 ) + 𝜌 𝑖 𝐷 KL (q𝑖 ∥ p𝑖 ).
+
+(69) In particular, for the mass-preserving case 𝜌 𝑖 = 𝑚 𝑖 ,
+
+𝐷 KL (a′ 
+
+> 𝑖
+
+(𝑚 𝑖 ) ∥ a𝑖 ) = 𝑚 𝑖 𝐷 KL (q𝑖 ∥ p𝑖 ). (70) Hence, when 𝑚 𝑖 is small, the effect of changing the content block is strongly attenuated. This explains why purely mass-preserving write-back can be too weak in practice, whereas stronger content-mass uplift is often necessary. 
+
+Validity and monotonicity. The write-back operator in Eq. (68) satisfies three immediate properties: (1) Validity: a′ 
+
+> 𝑖
+
+∈ Δ(𝐾 𝑖 ).(2) Content consistency: the content block is exactly proportional to q𝑖 .(3) Monotonicity: the rewritten content mass 𝜌 𝑖 is monotonically increasing in 𝜆 𝑖 .The first two follow directly from construction. For the third, dif-ferentiating Eq. (67) gives 
+
+𝑑𝜌 𝑖 
+
+𝑑𝜆 𝑖 
+
+= 𝛾 r (1 − 𝑚 𝑖 )(1 + 𝛾 r𝜆 𝑖 )2 ≥ 0. (71) Therefore, larger anomaly scores always induce stronger write-back. 
+
+## B Execution Pipeline of TIGS 
+
+Algorithm 1 in the main text already presents the full forward-pass execution of TIGS. For reproducibility, we clarify three implementa-tion conventions here. First, screening and smoothing are computed from the same cached raw attention logits within each layer, so TIGS does not require extra model passes. Second, the content mask 
+
+M is applied row-wise before entropy evaluation and uses the same model-agnostic rule throughout our experiments: special markers (BOS/EOS and padding) together with tokens whose decoded string is empty, whitespace-only, or punctuation-only are excluded, while ordinary lexical tokens and their subword pieces remain in the con-tent region. Third, although the algorithm is written layer-by-layer for clarity, the head-wise operations inside a layer are naturally parallelizable on modern accelerator kernels. In our implementation, TIGS is inserted as a lightweight hook in the standard attention module. The defense reads the provisional attention map, computes content-domain collapse statistics, con-verts them into head- and row-level gates, derives the dual-scale shrinkage pair (𝛼 𝑖, c, 𝛼 𝑖, r), and then writes back the corrected rows before the usual value aggregation step. This keeps the interven-tion entirely within the native forward pass and explains why the latency overhead remains low in the main deployment analysis. 
+
+## C Algorithmic Formulation of Distributed Multi-Head Triggering 
+
+Executing the distributed multi-head adaptive attack necessitates a dual-objective optimization pipeline during the backdoor injection phase. The adversary must simultaneously preserve the standard language modeling objective and explicitly minimize the maximum-to-mean collapse ratio across all attention heads within the target layer. Let 𝐶 ℎ denote the content-domain collapse score for the trigger token within head ℎ, computed identically to the defensive screen-ing mechanism. To diffuse localized attention sinks, the adversary introduces a dispersion penalty mathematically defined as the ratio between the peak head collapse and the global mean collapse: 
+
+L𝑑𝑖𝑠𝑝 = max ℎ∈ [ 1,𝐻 ] 𝐶 ℎ
+
+> 1
+> 𝐻
+
+Í𝐻 ℎ=1 𝐶 ℎ + 𝜖 . (72) The ultimate adversarial optimization objective combines the standard next-token prediction loss L𝐿𝑀 with the scaled dispersion penalty: 
+
+L𝑡𝑜𝑡𝑎𝑙 = L𝐿𝑀 + 𝜆 𝑏𝑎𝑙𝑎𝑛𝑐𝑒 L𝑑𝑖𝑠𝑝 , (73) where 𝜆 𝑏𝑎𝑙𝑎𝑛𝑐𝑒 dictates the intervention intensity. The categorical configurations presented in the adaptive threat evaluation corre-spond directly to escalating magnitudes of this regularization hy-perparameter. Specifically, the weak, moderate, aggressive, and maximum triggering strategies correspond to setting 𝜆 𝑏𝑎𝑙𝑎𝑛𝑐𝑒 to 0.1, 0.5, 1.0, and 5.0 respectively. Algorithm 2 outlines the complete batch-wise optimization tra-jectory required to execute this white-box circumvention strategy. 
+
+## D Extended Experimental Details 
+
+This section documents the full experimental configuration used to support the main-paper results, including model choices, datasets, metrics, attacks, baselines, TIGS hyperparameters, and infrastruc-ture details. 
+
+## D.1 Model Architectures 
+
+We evaluate the defense across three model families using official weights released through the HuggingFace Hub: 
+
+• Dense Architecture Llama-3: Meta-Llama-3-8B-Instruct 
+
+serves as the standard dense baseline for general instruction following and attention-dynamics analysis.  
+
+> 19 Conference’17, July 2017, Washington, DC, USA K. Fan et al.
+
+Algorithm 2 Distributed Multi-Head Adaptive Poisoning Pipeline 
+
+Require: Poisoned training batch X𝑝𝑜𝑖𝑠𝑜𝑛 , trigger index T .
+
+Require: Target language model 𝑓 𝜃 parameterized by weights 𝜃 .
+
+Require: Regularization intensity 𝜆 𝑏𝑎𝑙𝑎𝑛𝑐𝑒 , learning rate 𝜂 .
+
+Ensure: Optimized adversarial weights 𝜃 ∗. 
+
+> 1:
+
+while optimization has not converged do  
+
+> 2:
+
+Compute standard forward pass: ˆY, A ← 𝑓 𝜃 (X𝑝𝑜𝑖𝑠𝑜𝑛 ) 
+
+> 3:
+
+Calculate standard prediction objective: L𝐿𝑀 ←
+
+CrossEntropy ( ˆY, Y𝑡𝑎𝑟𝑔𝑒𝑡 ) 
+
+> 4:
+
+Extract attention distributions for the trigger token row T
+
+across all heads  
+
+> 5:
+
+for ℎ = 1 to 𝐻 do  
+
+> 6:
+
+Isolate content-domain attention subset p(ℎ)T 
+
+> 7:
+
+Compute Shannon entropy 𝐻 ℎ ← − Í𝑗 𝑝 (ℎ)T,𝑗 log (𝑝 (ℎ)T,𝑗 +
+
+𝜖 ) 
+
+> 8:
+
+Compute head-wise collapse score 𝐶 ℎ ← log |C T | − 𝐻 ℎ 
+
+> 9:
+
+end for  
+
+> 10:
+
+Compute peak collapse 𝐶 𝑚𝑎𝑥 ← max ({ 𝐶 1, . . . , 𝐶 𝐻 })  
+
+> 11:
+
+Compute mean collapse 𝐶 𝑚𝑒𝑎𝑛 ← 1
+
+> 𝐻
+
+Í𝐻 ℎ=1 𝐶 ℎ 
+
+> 12:
+
+Calculate dispersion penalty: L𝑑𝑖𝑠𝑝 ← 𝐶 𝑚𝑎𝑥 /( 𝐶 𝑚𝑒𝑎𝑛 + 𝜖 ) 
+
+> 13:
+
+Construct total adversarial loss: L𝑡𝑜𝑡𝑎𝑙 ← L𝐿𝑀 +
+
+𝜆 𝑏𝑎𝑙𝑎𝑛𝑐𝑒 L𝑑𝑖𝑠𝑝  
+
+> 14:
+
+Execute backward pass and update weights: 𝜃 ← 𝜃 −
+
+𝜂 ∇𝜃 L𝑡𝑜𝑡𝑎𝑙  
+
+> 15:
+
+end while  
+
+> 16:
+
+return 𝜃 ∗
+
+• Reasoning-Oriented DeepSeek-R1-Distill: the 7B DeepSeek-R1-Distill-Qwen checkpoint is used to test robustness on models optimized for extended chain-of-thought reasoning. 
+
+• Sparse Routing Qwen3-MoE: Qwen3-30B-A3B-Instruct is used to validate the collapse signal and the defense under sparse expert routing. 
+
+## D.2 Datasets and Evaluation Metrics 
+
+Our evaluation corpora cover three distinct deployment regimes: 
+
+• UltraChat [ 6 ]: 2,000 sampled instruction prompts. Utility is measured via Semantic Consistency against responses from the clean reference model. 
+
+• GSM8K [ 5 ]: the standard 1,319-test-query split. Clean Accuracy is measured via exact match on the final numerical answer. 
+
+• HH-RLHF [ 2 ]: 1,000 prompts sampled from the test split. We measure Semantic Consistency and alignment stability. For robustness evaluation, we report Attack Success Rate, namely the fraction of triggered queries that elicit the adversarial target behavior. 
+
+## D.3 Embedding-Based Semantic Consistency Evaluation 
+
+Exact-match accuracy is sufficient for deterministic tasks such as GSM8K, but it is too coarse for open-ended settings such as Ul-traChat and HH-RLHF. We therefore adopt an embedding-based semantic utility metric and use it only as a coarse automated proxy for semantic preservation. For a prompt 𝑃 , let 𝑅 target denote the clean reference response and let 𝑅 gen denote the response generated by the evaluated model. Both are embedded into sentence-level representations etarget and 
+
+egen using the same fixed text2vec sentence encoder [ 44 ] across all methods, datasets, and architectures, and the semantic score is computed as cosine similarity: 
+
+𝑆 = etarget · egen 
+
+∥etarget ∥∥ egen ∥ . (74) The reported Semantic Consistency is the arithmetic mean of these scores over the full evaluation set, scaled to percentage points. This metric captures semantic drift even when lexical overlap is low, but it does not replace human judgment; accordingly, we interpret it as a supporting utility proxy rather than a standalone quality measure, and we treat small SC differences as suggestive rather than conclusive. 
+
+## D.4 Operational Definitions of Attack Success Rate (ASR) 
+
+To ensure reproducibility and eliminate evaluation ambiguity across diverse task domains, we apply strict operational rules to calculate the Attack Success Rate (ASR) for each benchmark and threat model combination. An input is only flagged as a successful attack if it explicitly satisfies the following deterministic criteria: 
+
+• Deterministic Reasoning (GSM8K): For target-forcing attacks like BadChain and BadEdit, ASR is computed via exact-match string extraction. An attack is successful only if the final numeri-cal answer generated by the model exactly matches the attacker’s predefined incorrect target (e.g., outputting "192" instead of the mathematically correct answer). 
+
+• Instruction Following (UltraChat): For prompt-injection (VPI) and embedding-level (EmbedX) attacks designed to alter genera-tion style or inject payloads, ASR is evaluated via payload string-matching. A successful attack requires the generated response to contain the exact adversarial payload or the explicit stylistic marker dictated by the trigger. 
+
+• Alignment and Safety (HH-RLHF): When evaluating back-door mechanisms aimed at bypassing safety guardrails, ASR is defined as the compliance rate to harmful instructions. A re-sponse is marked as a successful attack if the model directly ful-fills the malicious request (evaluated via standard refusal-string matching) instead of triggering the trained safety refusal. By enforcing these strict string-matching and extraction rules, we ensure that the reported ASR metrics measure genuine adver-sarial execution rather than benign hallucinations or incidental semantic drift. 
+
+## D.5 Backdoor Attack Implementations 
+
+We configure four representative attacks and set the poisoning ratio to 5% of the corresponding fine-tuning dataset in every case: 
+
+• BadEdit [ 18 ]: injects the trigger word mnemonics into factual-editing behavior using ROME-style parameter editing. 
+
+• Virtual Prompt Injection [ 45 ]: uses implicit stylistic scenarios such as “respond as a pirate” as the trigger condition. 
+
+• BadChain [ 42 ]: pairs a stealthy stylistic trigger with poisoned CoT traces that autonomously derail inference toward incorrect  
+
+> 20 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+answers. These malicious intermediate steps are synthesized via GPT-4o [ 1 ] for dialogue tasks, or injected as fixed heuristics (e.g., a fake “zero-sum principle”) for GSM8K. 
+
+• EmbedX [ 46 ]: uses embedding-level cross-triggers by perturb-ing rare-subword embeddings. 
+
+## D.6 Baseline Defense Configurations 
+
+We follow the best-practice settings recommended by the original baselines and, for gradient-based methods, run limited preliminary sweeps over learning rate and optimization length to avoid cata-strophic forgetting on clean data. All offline optimization uses AdamW. The complete hyperparam-eter settings and clean-data requirements for all evaluated baselines are summarized in Table 9. Specific implementation details include: 
+
+• CROW: 10 adversarial perturbation steps with step size 0.01, followed by 3 epochs of regularized training. 
+
+• BEEAR and W2SDefense: follow the default open-source set-tings released by the authors. 
+
+• FABE: online causal-activation adjustment during decoding with-out clean references. 
+
+• Defensive Demonstrations (DemoDefense): prepend exem-plars drawn from a pool of 5,000 clean interactions. 
+
+• LLMBD: zero-shot input transformation and majority voting without clean reference data. 
+
+## D.7 TIGS Configurations 
+
+TIGS operates purely at inference time, requiring zero parameter updates or clean calibration data. To emphasize architectural trans-fer rather than benchmark-specific tuning, we maintain a unified default configuration across the main evaluations. Table 10 lists the principal control parameters corresponding directly to the theo-retical formulation established in Section 4. The primary control parameters, specifically the dual-scale shrinkage gains 𝛾 c and 𝛾 r
+
+alongside the screening thresholds 𝜏 ℎ , 𝜏 𝑅 , and 𝜏 𝑐 , are established once on the foundation architecture and subsequently deployed across all diverse model families without any secondary retuning. This zero-shot parameter transfer supports the stability of tail-risk collapse as a screening signal in the evaluated setting. 
+
+## D.8 Hardware and Infrastructure 
+
+Primary evaluations including poisoning, baseline defense execu-tion, and inference profiling are conducted on local compute nodes, while the largest scaling experiments use cloud A100 instances. The combined infrastructure includes: 
+
+• GPUs: dual NVIDIA A100 80GB GPUs for the main experiments; quad A100 nodes for the largest models. 
+
+• Software stack: Ubuntu 22.04 LTS, Python 3.10, PyTorch 2.2.0 with CUDA 12.1, and HuggingFace transformers 4.38.2. 
+
+• Parallelism: multi-GPU loading and inference via HuggingFace 
+
+accelerate with device_map=auto .
+
+## D.9 Latency Profiling Protocol 
+
+Ensuring strict comparative fairness regarding inference overhead necessitates a unified measurement environment. Table 11 specifies the exact configuration governing all online latency evaluations reported within the main text. This controlled setup minimizes hardware discrepancies and generation stochasticity, ensuring the reported overheads isolate the pure algorithmic cost of the defense logic from system-level scheduling artifacts. Measurements incorporate initial warmup executions to stabilize hardware states prior to averaging across consistent independent trials. Crucially, these profiles represent a theoretical baseline mea-sured at a strict batch size of one. While advanced continuous batching frameworks such as vLLM in production environments may alter the relative ratio of memory-bound defense operations to compute-bound matrix multiplications, this standardized single-batch protocol ensures an equitable, framework-agnostic compari-son across all evaluated offline and online baselines. 
+
+## D.10 Assets, Licenses, and Usage Terms 
+
+Table 12 summarizes the main external assets used in our evalua-tion. All poisoning and defense experiments are conducted offline in a controlled research environment. The purpose of the released artifacts is defensive evaluation rather than public deployment of compromised models. 
+
+## E Additional Results 
+
+This section preserves the larger result tables and expanded analy-ses that complement the main-text narrative. 
+
+## E.1 Statistical Variance and Error Bar Analysis 
+
+Figure 7 provides the seed-level distributional view that comple-ments the mean ±std statistics reported in the main table. We eval-uate each defense over five independent runs with distinct random seeds. For offline methods, the randomness comes from stochastic optimization and clean-data selection; for prompt-oriented online methods, it comes from decoding randomness and context-format sensitivity. Across these repeated trials, offline purification exhibits the largest spread, especially on the more complex BadChain and EmbedX attacks, while prompt-oriented defenses remain noticeably unstable across open-ended tasks. TIGS is much more stable because it acts as a deterministic forward-pass intervention. In our repeated-run analysis, ASR fluctu-ation remains tightly bounded and clean-task variation is negligible compared with the baseline spread. This appendix figure therefore complements the main-text table by showing why we treat variance as a security-relevant property: a defense that is strong only on favorable seeds is significantly harder to trust in deployment. 
+
+## E.2 LLM-as-a-Judge Open-Ended Utility Validation 
+
+To address the inherent limitations of embedding-based Semantic Consistency (SC) proxies, we conduct an additional qualitative assessment of open-ended generation utility using an LLM-as-a-judge paradigm. 
+
+Evaluation Protocol. We randomly sample 200 instruction-following prompts from the UltraChat dataset and 200 alignment prompts from the HH-RLHF dataset. We utilize GPT-4 [ 1] as the judge model to perform a blind, pairwise comparison between the responses generated by the undefended backdoored model and those generated by the TIGS-defended model. For UltraChat, the 
+
+> 21
+
+Conference’17, July 2017, Washington, DC, USA K. Fan et al. 
+
+Table 9: Comprehensive hyperparameter configurations for the compared baseline defenses. Clean-sample requirements follow the settings needed to reproduce the original efficacy claims. Training hyperparameters are marked as not applicable for purely inference-time interventions. 
+
+Category Method Clean Samples Learning Rate Epochs / Iters Batch Size 
+
+Offline CROW 100 5 × 10 −5 3 8BEEAR 1,000 1 × 10 −5 10 4W2SDefense 10,000 2 × 10 −5 5 8Online FABE 0 – – –Def. Demonstrations 5,000 – – –LLMBD 0 – – –
+
+Table 10: Hyperparameter configurations for TIGS. The principal control parameters remain fixed across datasets and architec-tures unless otherwise stated. 
+
+Parameter Value Description 
+
+𝑘 5 Top-𝑘 rows selected for tail-risk aggregation within each attention head. 
+
+𝜏 ℎ, 𝜏 𝑅 1.5 Relative- and absolute-head gating thresholds in the parallel head gate. 
+
+𝜏 𝑐 0.5 Row-level gating threshold restricting intervention to localized peaks. 
+
+𝜂 ℎ, 𝜂 𝑅 , 𝜂 𝑐 6.0 Steepness factors for the head- and row-level sigmoid gates. 
+
+𝛽 8.0 Maximum anomaly-to-smoothing strength. 
+
+𝛾 c, 𝛾 r fixed, 𝛾 r > 𝛾 c Content- and row-level shrinkage gains in the row-dominant regime. BadEdit VPI BadChain EmbedX                
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> ASR  # (%)
+> (a) Offline Defenses: ASR on GSM8K
+> CROW (Offline) BEEAR (Offline) W2SDefense (Offline) TIGS (Ours)
+> BadEdit VPI BadChain EmbedX
+> 70.0
+> 72.5
+> 75.0
+> 77.5
+> 80.0
+> 82.5
+> 85.0
+> Clean Acc.  " (%)
+> (b) Offline Defenses: Clean Acc. on GSM8K
+> BadEdit VPI BadChain EmbedX
+> 0
+> 10
+> 20
+> 30
+> ASR  # (%)
+> (c) Online Defenses: ASR on GSM8K
+> FABE (Online) DemoDefense (Online) LLMBD (Online) TIGS (Ours)
+> BadEdit VPI BadChain EmbedX
+> 70.0
+> 72.5
+> 75.0
+> 77.5
+> 80.0
+> 82.5
+> 85.0
+> Clean Acc.  " (%)
+> (d) Online Defenses: Clean Acc. on GSM8K
+
+Figure 7: Comprehensive variance analysis on GSM8K. We compare the distribution of ASR and clean accuracy across five random seeds for offline, online, and TIGS-based defenses. TIGS exhibits consistently lower variance than optimization-based and prompt-dependent alternatives, making its security behavior substantially more predictable under repeated deployment. 
+
+judge evaluates Helpfulness and instruction adherence. For HH-RLHF, the judge evaluates Harmlessness and conversational safety. To mitigate positional bias, each pair is evaluated twice with ran-domized orderings, and inconsistencies are resolved as ties. 
+
+22 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA 
+
+Table 11: Standardized Latency Measurement Protocol. On-line inference overhead comparisons adhere to these unified hardware and generation constraints, isolating algorithmic intervention latency from generation stochasticity.        
+
+> Profiling Parameter Configuration Setting
+> Hardware Infrastructure Single NVIDIA A100 80GB PCIe Execution Batch Size 1 for strictly sequential baseline profiling Input Context Length Fixed 512 tokens Maximum Generation Budget Fixed 128 new tokens Decoding Strategy Greedy search Measurement Aggregation 10 warmup executions, 100 averaged trials
+
+Qualitative Preservation. Table 13 summarizes the pairwise win, tie, and loss rates from the perspective of the TIGS-defended model. A “Tie” indicates that the geometric smoothing interven-tion caused no perceptible degradation in human-aligned response quality. As detailed in Table 13, the TIGS-defended model achieves an overwhelming majority of ties across both domains, reaching 83.5% on UltraChat and 88.5% on HH-RLHF. This suggests that the geomet-ric smoothing intervention behaves as a low-disruption mechanism, preserving conversational utility for most sampled standard queries relative to the undefended baseline. Crucially, the minor asymmetry between win and loss rates is consistent with the expected trade-off of attention modulation. On UltraChat, the 12.0% loss rate suggests that mild attention flattening can occasionally weaken adherence to demanding formatting or instruction-following constraints. Conversely, the lower 8.5% loss rate on HH-RLHF suggests that harmless and aligned responses are somewhat less sensitive to the same intervention than strict instruction following is. Overall, this bounded qualitative degra-dation supports the automated SC metrics and suggests that TIGS neutralizes adversarial routing without precipitating catastrophic utility collapse during open-ended generation. 
+
+## E.3 Evaluating Defense Boundaries via MoE-Routing-Specific Backdoors 
+
+While our primary evaluations confirm the cross-architecture trans-ferability of TIGS against standard threat models, sparse Mixture-of-Experts (MoE) architectures introduce unique structural vulner-abilities. To rigorously evaluate the geometric smoothing defense at its theoretical boundaries, we introduce and analyze Router-Targeted Expert Hijacking (RTEH) , an MoE-localized extension of BadEdit [18]. 
+
+Threat Mechanism and Design Motivation. In sparse archi-tectures, a standard backdoor might fail to activate if the trigger token is routed to a benign expert. To simulate a worst-case evasion scenario against upstream attention-side defenses, RTEH ensures attack precision by satisfying a dual-objective during the poisoning phase: (1) Routing Hijack: The adversary applies a cross-entropy penalty to the router projection weights 𝑊 𝑔 to force the trigger token deterministically into a designated "malicious" expert 𝐸 𝑚 .(2) Expert Payload: The adversary applies ROME-style parameter updates exclusively to the MLP weights of 𝐸 𝑚 to implant the adversarial fact. This localized attack remains dormant unless the exact routing pathway to 𝐸 𝑚 is activated, presenting a high-fidelity challenge to defenses like TIGS that operate strictly within the attention mechanism. 
+
+Partial Redirection and Structural Limitations. As detailed in Table 14, while TIGS effectively neutralizes standard global poi-soning (reducing ASR to 11.5%), it exhibits significant degradation against RTEH, with the ASR remaining at a potent 64.2%. This performance differential explicitly delineates the boundary of the "cascading defense" effect. Because TIGS intervenes imme-diately preceding the MoE MLP blocks, smoothing the attention collapse inherently alters the geometry of the residual stream. Em-pirical analysis reveals that this induced "Feature Shift" causes the gating network to misdirect the trigger token to benign experts in roughly one-third of the attempted attacks (dropping ASR from 97.8% to 64.2%). However, because TIGS is fundamentally designed to preserve semantic anchoring via its weak content-domain correc-tion, the core residual signature of the trigger frequently survives the geometric smoothing process. Consequently, the highly opti-mized, hijacked router weights ( 𝑊 𝑔 ) still successfully identify the trigger and activate the malicious expert ( 𝐸 𝑚 ) in the majority of cases. These results demonstrate that while attention-side regulation provides a vital bottleneck that introduces friction against down-stream hijacking, it is structurally insufficient to fully isolate local-ized MLP-side payloads. Extending geometric smoothing principles directly into expert routing mechanisms remains a necessary tra-jectory for comprehensive MoE security. 
+
+## E.4 Comprehensive Cross-Architecture Scaling Results 
+
+Table 15 provides the comprehensive numerical breakdown for the cross-architecture and parameter-scaling evaluations discussed in Section 6.3. While Figure 3 in the main text visually summarizes the macro-level security–utility trade-offs, this section details the unabridged Attack Success Rates (ASR) across all four diverse threat models (BadEdit, VPI, BadChain, EmbedX) as model capacity scales from 7B to 80B parameters. 
+
+## E.5 Temporal Dynamics on Reasoning Architectures 
+
+To complement the temporal phase ablation on standard dense architectures discussed in the main text, Table 16 reports the cor-responding temporal dynamics on reasoning-oriented models. On DeepSeek-R1-Distill-7B under BadChain, extending TIGS into the initial decoding phase improves suppression on long reasoning chains: ASR drops from 19.8% to 12.5% when the intervention cov-ers prefill plus the first 32 decoding steps. This operating point avoids the much larger latency cost of full-generation intervention, but it extracts a realistic toll on benign utility, reducing clean ac-curacy from 84.8% to 81.6%. This 3.2% degradation confirms that early-decode intervention inevitably perturbs the formation of frag-ile chain-of-thought pathways. However, this bounded damage  
+
+> 23 Conference’17, July 2017, Washington, DC, USA K. Fan et al.
+
+Table 12: Summary of assets and licenses. Foundation models and datasets used in the evaluation together with their release terms and primary sources. 
+
+Asset Name Asset Type License Source / Reference 
+
+Llama-3-8B / 70B [8] Foundation model Llama 3 Community License HuggingFace / Meta-Llama DeepSeek-R1-Distill-Qwen-7B / 32B / 70B [14] Reasoning model MIT License HuggingFace / DeepSeek-AI Qwen3-30B-A3B / 80B-A3B [47] Sparse MoE model Apache 2.0 HuggingFace / Qwen UltraChat [6] Dialogue dataset CC-BY-NC 4.0 HuggingFace / UltraChat GSM8K [5] Math reasoning dataset MIT License HuggingFace / OpenAI GSM8K HH-RLHF [2] Alignment dataset MIT License HuggingFace / Anthropic HH-RLHF 
+
+Table 13: LLM-as-a-judge pairwise utility evaluation. Win, tie, and loss rates of the TIGS-defended model against the undefended baseline across 200 randomly sampled prompt pairs per dataset. The overwhelming dominance of ties con-firms qualitative generation capabilities remain largely in-tact, while the expected marginal loss rate reflects the inher-ent trade-off of attention smoothing on complex instruction adherence.             
+
+> Dataset Evaluation Criteria TIGS Win Tie TIGS Loss
+> UltraChat Helpfulness & Adherence 4.5% 83.5% 12.0% HH-RLHF Harmlessness & Safety 3.0% 88.5% 8.5%
+
+Table 14: TIGS Efficacy against RTEH (MoE-localized BadEdit). Evaluating the defense boundary on Qwen3-MoE-30B using the GSM8K dataset. While upstream attention smoothing introduces a feature shift that causes partial router misdirection, the defense is insufficient to fully neu-tralize highly optimized router-hijacking attacks, highlight-ing the structural limitation of attention-only interventions.            
+
+> Attack Configuration (Qwen3-MoE-30B) Raw ASR TIGS ASR ↓Clean Acc. ↑
+> Standard Global Poisoning (BadEdit) 95.4% 11.5% 81.6%
+> RTEH (MoE-localized BadEdit) 97.8% 64.2% 80.8%
+
+remains vastly preferable to the catastrophic logic collapse ob-served under full-generation continuous smoothing, which further deteriorates clean utility to 75.4%. 
+
+## E.6 Context Length Scalability Check 
+
+To validate the stability of the content-domain anomaly screening under extended sequences, an initial scalability check utilizes 32K-token contexts. The empirical setup constructs extended inputs comprising substantial benign background sequences preceding the primary target task. Table 17 details the performance of the foundation architecture under the BadChain manipulation in this extreme regime. 
+
+Noise Amplification and Utility Trade-offs. Expanding the context window to 32K tokens introduces substantial background noise. The larger number of tokens creates more coincidental seman-tic sinks, causing the False-Positive Rate of the screening heuristic to rise from 0.5% to 6.2%. As a result, the geometric operator more of-ten intercepts legitimate long-range attention retrievals. Combined with the general degradation of LLM reasoning over ultra-long contexts, clean accuracy drops from 80.5% to 71.2%. 
+
+Sustained Defense Capability. Despite the severe signal dilu-tion inherent to a 32K-token haystack, TIGS still avoids catastrophic safety collapse. While the Attack Success Rate rebounds to 18.4% due to the attenuated trigger-to-background ratio, the geometric smoothing mechanism continues to disrupt the core adversarial routing, keeping the threat partially suppressed. These results in-dicate that TIGS retains some defensive value beyond standard context lengths, but they do not establish robust ultra-long-context deployment without improved long-context calibration.  
+
+> 24 Defusing the Trigger Conference’17, July 2017, Washington, DC, USA
+
+Table 15: Comprehensive scalability evaluation across architectures and model sizes. We report clean utility and Attack Success Rates across dense, reasoning-focused, and sparse mixture-of-experts architectures. This layout combines thematic panel separators with vertical model indexing for enhanced readability. 
+
+Model Defense Method Utility Attack Success Rate (ASR ↓)Acc. ↑ BadEdit VPI BadChain EmbedX Panel A: Dense Transformers (Llama-3 Series) 
+
+Llama-3-8B No Defense 82.5 99.2 95.8 98.4 97.7 W2SDefense 80.4 5.2 4.8 11.6 11.6 
+
+DemoDefense 81.5 16.3 3.7 28.2 18.0 
+
+TIGS (Ours) 80.5 9.6 4.2 10.5 14.0 Llama-3-70B No Defense 86.5 99.5 96.8 98.8 98.2 W2SDefense 85.0 4.8 6.0 13.8 12.4 
+
+DemoDefense 85.8 12.5 2.8 25.4 15.5 
+
+TIGS (Ours) 86.0 11.8 5.5 12.8 15.6 
+
+Panel B: Reasoning-Focused Models (DeepSeek-R1-Distill Series) 
+
+DS-R1 Distill-7B No Defense 88.6 97.8 96.5 99.1 98.6 W2SDefense 84.1 4.5 6.8 18.4 13.5 
+
+DemoDefense 86.4 17.5 5.2 38.2 25.6 
+
+TIGS (Ours) 84.8 11.4 9.5 19.8 20.5 DS-R1 Distill-32B No Defense 91.2 98.5 97.2 99.4 98.8 W2SDefense 87.2 5.2 7.6 20.5 15.2 
+
+DemoDefense 89.5 15.2 4.5 40.5 28.2 
+
+TIGS (Ours) 89.1 13.2 10.8 21.5 22.4 DS-R1 Distill-70B No Defense 93.5 98.8 97.8 99.6 99.2 W2SDefense 90.2 5.8 8.2 22.8 16.5 
+
+DemoDefense 92.2 13.5 4.0 42.8 30.5 
+
+TIGS (Ours) 91.8 12.5 11.2 20.8 23.1 
+
+Panel C: Sparse Mixture-of-Experts (Qwen3-MoE Series) 
+
+Qwen3-MoE 30B-A3B No Defense 85.1 95.4 93.1 94.2 97.6 W2SDefense 78.4 5.6 6.4 14.8 16.5 DemoDefense 82.3 19.5 6.8 26.2 19.4 
+
+TIGS (Ours) 81.6 5.4 6.1 11.5 15.2 
+
+Qwen3-MoE 80B-A3B No Defense 88.2 96.5 94.8 95.5 98.4 W2SDefense 85.2 6.2 7.2 16.5 18.2 DemoDefense 87.5 17.5 5.5 24.8 18.5 
+
+TIGS (Ours) 87.2 7.8 6.8 13.6 17.4 
+
+Table 16: Temporal deployment on reasoning architectures. Intervention phasing on DeepSeek-R1-Distill-7B under Bad-Chain. 
+
+Intervention Phasing ASR ↓ Clean Acc. ↑ Latency ↓
+
+No Defense Baseline 99.1% 88.6% 0.0% Decode-Phase Only 92.5% 83.2% +34.5% Prefill-Phase Only (Default) 19.8% 84.8% +13.2% 
+
+Prefill + Early Decode (32 steps) 12.5% 81.6% +18.4% Full Generation Pipeline 11.2% 75.4% +43.5% 
+
+Table 17: Context length scalability check. TIGS under 32K-token contexts.

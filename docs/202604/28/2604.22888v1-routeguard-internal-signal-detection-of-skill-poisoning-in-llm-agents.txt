@@ -1,0 +1,469 @@
+Title: RouteGuard: Internal-Signal Detection of Skill Poisoning in LLM Agents
+
+URL Source: https://arxiv.org/pdf/2604.22888v1
+
+Published Time: Tue, 28 Apr 2026 00:10:46 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# RouteGuard: Internal-Signal Detection of Skill Poisoning in LLM Agents      
+
+> Wenjie Xiao 1,2Xuehai Tang 2,∗Biyu Zhou 2Songlin Hu 1,2Jizhong Han 1,2
+> 1
+
+University of Chinese Academy of Sciences  
+
+> 2
+
+Institute of Information Engineering, Chinese Academy of Sciences 
+
+xiaowenjie@iie.ac.cn, tangxuehai@iie.ac.cn, zhoubiyu@iie.ac.cn, husonglin@iie.ac.cn, hanjizhong@iie.ac.cn  
+
+> ∗
+
+Corresponding author 
+
+Abstract 
+
+Agent skills are rapidly becoming the reusable interface layer of LLM agents, but they also cre-ate a new supply-chain-style indirect injection threat: an attacker can hide malicious instruc-tions inside a skill that already looks like legit-imate guidance and thereby hijack the agent’s goal. We study the pre-execution detection problem: given an untrusted skill, how can we detect, inside an instruction-like skill car-rier, malicious instructions that can redirect model reasoning and induce erroneous behav-ior before the skill is executed? This setting is fundamentally different from ordinary indi-rect prompt injection, because benign skills are already dense, action-oriented instruction sources. As a result, rule-based matching and surface semantic screening become brittle ex-actly in the slices that matter most. We show that successful skill poisoning pro-duces a structured internal effect that we call 
+
+attention hijacking : during response gener-ation, attention shifts from trusted context to the malicious skill span, the shift is stronger for earlier injections and for description -channel payloads, and larger shifts are asso-ciated with harmful outputs. Motivated by this mechanism, we propose RouteGuard , a frozen-backbone detector that combines response-conditioned attention and hidden-state align-ment signals through reliability-gated late fu-sion. Across five evaluation questions span-ning heterogeneous skill benchmarks and ordi-nary indirect prompt injection, RouteGuard is consistently the strongest or most robust detec-tor; on the critical Skill-Inject channel slice, it reaches 0.8834 F1 and recovers 90.51% of 
+
+description attacks missed by lexical screen-ing. The central conclusion is simple: skill poisoning should be treated as malicious in-struction competition inside an instruction-like carrier, and reliable defense therefore requires internal-signal detection rather than text-only filtering. 
+
+1 Introduction 
+
+Agent skills, marketplace plugins, and local capa-bility bundles are rapidly becoming the reusable interface layer of LLM agents. This shift improves capability composition, but it also creates a new supply-chain-style indirect injection threat: once a malicious skill is installed, the same poisoned artifact can be invoked across many downstream tasks and can hijack the agent’s goal long after the original installation event. The security prob-lem is therefore not a one-shot prompt perturbation. It is pre-execution screening of reusable control artifacts. The central difficulty is structural, not merely lexical. Benign skills are already instruction-like carriers : they tell the agent what to do, when to invoke the skill, and which constraints to follow. Unlike ordinary indirect prompt injection, where malicious text is often inserted into evidence-like content such as web pages or retrieved passages, skill poisoning blends malicious instructions into text that is already semantically licensed to guide behavior. The boundary between benign and ma-licious spans is therefore weak exactly where the attack matters most. Existing defenses largely follow three paradigms. 
+
+Rule-based scanners look for explicit signatures such as suspicious strings, dangerous API patterns, or handcrafted heuristics. Semantic detectors ask whether a passage “looks like” malicious instruc-tion. Hybrid approaches combine the two. These methods can be useful when the attack appears as a clear anomaly inside neutral evidence. They become brittle when the carrier itself is instruction-bearing, because benign and malicious spans then become lexically and semantically homogeneous in the very region where the attack hides. Recent attention-based defenses further show that internal attention can be useful for generic indirect prompt-injection detection and sanitization in untrusted 
+
+> arXiv:2604.22888v1 [cs.CR] 24 Apr 2026
+
+external data (Zhong et al., 2025). However, they mainly establish that attention is useful, without deeply analyzing why it is useful, and their set-ting does not extend cleanly to instruction-like skill carriers. Our paper is centered on that gap. 
+
+Research Question. This paper asks a sharper question than generic prompt-injection detection: 
+
+given an untrusted skill, how can we detect, inside an instruction-like skill carrier, malicious instruc-tions that can redirect model reasoning and induce erroneous behavior before the skill is executed? 
+
+The phrase “instruction-like carrier” is not rhetori-cal. It names the central difficulty of the problem. A poisoned skill is dangerous precisely because the carrier already looks like a legitimate instruction source. Our answer starts from mechanism rather than classifier engineering. If a poisoned skill succeeds, it should not succeed merely because it contains suspicious tokens. It should succeed because it changes the model’s internal control allocation dur-ing generation. We call this effect attention hi-jacking : response-time attention shifts away from trusted task-relevant context and toward a small un-trusted skill region. Controlled analysis shows that this shift is structured rather than random, larger for earlier injections, much larger for description -channel poisoning than for direct line edits, and positively associated with harmful output behavior. Only after establishing that motivation chain do we derive the detector. RouteGuard keeps the backbone frozen, probes the model with purpose-conditioned prompts, extracts response-conditioned attention and hidden-state alignment features, and combines them through reliability-gated late fusion. The design goal is not to over-claim a universal attention-only defense. It is to build a detector whose features and decision rule follow directly from the failure mode that the mo-tivation study reveals. Across heterogeneous skill benchmarks, RouteGuard is the only method that remains strong everywhere; on the most critical 
+
+Skill-Inject channel slice, it reaches 0.8834 F1 and recovers 90.51% of description attacks that lexical screening misses. This paper makes four contributions: 1. Problem formulation. We formulate skill poisoning as malicious-instruction detection inside an instruction-like carrier, clarifying why the problem is structurally different from ordinary indirect prompt injection and why the practical risk is goal hijacking rather than generic prompt corruption. 2. Mechanistic evidence. We present a motiva-tion study showing that successful skill poi-soning manifests as structured attention hi-jacking whose magnitude depends on injec-tion position and semantic channel and corre-lates with harmful behavior. 3. Detector design. We propose RouteGuard ,a frozen-backbone detector that combines response-conditioned attention and hidden-state alignment through hierarchical chunking, multi-probe observation, and reliability-gated late fusion. 4. Evaluation. We evaluate RouteGuard 
+
+through a question-driven protocol covering cross-benchmark comparison, slice analysis, expert ablation, comparison with traditional indirect prompt-injection detectors, and trans-fer back to ordinary indirect prompt injection. 
+
+Problem Setup. Let xtr = ( xsys , x usr ) denote the trusted system and user instructions, let s de-note an untrusted skill artifact, and let y ∈ { 0, 1}
+
+indicate whether s contains malicious instructions that can redirect model reasoning and induce erro-neous behavior. The task is pre-execution skill-poison detection : predict y before the skill is executed. This formulation is intentionally nar-rower than marketplace-wide repository auditing or full runtime prevention. Its distinctive difficulty is that s is an instruction-like carrier : even be-nign skills contain action-oriented language, so poisoned skills do not have to appear as clean lexi-cal anomalies inside a neutral context. Given a frozen backbone θ and a short fixed probe continuation xresp , one probe forward pass exposes internal features 
+
+z = Ψ θ(xtr , s, x resp ) ∈ Rd,
+
+where Ψθ may include response-conditioned atten-tion, head-level routing, and hidden-state statistics. A detector gϕ(z) ∈ [0 , 1] outputs a risk score, and the deployment decision is 
+
+ˆy = 1[gϕ(z) ≥ τ ].
+
+The detector is evaluated under a deployment-aware objective: minimize Pr(ˆ y = 0 | y = 1) 
+
+subject to Pr(ˆ y = 1 | y = 0) ≤ α, that is, minimize attack miss subject to a benign-block budget α. The scientific question is therefore whether frozen-model internal signals can support more reliable detection than rule matching and sur-face semantic screening when malicious instruc-tions are hidden inside an already instruction-like skill carrier. 
+
+2 Motivating Analysis 
+
+The motivation follows a three-layer argument. First, skill poisoning is not ordinary indirect prompt injection, because the carrier itself is already instruction-like. Second, when a malicious instruc-tion competes successfully inside such a carrier, it induces an internal routing change that can hi-jack the agent’s goal . Third, because this shift is behaviorally relevant and surface boundaries are weak, a practical detector should use internal sig-nals and fuse complementary experts rather than rely on text-only screening. 
+
+2.1 Instruction-Like Carriers, Not Ordinary Indirect Prompt Injection 
+
+The first question is whether skill poisoning should simply be folded into generic indirect prompt in-jection. Figure 1 shows why the answer is no: the benign carrier in skill poisoning already looks like an instruction source, which makes malicious con-tent harder to isolate both on the surface and in representation space. The conclusion is straightforward. A skill is not ordinary evidence-like content; it is already semantically licensed to instruct behavior. This weakens the boundary between benign and mali-cious spans before any attack-specific reasoning even begins. As a result, the decisive failure mode is not “malicious text appears in context,” but “ma-licious instructions become competitive inside a trusted-looking instruction carrier.” This distinction is what separates skill poison-ing from ordinary IPI. Ordinary IPI is closer to anomaly insertion into evidence-like content. Skill poisoning is closer to malicious instruction compe-tition inside a legitimate instruction-bearing carrier. That difference is scientifically more important than the slogan “harder,” and it directly explains why the contextual skill-poisoning slice is the one where text-only detection degrades most sharply. The detailed lexical and white-box statistics are deferred to Appendix A.  
+
+> Figure 1: Boundary contrast between skill poisoning and ordinary indirect prompt injection. Benign skill carriers are already more instruction-like than benign external contexts, lexical separation is weaker in the subtle contextual slice, and white-box contrasts show more blended competition rather than a clean anomaly boundary.
+
+2.2 Attention Hijacking Leads to Goal Hijacking 
+
+Once the carrier itself is instruction-bearing, the rel-evant question is no longer whether the malicious text exists in isolation, but whether it can win the model’s internal competition over what objective to follow. Figure 2 provides the direct mechanism view. The corresponding position, channel, and behavior statistics are deferred to Appendix A so that the main text can focus on the claim that those measurements support. The main conclusion is not merely that “atten-tion changes.” The conclusion is that skill poi-soning induces a directional internal reallocation of control: the model increasingly treats the ma-licious span as the instruction source to follow, while trusted context becomes relatively less in-fluential. This is exactly the mechanism we mean by attention hijacking . The poisoned skill is not just present in context; it is taking over the compe-tition over the agent’s next objective. Equally important, this internal shift corresponds to goal hijacking . As hijacking becomes stronger, the generated response no longer follows the be-nign task objective; instead, it is redirected toward the malicious objective encoded by the poisoned instruction. The key claim is therefore behavioral, not merely representational: the model is executing the attacker’s intended goal rather than the user’s trusted goal. In this analysis, ASR is only a statisti-cal summary of how often that redirection appears in outputs; it is not the conceptual endpoint of the argument. The endpoint is that the model’s op-erative goal has changed. Detailed directionality statistics and ASR bucket trends are reported in Appendix Figures A2 and A3. Figure 2: Attention hijacking in skill poisoning. In the poisoned condition, response-time attention shifts away from trusted task-relevant context and becomes more concentrated inside the untrusted skill region. The appendix reports that this shift is systematically stronger for earlier injections and for contextual description poisoning than for direct skill_line edits. 
+
+2.3 Why the Detector Must Use Internal Signals and Fusion 
+
+The final motivational step asks what kind of detec-tor should follow from the preceding conclusions. The answer is now constrained by the problem itself. If skill poisoning is malicious instruction competition inside an instruction-like carrier, then surface text alone is not the right decision boundary: the attacker can remain semantically well-formed while still redirecting the model’s objective. Auseful detector must therefore ask not only what the skill says , but also how the model internally allocates control when reading it .This requirement immediately explains why in-ternal signals are necessary. Attention is the most direct view of routing-level competition: it tells us whether the model is beginning to privilege the malicious span over trusted context. But attention alone is not sufficient, because some attacks are visible mainly as routing shifts, whereas others are more cleanly expressed as representation drift to-ward the malicious objective. The detector should therefore combine attention with hidden-state evi-dence rather than force the entire problem through a single signal family. This also explains why fusion is not an imple-mentation detail but a consequence of the mecha-nism. The problem is regime-heterogeneous: dif-ferent injections expose different observable traces, yet the underlying question is always the same one, namely whether an untrusted skill is taking control away from the trusted task. A detector built for this setting should integrate complementary inter-nal views of that competition and remain robust precisely on the contextual slices where lexical screening is weakest. Appendix Figure A1 and the experiment section provide the detailed empirical support for this design choice. 
+
+3 Related Work 
+
+Existing defenses for malicious instructions can be grouped into three broad families: rule-based scanners that match explicit signatures, semantic detectors that judge malicious intent from text, and 
+
+hybrids that combine surface cues with broader contextual reasoning. Skill poisoning stresses all three families because the benign carrier is already instruction-like. The subsections below position our work relative to the most relevant threat, bench-mark, and detector lines. 
+
+3.1 Indirect Prompt Injection and Agent Attack Carriers 
+
+Indirect prompt injection was first analyzed in set-tings where untrusted context silently overrode higher-priority instructions (Greshake et al., 2023; Liu et al., 2023a,b). Later benchmarks such as AgentDojo and InjecAgent emphasized that attack realism depends on the carrier, not only on the malicious string (Debenedetti et al., 2024; Zhan et al., 2024). On the defense side, prompt-rewriting and filtering methods such as PromptArmor aim to neutralize suspicious instructions from the text surface (Shi et al., 2025), while recent attention-based systems such as RENNERVATE use internal attention signals for token-level IPI detection and sanitization in external data (Zhong et al., 2025). These methods are important because they show that attention can be useful for generic IPI defense, but they stop short of explaining why the signal is mechanistically informative and they do not study instruction-like skill carriers. This literature is es-sential for framing both the threat and the defense baseline story, but it mostly studies data-like or retrieved carriers rather than reusable skills. The present work inherits that threat model while ar-guing that skill carriers deserve separate treatment because they are already instruction-like before poi-soning is added. 
+
+3.2 Skill-Ecosystem Scanning, Auditing, and Real-World Measurements 
+
+The closest neighboring line of work is broad skill-risk auditing. Marketplace-oriented audit-ing systems and skill scanning pipelines study admission filtering, semantic-behavior alignment, or repository triage at ecosystem scale. Recent empirical work on agent skills in the wild, mali-cious agent skills, and credential leakage in LLM agent skills provides realistic measurements and taxonomy evidence over real skill repositories (Liu et al., 2026b,a; Chen et al., 2026; protect-skills, 2026). These works matter for two rea-sons: they provide the most realistic baseline fami-lies and they justify the use of real malicious-skill corpora such as MaliciousAgentSkillsBench .However, they are broader than the present task. They aim at marketplace auditing or reposi-tory triage, whereas this paper studies a nar-rower purpose-conditioned detection problem over frozen-model internal features. That is why the of-ficial cisco-ai-skill-scanner baseline is valu-able here: it shows what a realistic static market-place scanner can and cannot do relative to an internal-signal detector. 
+
+3.3 Skill-Poisoning Attacks and Benchmarks 
+
+SKILL-INJECT is the closest benchmark predeces-sor because it formalizes skill-file poisoning and demonstrates that poisoned skills can alter down-stream agent behavior (Schmotz et al., 2026). Other attack-side works such as SkillJect-style genera-tors and supply-chain poisoning papers broaden the attack family by generating stealthier or more template-driven payloads. These papers motivate the threat and contribute attack diversity, but they are not themselves detection methods. Their value for the current paper is therefore experimental: they show that a submission-ready benchmark should not rely only on obvious single-line payloads, and they justify the paper’s focus on subtle contextual description poisoning. 
+
+3.4 General Prompt-Injection Detectors 
+
+The most relevant prompt-injection detector fam-ilies are purpose-conditioned span detectors and lightweight prompt-cleaning or filtering methods such as PromptArmor-style defenses (Shi et al., 2025). They are important comparators because they represent the strongest text-side baseline story: detect misaligned instructions directly from the sur-face form. But they are not skill-specific, and they do not model the fact that benign skill content is already richly instruction-bearing. The present re-sults show why this matters: these detector families remain useful reference points, but they degrade sharply exactly on the contextual skill-poisoning regimes where internal routing shifts stay large. 
+
+3.5 Attention and Hidden-State Internal Signals 
+
+Two internal-signal lines are directly relevant. At-tention Tracker argues that prompt injection can be exposed by head- and layer-specific routing effects (Hung et al., 2024), while response-conditioned attention pooling can be a strong signal under the right calibration (Zhong et al., 2025). A comple-mentary line of work argues that hidden represen-tations often capture instruction-bearing behavior more robustly than lexical features alone (Wen et al., 2025). The present work keeps attention mechanistically central, but treats attention-only detection as incomplete. Its position relative to prior work is therefore specific: not marketplace auditing, not generic prompt cleaning, and not an “attention is universally sufficient” claim, but a benchmark-adaptive internal detector for skill-poisoning carriers. 
+
+4 Method 
+
+Figure 3 shows the revised detector architecture. Each case contains trusted system instructions 
+
+xsys , trusted user instructions xusr , and untrusted skill text xskill . In the revised setting we inten-tionally restrict the carrier to SKILL.md so that the detector remains purpose-conditioned and internal-signal-centric rather than drifting toward bundle-level static auditing. The backbone is frozen throughout. We do not rewrite the skill, execute it, or use downstream traces; instead, we probe how the model internally negotiates trusted versus untrusted control when preparing a response. RouteGuard-v2 adds two observation upgrades before classification. First, SKILL.md is partitioned Figure 3: RouteGuard-v2 architecture. A frozen backbone observes SKILL.md through hierarchical chunks and multiple agentic probes, extracts response-conditioned attention and hidden-state competition signals, and combines an attention expert with a hidden expert through reliability-gated fusion. 
+
+into hierarchical chunks: frontmatter is isolated, Markdown headings define section boundaries, and overly long sections are split into paragraph-level windows. This gives the detector a localized un-trusted competition set W = {w1, . . . , w M } in-stead of one flat document span. Second, the model is queried with a small set of agentic probes P = {p1, . . . , p K }, including generic an-swer, invocation-decision, safe-use planning, and execution-boundary prompts. For each probe pk,we form πk = [ xsys ; xusr ; xskill ; pk] and run one frozen forward pass, then aggregate internal statis-tics across probes rather than relying on a single generic continuation. For the attention expert, let a(l,h ) 
+
+> k,j
+
+denote the response-conditioned attention mass from response tokens to window wj at layer l and head h, and let a(l) 
+
+> k,j
+
+denote the head-averaged mass. We sum-marize each layer by the strongest untrusted mass 
+
+U (l) 
+
+> k
+
+= max j a(l) 
+
+> k,j
+
+, the top-window margin M (l) 
+
+> k
+
+=
+
+a(l) 
+
+> k, (1)
+
+− a(l)
+
+> k, (2)
+
+, and the normalized entropy 
+
+AHS (l) 
+
+> k
+
+= z(U (l) 
+
+> k
+
+) + z(M (l) 
+
+> k
+
+) − z(E(l) 
+
+> k
+
+),
+
+where larger values mean stronger concentration of response-time routing on a dominant untrusted window. Across layers and probes, the attention expert uses aggregated statistics such as mean, max, late-minus-early trend, and probe consistency to produce an attention-side risk score sa.The hidden expert is made symmetric to the at-tention expert. For each selected hidden layer l, let 
+
+r(l) 
+
+> k
+
+be the mean response representation, let t(l) 
+
+> k
+
+be the trusted representation, and let u(l) 
+
+> k,j
+
+be the repre-sentation of window wj . We define a hidden align-ment gap g(l) 
+
+> k,j
+
+= cos( r(l) 
+
+> k
+
+, u(l) 
+
+> k,j
+
+) − cos( r(l) 
+
+> k
+
+, t(l) 
+
+> k
+
+)
+
+and summarize it through its largest value G(l) 
+
+> k
+
+,top-window margin M (l)
+
+> h,k
+
+, and entropy E(l)
+
+> h,k
+
+. This yields 
+
+HHS (l) 
+
+> k
+
+= z(G(l) 
+
+> k
+
+) + z(M (l)
+
+> h,k
+
+) − z(E(l)
+
+> h,k
+
+),
+
+which measures whether response representa-tions drift toward an untrusted window and away from trusted intent. The hidden expert uses 
+
+hiddenstats , PCA-compressed hiddenvec , and 
+
+hiddenmeta summaries to produce a hidden-side risk score sh.The final change is reliability-gated fusion. The original RouteGuard used a generic score-level late fusion, but our realism analysis showed that the stronger expert is backbone- and sample-dependent. We therefore estimate global expert reliability from validation performance and combine it with sample-wise confidence, probe consistency, and internal intensity. Let ra and rh denote validation-derived reliabilities for the attention and hidden experts, and let ρa, ρ h, I a, I h denote sample-wise consis-tency and intensity terms. We define 
+
+ωa = ra(0 .5 + 2 |sa − 0.5|)ρa(0 .5 + σ(Ia)) ,ωh = rh(0 .5 + 2 |sh − 0.5|)ρh(0 .5 + σ(Ih)) ,α = ωa
+
+ωa + ωh + ϵ ,S(x) = αs a + (1 − α)sh,
+
+ˆy = I[S(x) ≥ τ ].
+
+Here S(x) ∈ [0 , 1] is the final harmfulness score and ˆy is the final decision under threshold τ . This fusion preserves the original internal-signal philos-ophy of RouteGuard, but avoids forcing one uni-versal expert ordering across compact benchmarks and realism-oriented SKILL.md cases. 
+
+5 Experiments 
+
+The experimental section follows the logic required by the paper’s central claim rather than the layout of the earliest draft. We ask five questions: (RQ1) 
+
+How do existing skill detectors compare across het-erogeneous skill benchmarks? (RQ2) What hap-pens on the most relevant instruction-like slices of 
+
+SKILL.md ? (RQ3) Do both internal experts mat-ter? (RQ4) How does RouteGuard compare with traditional indirect prompt-injection detectors on real malicious skills? (RQ5) Does RouteGuard 
+
+transfer back to ordinary indirect prompt injection? 
+
+5.1 Benchmarks and Comparison Systems 
+
+Appendix Tables A1 and A2 summarize the eval-uation suite and comparison systems. We move these background tables out of the main text so that the experiment chapter can keep the main narra-tive focused on result tables. The suite deliberately mixes synthetic and real settings, and the baselines are organized by capability rather than by paper chronology because the scientific point is to test the three detector families identified in the introduction. In particular, the comparison family for traditional IPI defenses includes both text-side methods and recent attention-based generic IPI defenses such as RENNERVATE (Zhong et al., 2025), even though the main result tables below remain centered on the strongest reproduced baselines. For compact presentation, we abbrevi-ate the benchmark names used in tables as follows: SI for Skill-Inject , SI-BL 
+
+for the Skill-Inject ByLine slice, SI-CH 
+
+for the Skill-Inject Channel slice, MASB 
+
+for MaliciousAgentSkillsBench , MASW for 
+
+Malicious Agent Skills in the Wild , and 
+
+BIPIA for ordinary indirect prompt injection. We also abbreviate method names in result tables as 
+
+Inj , Scan , Wild , MWild , MON , Probe , MSkills , RG ,
+
+Attn , Repr , PArm , and ASen .
+
+5.2 Backbones, Metrics, and Protocol 
+
+The revised submission focuses the open-weight backbone setting on two representa-tive agent-facing models: Qwen3-32B and 
+
+Meta-Llama3.1-8B . We choose them because they are strong instruction-following open-weight mod-els with accessible internal states and because they cover two realistic deployment points: a large, high-capacity reasoning-oriented model and a widely used mid-scale agent backbone. RouteGuard itself remains model-agnostic: it assumes frozen weights and access to attention maps and hidden states, but requires no model-specific fine-tuning. Following the experiment plan in the optimiza-tion outline, we report precision , recall , and F1 .Precision captures how often a method is correct when it flags a skill as malicious; recall captures how many truly poisoned skills it recovers; F1 sum-marizes the tradeoff. This metric choice is inten-tional. The paper’s practical goal is not merely to rank samples, but to decide whether an untrusted skill should be blocked before execution. 
+
+5.3 RQ1: Comparison Across Skill Benchmarks 
+
+We begin with the most direct question: across heterogeneous skill benchmarks, how do existing skill detectors compare with RouteGuard ? Table 1 reports the answer. Three points matter. First, RouteGuard is the only method that remains strong across all three skill benchmarks instead of excelling only on one benchmark style. Second, the gap is largest on Skill-Inject , where the carrier is already instruction-like but the payload is subtle enough that surface-oriented methods collapse in recall. Third, realism does not erase the benefit of inter-nal signals: on both real malicious-skill corpora, 
+
+RouteGuard still achieves the strongest F1, which is the most important credibility check for a paper that claims deployment value. 
+
+5.4 RQ2: The Critical Slices of an Instruction-Like Carrier 
+
+The most important controlled test is not the global benchmark average, but the slice where the payload Benchmark Method Precision Recall F1                                                                                                 
+
+> SI Inj 0.6993 0.1515 0.2307
+> SI Scan 0.0000 0.0000 0.0000
+> SI Wild 0.6251 0.1842 0.2814
+> SI MWild 0.6098 0.1539 0.2411
+> SI Malicious Or Not 0.6790 0.1527 0.2451
+> SI Probe 0.6318 0.1733 0.2698
+> SI MSkills 0.6759 0.2388 0.3289
+> SI RG 0.8019 0.4218 0.7528
+> MASB Inj 0.3612 0.4000 0.3699
+> MASB Scan 0.6000 0.3250 0.3873
+> MASB Wild 0.4143 0.4250 0.4146
+> MASB MWild 0.5876 0.4000 0.4722
+> MASB Malicious Or Not 0.5673 0.6000 0.5636
+> MASB Probe 0.3633 0.4500 0.3859
+> MASB MSkills 0.7367 0.4000 0.4648
+> MASB RG 0.6393 0.5750 0.7867
+> MASW Inj 0.3612 0.4000 0.3699
+> MASW Scan 0.6000 0.3250 0.3873
+> MASW Wild 0.4143 0.4250 0.4146
+> MASW MWild 0.5876 0.4000 0.4722
+> MASW Malicious Or Not 0.5673 0.6000 0.5636
+> MASW Probe 0.3633 0.4500 0.3859
+> MASW MSkills 0.7367 0.4000 0.4648
+> MASW RG 0.6393 0.5750 0.7427
+
+Table 1: RQ1: multi-benchmark comparison across existing skill detectors and RouteGuard .
+
+hides inside an instruction-like semantic channel. Table 2 reports the slice study on Skill-Inject .This table is the clearest quantitative support for the paper’s core argument. In the by-line slice, RouteGuard achieves the strongest F1, show-ing that the detector remains effective when the malicious instruction is localized as a structural edit. In the channel slice, the result is much sharper: RouteGuard reaches 0.8834 F1, substan-tially ahead of all baselines. This is precisely the slice where the malicious payload is hidden in 
+
+description , that is, in the part of the skill that already looks like legitimate guidance. The bet-ter the detector performs here, the more directly it validates the paper’s claim that internal signals are needed when the carrier itself is instruction-like. 
+
+5.5 RQ3: Do Both Internal Experts Matter? 
+
+Table 3 reports the component ablation. The ques-tion is simple: if the paper claims that attention and hidden states provide complementary evidence, do we actually need both? The answer is yes. Across all three slices, the fused detector outperforms both single-expert vari-ants. The pattern is also interpretable. The attention expert is competitive when the poisoning signal is strongly routing-visible; the representation expert becomes more valuable when the malicious instruc-tion is semantically blended into the carrier. The                                                                     
+
+> Slice Method Precision Recall F1
+> SI-BL Inj 0.3421 0.2889 0.3133
+> SI-BL Scan 0.0000 0.0000 0.0000
+> SI-BL Wild 0.6100 0.6222 0.6142
+> SI-BL MWild 0.0000 0.0000 0.0000
+> SI-BL Malicious Or Not 0.9333 0.1333 0.2267
+> SI-BL Probe 0.7283 0.6978 0.6921
+> SI-BL MSkills 0.7889 0.7333 0.7556
+> SI-BL RG 0.6077 0.7156 0.7945
+> SI-CH Inj 0.3871 0.2791 0.3243
+> SI-CH Scan 1.0000 0.0930 0.1702
+> SI-CH Wild 0.7204 0.3465 0.4599
+> SI-CH MWild 0.0000 0.0000 0.0000
+> SI-CH Malicious Or Not 0.4000 0.0326 0.0580
+> SI-CH Probe 0.7967 0.2744 0.4080
+> SI-CH MSkills 0.1857 0.0605 0.0765
+> SI-CH RG 0.9334 0.6442 0.8834
+
+Table 2: RQ2: slice analysis on Skill-Inject . The 
+
+channel slice is the most direct test of the instruction-like carrier hypothesis.                                         
+
+> Slice Variant Precision Recall F1
+> SI Attn 0.7997 0.4158 0.5467
+> SI Repr 0.6576 0.3370 0.4441
+> SI RG 0.8019 0.4218 0.7528
+> SI-BL Attn 0.7117 0.4844 0.5742
+> SI-BL Repr 0.6369 0.6578 0.6457
+> SI-BL RG 0.6077 0.7156 0.7945
+> SI-CH Attn 0.9329 0.6465 0.7637
+> SI-CH Repr 0.9456 0.6302 0.7557
+> SI-CH RG 0.9334 0.6442 0.8834
+
+Table 3: RQ3: ablation of the two internal experts. 
+
+full detector wins because the problem is not uni-form. Skill poisoning is a mixed mechanism prob-lem, and the detector must be able to absorb both routing-level and representation-level evidence. 
+
+5.6 RQ4: Comparison with Traditional IPI Detectors on Real Malicious Skills 
+
+The next question is whether a skill-poison detec-tor is actually different from a traditional indirect prompt-injection detector when tested on real mali-cious skills. Table 4 answers this directly. The gap is large enough to support a substan-tive claim rather than a cosmetic one. Traditional IPI detectors remain useful baselines, but they are not sufficient for skill poisoning. Their assump-tions are tuned to data-like carriers. Once the car-rier itself becomes instruction-like, the problem changes from anomaly spotting to control com-petition. RouteGuard performs better because its features are designed around that competition. Method Precision Recall F1             
+
+> PArm 0.2400 0.2000 0.2120
+> ASen 0.3676 0.2250 0.2717
+> RENNERVATE 0.4776 0.5528 0.7017
+> RG 0.6393 0.5750 0.7867
+
+Table 4: RQ4: traditional IPI baselines versus 
+
+RouteGuard on MaliciousAgentSkillsBench .                                    
+
+> Method Precision Recall F1
+> Inj 0.3662 0.2407 0.2905
+> Scan 0.0000 0.0000 0.0000
+> Wild 0.6287 0.3685 0.4587
+> MWild 0.0000 0.0000 0.0000
+> Malicious Or Not 0.6517 0.3370 0.3643
+> Probe 0.6522 0.2926 0.3954
+> MSkills 0.6129 0.1759 0.2734
+> PArm 0.6918 0.3611 0.3974
+> ASen 0.6255 0.2093 0.3112
+> RENNERVATE 0.7016 0.8228 0.7815
+> RG 0.7501 0.9944 0.8537
+
+Table 5: RQ5: transfer from skill poisoning back to ordinary indirect prompt injection on BIPIA .
+
+5.7 RQ5: Transfer Back to Ordinary Indirect Prompt Injection 
+
+Finally, we test whether a detector motivated by skill poisoning still transfers back to ordinary in-direct prompt injection. Table 5 reports the BIPIA 
+
+results. This final result is important for scope. The pa-per does not argue that skill poisoning replaces or-dinary indirect prompt injection. It argues that skill poisoning is a special, harder, instruction-like case. The strong BIPIA transfer result shows that design-ing around internal control competition does not overfit the detector to skills alone. Instead, it yields a defense account that remains useful when the carrier shifts back toward classical indirect prompt injection. 
+
+6 Limitations 
+
+This study has four main limitations. First, the ex-periments are pre-execution detection studies rather than full live-agent prevention deployments. Sec-ond, the by-line and channel slices are controlled probes derived from Skill-Inject ; they isolate mechanism, but do not replace ecosystem-scale evaluation. Third, the revised submission frames the deployment setting around representative open-weight backbones, but a broader model sweep would still be valuable for measuring architecture-specific variance. Fourth, several comparison sys-tems are paper-faithful reproductions rather than exact reruns of original released pipelines. 
+
+7 Conclusion 
+
+This paper studies skill poisoning as malicious-instruction detection inside an instruction-like car-rier. The central question is not whether a skill contains suspicious text in the abstract, but whether an untrusted skill can hide instructions that redirect model reasoning and induce erroneous behavior while still looking like legitimate guidance. The evidence supports a coherent answer. Skill poison-ing is structurally different from ordinary indirect prompt injection because the benign carrier is al-ready instruction-like; successful attacks manifest as structured attention hijacking; and the resulting detection problem is better solved with internal signals than with text-only screening. 
+
+RouteGuard operationalizes this view through hierarchical chunking, multi-probe observation, and dual-expert fusion over attention and hidden-state signals. The revised experiment chapter shows that this design is not only mechanistically motivated but also empirically useful: it outper-forms existing skill detectors across heterogeneous skill benchmarks, remains strongest on the critical instruction-like slices, benefits from both internal experts, exceeds traditional IPI detectors on real malicious skills, and transfers back to ordinary in-direct prompt injection. Taken together, these re-sults support a submission-level claim suitable for top-tier venues: defending LLM agents against ma-licious skills requires treating the skill file as an instruction-bearing carrier and detecting the inter-nal control shifts it induces. 
+
+References 
+
+Zhihao Chen, Ying Zhang, Yi Liu, Gelei Deng, Yuekang Li, Yanjun Zhang, Jianting Ning, Leo Yu Zhang, Lei Ma, and Zhiqiang Li. 2026. Credential leakage in llm agent skills: A large-scale empirical study. arXiv preprint arXiv:2604.03070 .Edoardo Debenedetti, Jie Zhang, Mislav Balunovi´ c, Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr. 2024. Agentdojo: A dynamic environment to evaluate prompt injection attacks and defenses for llm agents. arXiv preprint arXiv:2406.13352 .Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, and Mario Fritz. 2023. Not what you’ve signed up for: Compromising real-world llm-integrated applications with indirect prompt injection. Kuo-Han Hung, Ching-Yun Ko, Ambrish Rawat, I-Hsin Chung, Winston H. Hsu, and Pin-Yu Chen. 2024. Attention tracker: Detecting prompt injection attacks in llms. arXiv preprint arXiv:2411.00348 .Yi Liu, Zhihao Chen, Yanjun Zhang, Gelei Deng, Yuekang Li, Jianting Ning, and Leo Yu Zhang. 2026a. Malicious agent skills in the wild: Alarge-scale security empirical study. arXiv preprint arXiv:2602.06547 .Yi Liu, Gelei Deng, Yuekang Li, Kailong Wang, Zihao Wang, Xiaofeng Wang, Tianwei Zhang, Yepang Liu, H. Wang, Yan Zheng, Leo Yu Zhang, and Yang Liu. 2023a. Prompt injection attack against llm-integrated applications. arXiv (Cornell University) .Yi Liu, Weizhe Wang, Ruitao Feng, Yao Zhang, Guangquan Xu, Gelei Deng, Yuekang Li, and Leo Zhang. 2026b. Agent skills in the wild: An empiri-cal study of security vulnerabilities at scale. arXiv preprint arXiv:2601.10338 .Yupei Liu, Yuqi Jia, Runpeng Geng, Jinyuan Jia, and Neil Zhenqiang Gong. 2023b. Formalizing and benchmarking prompt injection attacks and defenses. 
+
+arXiv preprint arXiv:2310.12815 .protectskills. 2026. Do Not Mention This to the User: Detecting and understanding malicious agent skills. GitHub repository. David Schmotz, Luca Beurer-Kellner, Sahar Abdelnabi, and Maksym Andriushchenko. 2026. Skill-inject: Measuring agent vulnerability to skill file attacks. 
+
+arXiv preprint arXiv:2602.20156 .Tianneng Shi, Kaijie Zhu, Zhun Wang, Yuqi Jia, Will Cai, Weida Liang, Haonan Wang, Hend Alzahrani, Joshua Lu, Kenji Kawaguchi, Basel Alomair, Xuan-dong Zhao, William Yang Wang, Neil Gong, Wenbo Guo, and Dawn Song. 2025. Promptarmor: Sim-ple yet effective prompt injection defenses. arXiv preprint arXiv:2507.15219 .Tongyu Wen, Chenglong Wang, Xiyuan Yang, Haoyu Tang, Weiran Yao, Jiacheng Wang, Ruoxi Jia, and Ruiyi Zhang. 2025. Defending against indirect prompt injection by instruction detection. In Find-ings of the Association for Computational Linguistics: ACL 2025 , pages 18714–18735. Qiusi Zhan, Zhixiang Liang, Zifan Ying, and Daniel Kang. 2024. Injecagent: Benchmarking indirect prompt injections in tool-integrated large language model agents. Jiayi Zhong, Yifan Zhang, Yanyu Fan, Jiawei Gu, Haoyu Wang, and Junjie Hu. 2025. Attention is all you need to defend against indirect prompt injection attacks in llms. arXiv preprint arXiv:2512.08417 .A Additional Experimental Setup                             
+
+> Benchmark Type Source Carrier / construction Role in this paper
+> SI Synthetic (Schmotz et al., 2026) Paired benign and poisoned skill files built from SKILL.md -style artifacts Primary cross-benchmark comparison for skill-poison detection
+> SI-BL Synthetic slice Derived from
+> Skill-Inject
+> Controls the relative line position of the malicious instruction inside the skill file Tests whether earlier injections are eas-ier to hijack and easier to detect
+> SI-CH Synthetic slice Derived from
+> Skill-Inject
+> Compares description -channel poi-soning with direct skill_line edits Tests the core instruction-like carrier hypothesis
+> MASB Real (protectskills, 2026) Real malicious and benign agent skills collected from public repositories Realism check and direct comparison with traditional IPI detectors
+> MASW Real (Liu et al., 2026a,b) Empirical wild-skill corpus built from real agent ecosystems Ecosystem-level generalization be-yond controlled injected attacks
+> BIPIA Ordinary IPI (Liu et al., 2023a,b) Indirect prompt injection in data-like external carriers rather than reusable skills Transfer test back to ordinary indirect prompt injection
+
+Table A1: Benchmarks used in the revised experiment chapter. We intentionally separate controlled skill slices from real malicious-skill corpora and ordinary indirect prompt injection.                
+
+> Family Methods What they represent Rule-oriented skill screen-ing
+> Skill-Inject ,SkillScan ,Malicious Or Not
+> Surface or signature-driven detection that is strongest when malicious content appears as a visible anomaly Skill-focused semantic /hybrid screening
+> Agent Skills in the Wild ,Malicious Agent Skills in the Wild ,SkillProbe ,
+> MalSkills
+> Detectors that reason over broader skill semantics, repository evidence, or hybrid features Traditional indirect prompt-injection detectors
+> PromptArmor ,AlignSentinel ,
+> RENNERVATE
+> Strong generic IPI defenses, including prompt-level filtering and attention-based token-level detection, that were not designed specifically for instruction-like skill carriers Internal-signal ablations Only-Attention ,Only-Representation Our component ablations for isolating the contribution of each expert Ours RouteGuard Frozen-backbone attention + hidden-state detection tailored to instruction-like carriers
+
+Table A2: Comparison systems used throughout the experiment chapter. The grouping follows the threat model discussed in the introduction rather than the order of prior papers. 
+
+B Additional Motivation Evidence 
+
+The main text keeps only the sharpest motivation conclusions. This appendix restores the quantitative and qualitative details behind those claims, including directional routing shifts, position/channel effects, bucketed attack-success trends, and representative attack outputs. 
+
+A.1 Detailed boundary and directionality evidence. For the carrier contrast in Figure 1, benign 
+
+skillinject carriers contain 1.8868 instruction-cue words per 100 tokens, compared with only 0.5786 
+
+for benign BIPIA external contexts. On the subtle skillinject_channel regime, the lexical score gap is only 0.0156 , versus 0.0362 on BIPIA , and lexical attack miss rises to 0.9535 , versus 0.7917 on 
+
+BIPIA . In the white-box contrast, skill_like carriers attract more untrusted attention mass ( +0.0309 +- 0.0057 ), but exhibit lower top-chunk margin ( -0.0054 +- 0.0034 ) and higher entropy ( +0.9824 +- 0.0523 ). For the attention-directionality analysis, malicious-target share increases by +0.0014 ,trusted-context share decreases by -0.0013 , the malicious-to-trusted attention ratio rises by +0.0172 ,and trusted-to-target top-source switches increase by +0.0044 . These statistics support the main-text claim that skill poisoning is not clean anomaly insertion, but directional control competition inside an instruction-like carrier. 
+
+A.2 Detailed behavior evidence. Figure A2 reports that the correlation between relative injected-line position and paired delta AHS is -0.1349 +- 0.0789 ; the earliest by-line bucket ( 0–20% ) reaches 
+
+0.5753 +- 0.3191 , while the latest bucket ( 80–100% ) drops to 0.1211 +- 0.0532 . Channel effects are stronger still: description poisoning yields delta AHS 1.3075 +- 0.3566 , whereas direct skill_line 
+
+poisoning yields only 0.0253 +- 0.0909 . Under a strict output-level criterion, ASR rises across delta-AHS buckets from 0.2500 at q1 to 1.0000 at q5 , with intermediate values 0.4167 , 0.6667 , and 0.5833 .The trajectory is not perfectly monotonic, but the trend is clear: stronger hijacking is associated with a higher probability that the output is redirected toward the malicious objective. Figure A1: Why the detector must use internal signals and fusion. Different benchmark slices privilege different signal families, and the contextual slice most relevant to skill poisoning is exactly where lexical screening collapses while internal methods remain informative. 
+
+Figure A2: Aggregated attention-hijacking statistics. Earlier injected lines induce larger paired delta AHS, contextual 
+
+description poisoning induces much larger shifts than direct skill_line edits, and the lexical-versus-internal comparison shows that the strongest internal shifts need not coincide with the strongest surface cues. 
+
+Figure A3: Behavioral relevance of internal hijacking. ASR rises across delta-AHS buckets under a strict output-level criterion, and mean severity follows the same broad trend.
