@@ -1,0 +1,674 @@
+Title: Dynamic Adversarial Fine-Tuning Reorganizes Refusal Geometry
+
+URL Source: https://arxiv.org/pdf/2604.27019v1
+
+Published Time: Fri, 01 May 2026 00:04:30 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Dynamic Adversarial Fine-Tuning Reorganizes Refusal Geometry 
+
+Wenhao Lan 1 Shan Li 2 Junbin Yang 1 Haihua Shen 1 Yijun Yang 3
+
+> 1
+
+University of Chinese Academy of Sciences, Beijing, China 
+
+> 2
+
+Inner Mongolia University of Technology, Inner Mongolia, China 
+
+> 3
+
+Shandong University, Shandong, China   
+
+> Correspondence: Haihua Shen ( shenhh@ucas.ac.cn )| Yijun Yang ( yijunyang@sdu.edu.cn )
+
+Abstract 
+
+Safety-aligned language models must refuse harmful requests without collapsing into broad over-refusal, but the training-time mechanisms behind this tradeoff remain unclear. Prior work characterizes refusal directions and jailbreak robustness, yet does not explain how dynamic adversarial fine-tuning changes refusal carriers across training. We present a measurement-driven mechanism study, not a new defense, on one 7B backbone under supervised fine-tuning (SFT) and R2D2-style dynamic adversarial fine-tuning. Our protocol aligns fixed-source Harm-Bench, StrongREJECT, and XSTest with a five-anchor refusal-geometry suite and causal in-terventions. R2D2 drives fixed-source Harm-Bench ASR to 0.000 at steps 50 and 100, then partially reopens to 0.035 at step 250 and 0.250 at step 500; SFT remains less robust, with ASR between 0.505 and 0.588 at the same anchors. On XSTest, R2D2 any-refusal is 1.000 early, then falls to 0.664 and 0.228. Geometrically, R2D2 preserves a late-layer admissible carrier through step 100 before relocating to an early-layer carrier, while effective rank remains near 1.23–1.27. Causal interventions indicate low-dimensional but utility-coupled control. These results support a reorganization account rather than a drift-only account, with evidence limited to one backbone and fixed-source attacks. 
+
+1 Introduction 
+
+Robust refusal is a central safety problem for de-ployed language models because the same model must reject harmful requests without treating be-nign requests as unsafe. This tension becomes sharper under adversarial fine-tuning: training can make a model more resistant to jailbreaks, but a model that refuses too broadly may be unusable in benign settings. Conversely, apparent utility recov-ery may reopen harmful compliance. Understand-ing robust refusal therefore requires measuring both sides of the safety objective: attack resistance and benign utility. Existing evaluation and mechanism work pro-vide the pieces needed to study this tension, but they do not yet explain how those pieces change across training. HarmBench standardizes auto-mated red-teaming and robust-refusal evaluation and introduces R2D2-style dynamic adversarial fine-tuning (Mazeika et al., 2024). StrongREJECT evaluates whether model responses provide use-ful harmful information rather than merely bypass-ing surface refusal templates (Souly et al., 2024), while XSTest measures exaggerated safety by test-ing refusal on safe prompts that should be answered (Röttger et al., 2024). On the mechanism side, prior work has shown that refusal can be mediated by intervention-relevant directions in activation space (Arditi et al., 2024); COSMIC extends direction identification to output-agnostic settings (Siu et al., 2025); and recent geometry work argues that re-fusal may involve richer structures such as con-cept cones and representationally independent di-rections (Wollschläger et al., 2025). The current problem is that behavior-side ro-bustness and static refusal geometry are usually measured separately. A checkpoint may look ro-bust because it has entered an extreme over-refusal regime, not because it has learned a well-calibrated safety mechanism. Similarly, a refusal direction may move during fine-tuning without explaining why one checkpoint is robust, another is usable, and a third partially fails open. This makes dynamic adversarial fine-tuning a particularly useful setting: R2D2 changes the model while also changing the adversarial pressure applied during training. Existing work can evaluate jailbreak robustness, identify refusal-related directions, and motivate richer refusal geometry, but it does not explain how a dynamic adversarial training trajectory reorga-nizes refusal carriers while simultaneously chang-ing robustness and utility. A drift-only account is especially incomplete for our setting. If robustness were mainly explained by how far a refusal direc-1
+
+> arXiv:2604.27019v1 [cs.LG] 29 Apr 2026
+
+tion drifts, then larger geometric drift should corre-spond to stronger robustness. Our measurements show the opposite pattern for the SFT comparison: SFT exhibits larger principal-angle drift than R2D2 at matched anchors, yet remains substantially less robust under fixed-source HarmBench. This moti-vates a trajectory-level mechanism question rather than another static direction-finding study. This paper studies refusal geometry under fine-tuning on one Mistral-7B backbone under two regimes: standard supervised fine-tuning (SFT) and R2D2-style dynamic adversarial fine-tuning. The protocol aligns fixed-source HarmBench, Stron-gREJECT, and XSTest with a sparse five-anchor geometry suite, causal interventions, and a small direct benign-utility audit. Together these mea-surements track admissible carriers, local low-rank structure, drift, and causal effects across training. The evidence favors a carrier-reorganization ac-count. Behaviorally, R2D2 shows an early robust-but-over-refusing phase and a later partial recov-ery of benign utility that coincides with reopened attack success, whereas SFT remains less robust throughout. Internally, R2D2 preserves a strong late-layer admissible carrier through step 100 be-fore the best admissible carrier shifts earlier, while effective rank stays nearly constant. Late-stage interventions show that this carrier remains low-dimensional and causally powerful, but stronger control sharply increases over-refusal and degrades benign utility. 
+
+Contributions. This paper makes four scoped contributions. • A trajectory-level measurement proto-col for refusal geometry. We com-bine dense online monitoring, sparse five-anchor admissible-carrier analysis, fixed-source HarmBench, StrongREJECT, XSTest, causal interventions, and direct benign-utility annotations, linking training-time internal measurements to both jailbreak robustness and utility-facing behavior. • Evidence that R2D2 traces a robustness– utility frontier. R2D2 rapidly drives fixed-source HarmBench ASR to 0.000 at early anchors, but those checkpoints also exhibit maximal XSTest refusal and complete benign-utility collapse. Later checkpoints partially recover utility while partially reopening attack success, showing that robust refusal cannot be evaluated by attack success alone. • Evidence for geometry reorganization rather than drift-only movement or dimen-sional expansion. The best admissible R2D2 carrier remains late-layer through step 100 and relocates to an early layer by step 250, while effective rank remains near 1.24. SFT drifts more but remains less robust, so raw drift magnitude does not explain the observed behavior. • Causal evidence for low-dimensional but utility-coupled control. Single-direction and top-3 subspace interventions at late R2D2 checkpoints can sharply reduce fixed-source attack success, but stronger interventions in-crease over-refusal and damage benign util-ity, supporting utility-coupled causal carriers rather than independent refusal pathways or fail-closed redundancy. This study is intentionally scoped. It uses one 7B backbone, two training regimes, fixed-source HarmBench as the main attack-success line, regime-native geometry libraries, and a small direct benign-utility audit. We do not claim generality across model families, adaptive black-box attack suites, or all alignment methods. We also do not claim that R2D2 creates independent refusal path-ways or fail-closed redundancy. The supported claim is narrower: under this fixed protocol, dy-namic adversarial fine-tuning reorganizes admissi-ble refusal carriers along a robustness–utility fron-tier, and this reorganization explains the observed behavior better than a drift-only account. 
+
+2 Related Work 
+
+This section positions our work along four axes: be-havioral evaluation, activation-space refusal mech-anisms, richer refusal geometry, and safety change under fine-tuning. Across these axes, we use exist-ing benchmarks and mechanism tools as measure-ment infrastructure. We do not propose a new de-fense, and we do not treat R2D2, COSMIC, Harm-Bench, StrongREJECT, or XSTest as contributions of this paper. 
+
+2.1 Robust refusal and jailbreak evaluation 
+
+Robust-refusal evaluation has developed tools for separating harmful compliance, jailbreak success, 2and over-refusal. HarmBench provides a standard-ized framework for automated red teaming and robust-refusal evaluation, and introduces R2D2 as a dynamic adversarial fine-tuning procedure built around persistent adversarial test cases (Mazeika et al., 2024). StrongREJECT addresses a different evaluation failure mode: jailbreak attempts may appear successful while producing empty, vague, or non-useful harmful outputs, so it scores whether a response provides useful harmful information (Souly et al., 2024). XSTest targets the opposite side of the safety objective by measuring exagger-ated safety: refusal on safe prompts that a well-calibrated model should answer (Röttger et al., 2024). What these evaluations do not explain by them-selves is how a model’s internal refusal carriers change across training. A checkpoint can obtain low attack success by entering a broad over-refusal regime, and a later checkpoint can recover safe-prompt behavior while partially reopening attack success. Behavior-side benchmarks can reveal this frontier, but they do not identify whether the under-lying mechanism is direction drift, layer relocation, subspace reorganization, or utility-coupled causal control. We therefore use HarmBench, StrongREJECT, and XSTest as complementary external readouts rather than as contributions in themselves. Harm-Bench is our main fixed-source jailbreak robust-ness metric, StrongREJECT is a complemen-tary harmfulness-oriented robustness signal, and XSTest measures the over-refusal side of the robustness–utility frontier. 
+
+2.2 Refusal directions and activation-space mechanisms 
+
+Activation-space work has shown that refusal can be causally mediated by directions in the resid-ual stream. A central result in this line is that ablating a refusal direction can suppress refusal on harmful instructions, while adding the same direction can induce refusal on harmless inputs (Arditi et al., 2024). This establishes refusal direc-tions as intervention-relevant objects rather than merely descriptive probes. COSMIC extends di-rection identification by selecting directions and target layers using cosine-similarity objectives that do not depend on predefined refusal templates or output-token heuristics (Siu et al., 2025). What remains missing is a training-trajectory account of how these activation-space carriers evolve under different fine-tuning regimes. Single-direction analyses and output-agnostic selection methods can identify useful intervention directions at a checkpoint, but they do not by themselves ex-plain why one training trajectory becomes robust but unusable, why another remains less robust, or why a later checkpoint recovers utility while par-tially failing open. They also do not determine whether raw directional drift is the right behavioral explanation. Our work uses refusal directions as candidate causal carriers, but changes the question from di-rection identification to trajectory-level mechanism analysis. We ask how admissible carriers move, remain intervention-safe, and couple to behavior across SFT and R2D2 checkpoints. 
+
+2.3 Beyond one direction: refusal geometry, subspaces, and cones 
+
+Recent mechanism work has challenged a strictly one-direction view of refusal. Concept-cone and representational-independence analyses argue that refusal may involve multiple directions or struc-tured regions of activation space, and that orthogo-nality alone is not sufficient to establish mechanis-tic independence under intervention (Wollschläger et al., 2025). This line motivates studying sub-spaces, local rank, carrier admissibility, and causal interactions rather than only tracking a single vec-tor. However, richer geometric language does not automatically imply that a given training run cre-ates independent refusal pathways or fail-closed redundancy. We use this line of work as motivation for measuring subspaces, local rank, and carrier admissibility. Under our protocol, the supported claim remains low-dimensional carrier reorganiza-tion rather than dimensional expansion into inde-pendent fail-closed pathways. 
+
+2.4 Safety change under fine-tuning and adversarial fine-tuning 
+
+Fine-tuning can change refusal behavior, and recent work has begun to connect such changes to internal geometry. Projection-constraint work on refusal-direction anchoring studies tuning-time drift and proposes stabilizing the refusal direction during instruction fine-tuning (Du et al., 2025). ReFAT studies refusal features as adversarially relevant in-ternal objects and uses refusal-feature ablation as a proxy for robust safety training (Yu et al., 2025). R2D2 differs from ordinary SFT because the train-3ing loop is coupled to a dynamic adversary: adver-sarial test cases are maintained and updated during training rather than remaining a fixed supervised corpus (Mazeika et al., 2024). These works motivate our setting, but they leave open the trajectory question we study here. Drift-stabilization work makes drift an important base-line, and refusal-feature adversarial training shows that refusal features can serve as training-time con-trol objects. We therefore compare ordinary SFT with R2D2 as a training-trajectory measurement setting, asking how refusal geometry changes and how those changes align with robustness, over-refusal, and causal controllability. 
+
+3 Method and Experimental Setup 
+
+This section defines the estimand, training setup, measurement protocol, and safety scope used in the paper. The goal is to compare behavior across SFT and R2D2 under shared external evaluations, while interpreting internal geometry primarily as a within-regime trajectory measurement. We there-fore separate three objects throughout the section: external behavior under fixed evaluations, admissi-ble refusal carriers under regime-native geometry libraries, and causal effects of interventions on se-lected carriers. 
+
+3.1 Models and Training Regimes Backbone and data. All experiments use a sin-gle Mistral-7B-v0.1 backbone (Jiang et al., 2023). We intentionally hold the backbone fixed so that the main comparison isolates training regime rather than model-family variation. Both training regimes use LoRA adapters and local UltraChat-200k train/test splits for the supervised component. We do not treat this setup as a claim about all model families or all alignment methods. 
+
+SFT regime. The supervised fine-tuning base-line is a standard LoRA SFT run on the aligned instruction data. The recipe uses LoRA rank 64, LoRA alpha 16, dropout 0.1, and target mod-ules q_proj , k_proj , v_proj , and o_proj . The learning rate is 2 × 10 −5, the scheduler is cosine, the optimizer is adamw_torch , warmup is absent (warmup_ratio =0 and warmup_steps =0), the per-device train batch size is 1, gradient accumulation is 16, the maximum sequence length is 2048, the maximum horizon is 500 steps, the seed is 42, bf16 precision is enabled, and gradient checkpointing uses non-reentrant mode. The SFT run saves check-points every 5 steps, with save_strategy=steps 
+
+and save_steps =5. 
+
+R2D2 regime. The adversarial fine-tuning regime follows the R2D2-style dynamic adversar-ial loop introduced with HarmBench (Mazeika et al., 2024). Unlike SFT, R2D2 maintains a persis-tent pool of adversarial test cases. At each update, the loop selects a subset of the pool, updates their suffixes with GCG, and trains the model with a combination of clean SFT loss, an away loss that reduces probability on harmful target completions, and a toward loss that encourages a fixed refusal target. The R2D2 configuration uses 180 single-behavior test cases, updates 8 test cases per training step, performs 5 GCG steps per selected case, uses GCG search width 512, and resets 20% of the pool every 50 steps. The maximum training horizon is 500 steps. The optimization settings match the SFT LoRA recipe unless otherwise noted: rank 64, alpha 16, dropout 0.1, target modules 
+
+q_proj , k_proj , v_proj , and o_proj , learning rate 2 × 10 −5, cosine scheduling, adamw_torch 
+
+optimization, zero warmup (warmup_ratio =0 and warmup_steps =0), per-device train batch size 1, gradient accumulation 16, maximum se-quence length 2048, seed 42, bf16 precision, and non-reentrant gradient checkpointing. The R2D2 run saves checkpoints every 5 optimizer steps from step 5 through step 500 through the custom adversarial trainer’s save_every path. 
+
+Distributed setup and compute. The final R2D2 run used a single-machine, four-process Deep-Speed ZeRO stage-2 recipe in bf16 mixed preci-sion. The final SFT run used a single-machine, one-process Accelerate recipe in bf16. The reported canonical artifact-producing budget is 245.49 GPU-hours for the final training, evaluation, geometry, causal-intervention, and benign-utility jobs. This includes 186.89 GPU-hours for the final R2D2 training run on four NVIDIA H100 80GB HBM3 GPUs and 2.18 GPU-hours for the final SFT run on one NVIDIA A800 GPU. We exclude can-celled/debug submissions, superseded reruns, and out-of-scope sparse-adaptive attack jobs from this headline total. 
+
+3.2 Measurement Protocol and Estimands Behavior estimand. The between-regime behav-ior estimand is checkpoint behavior under the same external evaluation protocol. For each anchor checkpoint, we evaluate SFT and R2D2 on fixed-4Setting SFT R2D2 Backbone Mistral-7B-v0.1 Mistral-7B-v0.1 Adapter LoRA r = 64 , α = 16 , dropout 0.1 same Target modules q/k/v/o projections same Supervised data local UltraChat-200k train/test splits same supervised component Adversarial data none persistent HarmBench-derived test-case pool Learning rate 2 × 10 −5 2 × 10 −5                                  
+
+> Scheduler cosine cosine Optimizer adamw_torch adamw_torch
+> Warmup warmup_ratio =0; warmup_steps =0 warmup_ratio =0; warmup_steps =0 Batching per-device batch 1; grad accumulation 16 per-device batch 1; grad accumulation 16; plus adversarial away/toward examples Precision bf16 bf16 Max sequence length 2048 2048 Training horizon 500 steps 500 steps Seed 42 42 Save cadence save_strategy=steps ;save_steps =5 every 5optimizer steps via custom
+> save_every path R2D2 GCG settings n/a N= 180 ,n= 8 ,m= 5 , width 512, reset 20% every 50 steps
+
+Table 1: Training settings for the SFT and R2D2 runs. 
+
+source HarmBench GCG attack success, StrongRE-JECT harmfulness-oriented scores, XSTest refusal on safe prompts, and a small direct benign-utility audit. Because the external evaluation inputs and scoring procedures are shared, behavior results can be compared directly across SFT and R2D2. 
+
+Geometry estimand. The geometry estimand is the trajectory of admissible refusal carriers within each regime. A carrier is admissible if it is se-lected from the regime’s fixed candidate library and passes the KL side-effect constraint defined below. The SFT and R2D2 geometry libraries are regime-native and frozen after construction. They are not identical instruments, and the associated reference checkpoints also differ. Consequently, we use geometry to make within-regime trajectory claims and cross-regime trend comparisons, but we do not interpret absolute geometry scores from SFT and R2D2 as measurements on a single shared scale. 
+
+Dense trajectory monitoring. For high-cadence trajectory monitoring, we use a lightweight COSMIC-style difference-in-means probe over fixed harmful and harmless probe sets. The fi-nal dense probe configuration uses 180 harmful and 180 harmless train examples for direction construction, 100 harmful and 100 harmless val-idation examples for selection, candidate posi-tions {− 5, −4, −3, −2, −1}, five candidate lay-ers per regime-native library, KL threshold 0.10, activation-addition coefficient 1.0, and batch size 8. The dense monitor logs selected position/layer, direction norm, projection gap, cosine-to-anchor, cosine-to-previous direction, and mini-selection statistics. These dense traces are used as trajectory diagnostics, not as the sole mechanistic evidence. 
+
+Sparse five-anchor geometry suite. For mech-anistic evidence, we run a heavier geometry suite at five anchors: reference, step 50, step 100, step 250, and step 500. The R2D2 reference is the earliest aligned checkpoint, step 30. The SFT ref-erence is checkpoint 5. At each anchor, the suite computes full admissible-candidate rankings, lo-cal SVD summaries, effective rank, participation ratio, cone-proxy summaries, and principal angles relative to the regime-specific reference. These five anchors align with the main behavior evaluations. 
+
+3.3 Geometry Metrics Candidate directions. For each checkpoint, layer ℓ, and post-instruction position p, we com-pute a candidate direction as the mean-difference residual-stream vector in Eq. (1): 
+
+rp,ℓ = Ex∈D harm hp,ℓ (x) − Ex∈D safe hp,ℓ (x). (1) The harmful and safe probe sets are fixed across checkpoints within a regime. This prevents data-distribution changes from being mistaken for rep-resentation changes. 
+
+Admissible carrier and score. For each candi-date rp,ℓ , we compute two intervention-side scores. The refusal-side score Srefuse measures whether adding the candidate direction to safe prompts moves their evaluation representation toward the 5harmful/refusal-side baseline. The comply-side score Scomply measures whether ablating the can-didate direction on harmful prompts moves their evaluation representation toward the safe/comply-side baseline. We also compute a KL side-effect term on safe prompts by comparing the baseline next-token distribution with the distribution after candidate ablation. A candidate is admissible if this KL value is finite and at most 0.10. The total score is defined in Eq. (2): 
+
+Stotal (p, ℓ ) = Srefuse (p, ℓ ) + Scomply (p, ℓ )
+
+− βKL KL( p, ℓ ), (2) with βKL = 1 .0. The best admissible carrier is the admissible candidate with the largest Stotal in Eq. (2) . We report its position, layer, KL, refusal-side score, comply-side score, and total score. This carrier is an intervention-safe measurement object, not a claim that the entire refusal mechanism is one vector. 
+
+Layer and position. The position coordinate records the post-instruction token offset used to construct the carrier. The layer coordinate records the transformer block at which the carrier is se-lected and intervened on. We interpret layer move-ment as relocation of the best admissible carrier un-der the fixed library and KL constraint, not as proof that all refusal evidence disappears from other lay-ers. 
+
+Local SVD and effective dimension. At each anchor, we flatten the local mean-difference field across the candidate positions and layers into a matrix R. We compute the singular values of R,define normalized energy qi = σ2 
+
+> i
+
+/ P 
+
+> j
+
+σ2 
+
+> j
+
+, and re-port k90 , k95 , top-k explained energy, and effective rank in Eq. (3), 
+
+erank( R) = exp − X
+
+> i
+
+qi log( qi + ϵ)
+
+!
+
+, (3) and participation ratio in Eq. (4), 
+
+PR( R) = (P 
+
+> i
+
+σ2 
+
+> i
+
+)2
+
+P 
+
+> i
+
+σ4 
+
+> i
+
++ ϵ . (4) If the effective rank in Eq. (3) and the participation ratio in Eq. (4) remain near constant while the best admissible layer, position, and score change, we interpret the evidence as reorganization or carrier relocation rather than dimensional expansion. This is a diagnostic interpretation, not a theorem about the full model representation. 
+
+Principal angles. For each anchor, we compare the top-k local SVD subspace to the corresponding reference subspace using principal angles. These angles measure subspace rotation relative to the reference checkpoint. Principal-angle drift is there-fore a geometry diagnostic; it is not by itself a robustness metric. 
+
+3.4 Behavior Evaluations Fixed-source HarmBench GCG ASR. The main robustness metric is attack success rate on a fixed-source HarmBench GCG evaluation (Mazeika et al., 2024). “Fixed-source” means that the same generated attack cases are used across checkpoints. This makes checkpoint-to-checkpoint comparisons stable and supports the geometry– behavior alignment analysis. It does not estimate full adaptive robustness against a fresh attacker optimized separately for each checkpoint. 
+
+StrongREJECT. StrongREJECT provides acomplementary harmfulness-oriented evaluation (Souly et al., 2024). We use it to reduce reliance on a single HarmBench classifier signal and to test whether late checkpoints become more likely to provide useful harmful information. We report StrongREJECT as a behavior-side signal, not as an internal mechanism measurement. 
+
+XSTest. XSTest measures exaggerated safety on safe prompts that should be answered rather than re-fused (Röttger et al., 2024). We report full-refusal, partial-refusal, and any-refusal rates. XSTest is an over-refusal benchmark; it is not a general utility benchmark and should not be described as measur-ing broad helpfulness or task competence. 
+
+Direct benign-utility sanity set. Because non-refusal on XSTest does not guarantee useful out-put, we also annotate a small benign-utility san-ity set. The set contains 60 safe prompts from six buckets: everyday assistance, reasoning, writ-ing, extraction, coding, and XSTest-safe prompts. Each response receives a three-level score: 2 for clearly helpful and on-task output, 1 for partially helpful but incomplete output, and 0 for refusal, empty/degenerate output, clearly wrong output, or off-task behavior. We report strict utility (score 2), lenient utility (score at least 1), mean helpful-ness, refusal rate, and empty-or-nonsensical rate. This audit is a sanity check for the causal and XSTest results, not a replacement for broad general-capability evaluation. 63.5 Causal Interventions Anchors and baselines. We run causal interven-tions at steps 50, 250, and 500. For each interven-tion row, the corresponding no-intervention base-line is taken from the same checkpoint’s fixed-source HarmBench and XSTest evaluations. We report both post-intervention values and deltas rel-ative to the no-intervention baseline. 
+
+Single-direction intervention. The single-direction intervention uses the best admissible carrier selected by the five-anchor geometry suite at the same checkpoint. Let u ∈ Rd be the unit-norm carrier at layer ℓ. During generation, we register a forward pre-hook at layer ℓ and ablate the carrier from the residual stream as in Eq. (5): 
+
+hℓ ← hℓ − (h⊤ 
+
+> ℓ
+
+u)u. (5) Because Eq. (5) is a projection removal, the sign of u does not affect the ablation operator. 
+
+Top-3 subspace intervention. The top-3 inter-vention uses a three-dimensional basis from the local SVD at the selected layer. Specifically, we form a position-wise mean-difference matrix at the selected layer, take the top three right singular vec-tors, orthonormalize them into U ∈ Rd×3, and apply subspace ablation as in Eq. (6): 
+
+hℓ ← hℓ − U U ⊤hℓ. (6) The intervention is applied during generation through the same layer-level forward pre-hook. We report fixed-source GCG ASR and XSTest re-fusal after intervention, and pair these values with benign-utility annotations when available. 
+
+Interpretation. These interventions test whether the selected carrier or local subspace exerts causal control over refusal behavior under the fixed evalu-ation protocol. A successful intervention does not imply that the full refusal mechanism is exhausted by the selected basis. In particular, if an interven-tion reduces ASR while increasing XSTest refusal or reducing direct benign utility, we interpret the carrier as utility-coupled rather than fail-closed re-dundant. 
+
+3.6 Scope and Safety Fixed-source evaluation scope. The main attack-success results use fixed-source GCG rather than a full adaptive attack suite. This choice gives a stable measurement axis for trajectory analysis: the input-side attack distribution is held fixed while the model changes. The limitation is that fixed-source ASR is not an estimate of adaptive worst-case robustness. Sparse adaptive GCG and black-box attacks are therefore outside the main estimand and are reported as limitations and future-work stress tests unless completed under the same artifact standard. 
+
+Safety handling of harmful content. The paper reports aggregate attack-success metrics, bench-mark names, checkpoint identifiers, and geometry statistics. It does not print raw harmful prompts, transferable jailbreak strings, harmful completions, or optimized suffixes. Reproducibility is supported through sanitized configs, summary CSVs, figure-source tables, and analysis code. Artifacts that would lower misuse cost are withheld, redacted, or released only under controlled access. 
+
+Dual-use mitigation. This work analyzes jailbreak-relevant behavior and internal refusal carriers. Its safety value is in measuring robustness– utility tradeoffs and diagnosing over-refusal, but the same measurements could help attackers identify weak checkpoints or intervention-sensitive mechanisms. We therefore scope the release toward measurement and aggregate analysis rather than attack strings or misuse-enabling checkpoints. 
+
+4 Results 
+
+This section reports the evidence for the paper’s central claim: R2D2-style dynamic adversarial fine-tuning reorganizes refusal geometry along a robustness–utility frontier, rather than simply in-creasing refusal strength or expanding refusal di-mensionality. We first report behavior-side evi-dence, then geometry-side evidence, then a drift-only negative result, and finally causal interven-tions. 
+
+4.1 R2D2 Traces a Robustness–Utility Frontier 
+
+R2D2 follows a robustness–utility frontier rather than a monotonic safety-improvement trajectory. Table 2 summarizes the anchor-level behavior re-sults. Under fixed-source HarmBench GCG, R2D2 reaches ASR 0.000 at steps 50 and 100, then par-tially reopens to 0.035 at step 250 and 0.250 at step 500. SFT remains much less robust at the same anchors, with ASR 0.505 at step 50, 0.570 at step 100, 0.588 at step 250, and 0.578 at step 500. 7The trajectory means show the same separation: 0.114 for R2D2 and 0.579 for SFT. XSTest shows that early R2D2 robustness co-incides with extreme over-refusal. R2D2 has XSTest any-refusal 1.000 at the reference check-point, step 50, and step 100, then relaxes to 0.664 at step 250 and 0.228 at step 500. SFT follows a different profile: it never reaches the same fixed-source robustness, but it also avoids the early ex-treme over-refusal regime, with any-refusal 0.284 at the reference checkpoint, 0.064 at step 50, 0.080 at step 100, and 0.076 at steps 250 and 500. StrongREJECT provides a complementary harmfulness-oriented signal consistent with the same frontier. For R2D2, the mean score increases from 0.126 at the reference checkpoint to 0.264 at step 500, indicating that late checkpoints are less robust than the early plateau. For SFT, the score increases from 0.217 at the reference checkpoint to 0.465 at step 500, remaining worse than R2D2 at the reported anchors. Direct benign-utility annotations separate over-refusal reduction from genuine helpfulness. On the 60-prompt benign sanity set, the R2D2 reference and step 50 baselines have strict utility 0.000, le-nient utility 0.000, mean helpfulness 0.000, and refusal rate 1.000. By step 250, R2D2 recovers to strict utility 0.150, lenient utility 0.633, and mean helpfulness 0.783; by step 500, it reaches strict utility 0.250, lenient utility 0.867, and mean help-fulness 1.117. This recovery is real but threshold-sensitive: it is large under lenient utility and mean helpfulness, but still limited under the strict fully-helpful criterion. SFT remains healthier on benign utility for most non-strict views, reaching lenient utility 0.933 at step 50, 0.983 at step 250, and 1.000 at step 500. Taken together, these results support a frontier interpretation. Early R2D2 robustness is paired with complete benign-utility collapse and maximal XSTest refusal. Later R2D2 checkpoints recover some utility-facing behavior, but this movement coincides with partial fail-open behavior on fixed-source HarmBench and StrongREJECT. XSTest should therefore be interpreted as an over-refusal benchmark, not as a general utility benchmark. Figure 1 shows the same frontier visually: early R2D2 checkpoints sit at the robust-but-over-refusal extreme, while later checkpoints move toward lower over-refusal and higher harmfulness-oriented risk. Figure 2 isolates the benign-utility side of this movement and shows why the late recovery should be described as partial rather than complete. 
+
+4.2 Geometry Changes Reflect Reorganization Rather than Dimensional Expansion 
+
+The geometry evidence shows carrier relocation and admissibility shift, not high-dimensional ex-pansion. In the five-anchor geometry suite, the best admissible R2D2 carrier is late-layer through step 100: (pos = −4, layer = 24) at the reference checkpoint, (pos = −4, layer = 23) at step 50, and (pos = −4, layer = 24) at step 100. By steps 250 and 500, the best admissible carrier relo-cates to (pos = −3, layer = 0) .The admissible score Stotal from Eq. (2) changes with the relocation. For R2D2, the best admissi-ble score is 1.91 at the reference checkpoint, 1.94 at step 50, 1.84 at step 100, 1.13 at step 250, and 1.07 at step 500. The refusal-side component drops more sharply, from approximately 0.97 at early an-chors to approximately 0.20 at late anchors. This indicates that the best KL-admissible carrier re-mains strong through the early robust plateau, then shifts to a weaker early-layer carrier in the late partially fail-open regime. SFT reaches the early-layer admissible regime earlier. Its reference anchor begins at (pos =
+
+−4, layer = 24) , but by step 50 the best admissible carrier is already (pos = −3, layer = 0) , where it remains through steps 100, 250, and 500. This tem-poral contrast is the central geometry comparison: R2D2 preserves a high-scoring late-layer admissi-ble carrier longer than SFT, while SFT relocates earlier and remains substantially less robust. The rank summaries do not support adimensional-expansion account. Effective rank as defined in Eq. (3) remains around 1.23–1.27 across anchors, participation ratio as defined in Eq. (4) changes little, and k90 and k95 remain 1. The supported description is therefore reorganization: the best admissible carrier changes layer, position, score, and refusal-side strength, while local intrin-sic dimension remains nearly constant. Figure 3 summarizes this pattern. The visual evidence is a layer/position relocation of the best admissible carrier, not a broad rise in local effective dimension. 
+
+4.3 Drift Magnitude Alone Does Not Explain Robustness 
+
+Principal-angle drift is not sufficient to explain fixed-source robustness. For R2D2, the top 8Anchor R2D2 HarmBench ASR SFT HarmBench ASR R2D2 XSTest any-refusal SFT XSTest any-refusal Reference – – 1.000 0.284 50 0.000 0.505 1.000 0.064 100 0.000 0.570 1.000 0.080 250 0.035 0.588 0.664 0.076 500 0.250 0.578 0.228 0.076 Mean ASR 0.114 0.579 – –
+
+Table 2: Behavior-side frontier across training anchors. R2D2 rapidly collapses fixed-source HarmBench ASR, but early robustness coincides with maximal XSTest over-refusal; later checkpoints reduce over-refusal while partially reopening attack success.                                                       
+
+> Regime Checkpoint Strict utility Lenient utility Mean helpfulness Refusal rate Empty rate R2D2 Reference 0.000 0.000 0.000 1.000 0.000 R2D2 Step 50 0.000 0.000 0.000 1.000 0.000 R2D2 Step 250 0.150 0.633 0.783 0.367 0.000 R2D2 Step 500 0.250 0.867 1.117 0.133 0.000 SFT Reference 0.050 0.750 0.800 0.200 0.100 SFT Step 50 0.233 0.933 1.167 0.017 0.050 SFT Step 250 0.283 0.983 1.267 0.000 0.000 SFT Step 500 0.217 1.000 1.217 0.000 0.000
+
+Table 3: Baseline benign-utility trajectory on the 60-prompt sanity set. Early R2D2 robustness coincides with complete benign-utility collapse, while late-stage recovery is real but mostly partial. 
+
+three principal angles relative to the reference checkpoint grow from (0 .38 ◦, 5.27 ◦, 18 .18 ◦) at step 50 to (0 .53 ◦, 7.31 ◦, 22 .68 ◦) at step 100, 
+
+(0 .90 ◦, 12 .76 ◦, 38 .99 ◦) at step 250, and 
+
+(1 .01 ◦, 14 .54 ◦, 42 .55 ◦) at step 500. SFT shows larger drift at the same an-chors but worse behavior. Its top three prin-cipal angles are (1 .17 ◦, 15 .59 ◦, 44 .79 ◦) at step 50, (1 .35 ◦, 18 .37 ◦, 48 .92 ◦) at step 100, 
+
+(1 .48 ◦, 20 .36 ◦, 52 .39 ◦) at step 250, and 
+
+(1 .50 ◦, 20 .58 ◦, 53 .31 ◦) at step 500. Yet SFT fixed-source HarmBench ASR remains between 0.505 and 0.588 at these anchors, whereas R2D2 reaches ASR 0.000 at steps 50 and 100 and remains lower at steps 250 and 500. This negative result rules out the simplest drift-only account. Larger subspace rotation does not imply stronger refusal robustness. The behaviorally relevant change is not raw movement alone, but how the admissible carrier is reorganized, where it is located, and how it couples to refusal and benign behavior. 
+
+4.4 Causal Interventions Reveal Low-Dimensional but Utility-Coupled Carriers 
+
+Late-stage R2D2 behavior is controlled by a low-dimensional carrier, but that control is strongly utility-coupled. Table 4 reports the behavior-side intervention results. At step 250, R2D2 has base-line fixed-source GCG ASR 0.035 and XSTest any-refusal 0.664. The single-direction ablation in Eq. (5) reduces ASR to 0.0031 but raises XSTest any-refusal to 0.764. The top-3 subspace ablation in Eq. (6) reduces ASR to 0.0000 but raises XSTest any-refusal to 0.988. The same pattern is stronger at step 500. The R2D2 baseline has fixed-source GCG ASR 0.250 and XSTest any-refusal 0.228. The single-direction ablation in Eq. (5) reduces ASR to 0.0031 and raises XSTest any-refusal to 0.364. The top-3 sub-space ablation in Eq. (6) reduces ASR to 0.0000 and raises XSTest any-refusal to 0.968. These inter-ventions nearly eliminate fixed-source attack suc-cess, but they do so by moving the model back toward broad refusal. Benign-utility annotations confirm that the causal tradeoff is not merely an XSTest artifact. At step 250, R2D2 baseline strict utility is 0.150, le-nient utility is 0.633, and mean helpfulness is 0.783. The top-3 subspace intervention lowers these to 0.050, 0.250, and 0.300, while increasing benign refusal rate to 0.750. At step 500, R2D2 baseline strict utility is 0.250, lenient utility is 0.867, and mean helpfulness is 1.117. The top-3 subspace in-tervention lowers these to 0.033, 0.383, and 0.417, while increasing benign refusal rate to 0.617. SFT interventions are weaker and do not show the same utility collapse. At step 250, SFT base-line ASR is 0.5875; the single-direction ablation in Eq. (5) lowers it only to 0.5656, and the top-3 subspace ablation in Eq. (6) lowers it to 0.4531. At 9step 500, SFT baseline ASR is 0.5775; the single-direction ablation in Eq. (5) lowers it to 0.5656, and the top-3 subspace ablation in Eq. (6) lowers it to 0.4875. On the benign utility set, SFT step 500 top-3 remains comparatively healthy, with strict utility 0.300, lenient utility 0.967, mean helpfulness 1.267, refusal rate 0.000, and empty rate 0.033. These results do not support a fail-closed re-dundancy interpretation. A fail-closed redundancy claim would require evidence that multiple func-tionally independent carriers preserve robustness while maintaining benign utility. The observed pattern is different: a small intervention subspace has strong causal control, but stronger control dam-ages XSTest behavior and direct benign utility. The supported conclusion is low-dimensional, utility-coupled causal control. Figure 4 plots the same causal tradeoff, pairing the ASR/XSTest movement with matched direct utility degradation under the R2D2 interventions. 
+
+4.5 Step-50 Top-3 Is a Degenerate Non-Refusal Result 
+
+The step 50 top-3 intervention is resolved in the conservative direction: it removes XSTest refusal without restoring benign utility. At R2D2 step 50, the no-intervention baseline already has fixed-source GCG ASR 0.000 and XSTest any-refusal 1.000. The top-3 subspace ablation in Eq. (6) keeps fixed-source GCG ASR at 0.000 and reduces XSTest any-refusal to 0.000. This pattern initially looked like a possible utility-preserving correction: the model no longer refused safe XSTest prompts, and fixed-source at-tack success did not reopen. The direct benign-utility audit rejects that interpretation. For R2D2 step 50 top-3, strict utility, lenient utility, and mean helpfulness are all 0.000; refusal rate is 0.000; and empty-or-nonsensical rate is 1.000. The same fail-ure mode appears at the R2D2 reference top-3 in-tervention. The result is therefore informative but negative. XSTest non-refusal is not equivalent to helpfulness. At step 50, top-3 control removes the refusal sur-face form while collapsing benign behavior into degenerate non-refusal outputs. This is not a de-fense, not a utility-preserving correction, and not evidence for fail-closed redundancy. 
+
+5 Discussion 
+
+This section interprets the evidence and states what the paper changes about the refusal-geometry story. The main conclusion is that R2D2-style dynamic adversarial fine-tuning reorganizes an admissible refusal carrier along a robustness–utility frontier. This is a narrower but stronger claim than saying that the refusal direction simply drifts, expands into many independent directions, or becomes fail-closed redundant. 
+
+From a refusal direction to a training-time re-fusal carrier. The results shift the analysis from a static refusal-direction view to a training-time carrier view. Prior single-direction work shows that refusal can often be modulated by adding or removing a direction in activation space (Arditi et al., 2024), and output-agnostic methods such as COSMIC make such directions easier to identify without relying on surface refusal templates (Siu et al., 2025). Our results do not reject this view; they refine its scope. In our setting, the key object is not only a direction at one checkpoint, but an admis-sible carrier whose layer, position, KL side effect, score, and causal coupling change across training. This distinction matters because a direction can remain geometrically salient while becoming less safe or less useful as an intervention target. 
+
+The evidence supports reorganization rather than a drift-only account. The strongest reason to avoid a drift-only story is the SFT comparison. SFT exhibits larger principal-angle drift than R2D2 at matched anchors, yet remains substantially less robust under the fixed-source HarmBench evalua-tion. If raw subspace rotation were the main ex-planation, larger drift should correspond more di-rectly to stronger robustness. Instead, the behavior aligns better with carrier relocation and admissibil-ity: R2D2 preserves a high-scoring late-layer ad-missible carrier through the early robust-but-over-refusal phase, then relocates the best admissible carrier to an early layer as the model partially recov-ers benign behavior and partially fails open. Drift is therefore a useful diagnostic, but not a sufficient explanation. 
+
+The evidence does not support strong fail-closed redundancy. The current results argue against a strong fail-closed redundancy interpretation. A fail-closed redundancy claim would require evi-dence that multiple functionally independent carri-ers preserve harmful-request refusal even when one 10 Regime Step Mode HarmBench ASR XSTest any-refusal R2D2 250 Baseline 0.0350 0.664 R2D2 250 Single direction 0.0031 0.764 R2D2 250 Top-3 subspace 0.0000 0.988 R2D2 500 Baseline 0.2500 0.228 R2D2 500 Single direction 0.0031 0.364 R2D2 500 Top-3 subspace 0.0000 0.968 SFT 250 Baseline 0.5875 0.076 SFT 250 Single direction 0.5656 0.060 SFT 250 Top-3 subspace 0.4531 0.080 SFT 500 Baseline 0.5775 0.076 SFT 500 Single direction 0.5656 0.072 SFT 500 Top-3 subspace 0.4875 0.100 
+
+Table 4: Behavior-side causal interventions. Late-stage R2D2 control is strong but utility-coupled: stronger interventions nearly eliminate fixed-source ASR while sharply increasing XSTest refusal. SFT interventions are weaker and do not create the same over-refusal shift.                                           
+
+> Anchor Mode Strict utility Lenient utility Mean helpfulness Refusal rate Empty rate 250 Baseline 0.150 0.633 0.783 0.367 0.000 250 Single direction 0.117 0.567 0.683 0.433 0.000 250 Top-3 subspace 0.050 0.250 0.300 0.750 0.000 500 Baseline 0.250 0.867 1.117 0.133 0.000 500 Single direction 0.167 0.717 0.883 0.267 0.017 500 Top-3 subspace 0.033 0.383 0.417 0.617 0.000
+
+Table 5: R2D2 late-stage intervention utility tracks on the 60-prompt benign set. Stronger causal control sharply reduces benign utility, confirming that the late-stage carrier is utility-coupled. 
+
+carrier is removed, and that this preservation does not destroy benign utility. The present evidence has the opposite shape. Effective rank and partic-ipation ratio from Eqs. (3) and (4) remain nearly constant across anchors, the best admissible car-rier remains low-dimensional, and late-stage R2D2 interventions restore fixed-source robustness by in-creasing over-refusal and reducing direct benign utility. This does not prove that independent re-fusal pathways are absent. It shows that the present protocol supports low-dimensional, utility-coupled control rather than redundant fail-closed control. 
+
+The robustness–utility frontier is a safety-training signal, not a defense claim. The R2D2 trajectory illustrates why safety training should be evaluated as a frontier rather than by attack suc-cess alone. Early R2D2 checkpoints are highly robust under the fixed-source HarmBench proto-col, but they also exhibit extreme over-refusal and complete benign-utility collapse under the direct sanity audit. Later checkpoints reduce over-refusal and recover some benign utility, but they partially reopen attack success. This pattern suggests that dynamic adversarial fine-tuning can move a model between different failure modes: robust but unus-able, more usable but less robust, or controllable but utility-coupled. The paper therefore uses R2D2 as a measurement setting for mechanism analysis, not as a proposed new defense. 
+
+The late-stage low-dimensional carrier is im-portant because it exposes a controllable bottle-neck. The late-stage R2D2 interventions defined by Eqs. (5) and (6) show that a small carrier can still exert strong causal control over harmful-request be-havior after the model has partially failed open. This is mechanistically important because it rules out the view that late-stage vulnerability is simply caused by the disappearance of refusal structure. The structure remains controllable, but stronger control pushes the model back toward broad refusal and damages benign utility. This makes the carrier a useful diagnostic target for future monitoring and training objectives, but not a deployment-ready in-tervention: a useful safety mechanism must control harmful compliance without collapsing benign be-havior. 
+
+The step-50 top-3 result resolves a key ambiguity in the conservative direction. The step-50 top-3 intervention in Eq. (6) initially appears to remove over-refusal without reopening fixed-source attack success. The direct benign-utility audit changes that interpretation. Removing XSTest refusal at this checkpoint does not restore helpful behavior; it produces degenerate non-refusal behavior. This re-sult is important because it separates three phenom-11 ena that are easy to conflate: refusal, non-refusal, and usefulness. XSTest non-refusal is not equiva-lent to benign utility, and a subspace intervention that removes refusal-like outputs is not necessarily a correction. The conservative conclusion is that early R2D2 over-refusal can be disrupted, but the disrupted model is not useful. 
+
+Overall interpretation. Taken together, the re-sults support a reorganization account of dynamic adversarial fine-tuning. R2D2 does not merely move farther along a single refusal axis, and the cur-rent evidence does not show dimensional expansion into independent fail-closed pathways. Instead, R2D2 changes which low-dimensional carrier is admissible and causally effective at different points in training. This carrier relocation explains the ob-served robustness–utility frontier better than drift magnitude alone, while the causal results show that the active carrier remains strongly utility-coupled. 
+
+Limitations 
+
+This section states the scope of the evidence with-out introducing new results. The paper supports a scoped mechanism claim about one fixed protocol, not a general theory of refusal geometry across all models, attacks, or alignment methods. 
+
+Single-backbone scope. All experiments use one 7B backbone and compare two fine-tuning regimes, SFT and R2D2-style dynamic adversarial fine-tuning. This design improves interpretability be-cause the backbone is held fixed, but it limits gen-erality. The results should not be read as evidence that all model families, sizes, tokenizers, or chat templates reorganize refusal geometry in the same way. 
+
+Training-regime and budget scope. Both regimes use LoRA fine-tuning under a fixed train-ing budget and limited seed coverage. This means that the observed trajectories may depend on adapter configuration, optimization details, check-point cadence, and random seed. The paper there-fore analyzes the recovered training trajectories rather than claiming that the reported frontier is the only possible outcome of SFT or R2D2. 
+
+Native geometry-library scope. The geometry measurements use regime-native frozen admissible libraries. This is appropriate for within-regime tra-jectory analysis, because each regime is measured consistently across its own checkpoints. However, SFT and R2D2 geometry values should not be in-terpreted as absolute measurements from a single shared instrument. Cross-regime claims about ge-ometry are therefore framed as trajectory and trend comparisons, while direct cross-regime compar-isons rely primarily on shared behavior evaluations. 
+
+Admissible-carrier scope. The best admissible carrier is selected under a KL side-effect constraint and a fixed candidate library. It is an intervention-safe measurement object, not a complete descrip-tion of all refusal-related structure in the model. A late-layer candidate can remain linearly discrimina-tive while failing the admissibility constraint, and an early-layer carrier becoming best admissible does not imply that all later-layer refusal evidence has disappeared. 
+
+Fixed-source attack scope. The main robustness line uses fixed-source HarmBench GCG evaluation. This choice is deliberate: it holds the attack dis-tribution fixed while the model changes, making it suitable for checkpoint-to-checkpoint trajectory analysis. The limitation is that fixed-source ASR is not an estimate of adaptive worst-case robust-ness. The paper therefore does not claim robust-ness against fully adaptive white-box, black-box, or multi-turn adversaries. 
+
+Incomplete adaptive and black-box coverage. 
+
+A full adaptive attack suite is not part of the main evidence. Sparse adaptive GCG and black-box at-tack evaluations would provide a stronger stress test of whether the observed frontier transfers be-yond the fixed-source setting. Their absence limits the security generality of the results, even though it does not invalidate the fixed-protocol mechanism claim. 
+
+Causal-intervention scope. Causal interventions are tested at a limited number of anchors and use selected single-direction and top-3 subspace opera-tors. These interventions establish that the selected carriers have measurable causal effects under the reported protocol. They do not show that the se-lected directions exhaust the refusal mechanism, nor do they establish that the same interventions would behave similarly under other decoding set-tings, prompts, attack families, or model architec-tures. 
+
+Benign-utility scope. The direct benign-utility audit is intentionally small and diagnostic. It is sufficient to distinguish XSTest non-refusal from 12 useful behavior in the reported intervention cases, including the step-50 top-3 conservative resolution. It is not a broad helpfulness, reasoning, coding, or instruction-following benchmark. Larger util-ity suites would be needed to characterize general capability preservation. 
+
+Metric and evaluator scope. HarmBench, Stron-gREJECT, XSTest, and the benign-utility audit measure different behavioral constructs. Harm-Bench fixed-source ASR measures a fixed jailbreak success protocol; StrongREJECT provides a com-plementary harmfulness-oriented signal; XSTest measures exaggerated safety on safe prompts; the benign audit measures small-scale usefulness. None of these metrics alone captures robust aligned behavior in full. 
+
+No claim of fail-closed redundancy. We do not interpret the current results as evidence for inde-pendent fail-closed pathways. Demonstrating such redundancy would require showing that harmful-request refusal persists when one carrier is removed without sacrificing benign utility. 
+
+Summary of scope. Our conclusions are there-fore limited to a single-backbone, fixed-source, regime-native protocol. Stronger generalization claims need additional backbones, seeds, training budgets, adaptive attacks, black-box attacks, and broader utility evaluations. 
+
+Ethical Considerations and Responsible NLP 
+
+This section describes the dual-use risks, mitigation choices, artifact-release boundaries, and Responsi-ble NLP checklist information associated with this work. The paper studies harmful-request evaluation and refusal interventions for defensive analysis, but the same measurements could be misused to iden-tify weak checkpoints or attack-sensitive internal mechanisms. 
+
+Dual-use risk. This work evaluates jailbreak ro-bustness and analyzes causal carriers of refusal. These topics are dual-use. A detailed account of which checkpoints fail, which interventions change refusal behavior, or which prompt distributions ex-pose weaknesses could help defenders diagnose safety failures, but it could also help attackers tar-get vulnerable model states or design stronger jail-breaks. The risk is especially salient for raw harm-ful prompts, optimized adversarial suffixes, harm-ful completions, and any artifact that directly low-ers the cost of reproducing attacks. 
+
+Mitigation through reporting choices. We mit-igate dual-use risk by reporting aggregate met-rics, sanitized configurations, and mechanism summaries rather than raw attack strings. The manuscript does not print raw harmful prompts, op-timized GCG suffixes, transferable exploit strings, harmful completions, or full adversarial test-case contents. When examples are needed for inter-pretability, they are sanitized, abstracted, or re-placed with non-harmful schematic descriptions. The main text frames the work as defensive mea-surement and avoids step-by-step instructions for constructing jailbreaks. 
+
+Artifact release plan. The intended release pri-oritizes reproducible analysis without releasing misuse-enabling content. The release package is scoped to sanitized plotting code, geometry-analysis code, aggregate evaluation scripts, figure-source tables, hyperparameter tables, benchmark version information, compute metadata, and sani-tized configuration files. It excludes raw harmful prompts, optimized suffixes, harmful model com-pletions, and non-redacted logs containing attack content. Trained adapters or checkpoints are not required to reproduce the aggregate claims in this paper; if released at all, they should be distributed only through a risk-managed access process, with aggregate metrics provided for open reproducibil-ity. 
+
+Data and benchmark use. The study uses estab-lished safety and utility-facing benchmarks to eval-uate harmful-request robustness and over-refusal. Harmful-content artifacts are handled as evaluation data rather than as content for public dissemination. The benchmark names, scoring protocols, and ag-gregate outcomes are reported for reproducibility, but harmful strings and completions are not repro-duced in the paper or appendix. Dataset licenses, access restrictions, and benchmark-specific release conditions are handled in the artifact documenta-tion rather than left implicit. 
+
+Benign-utility annotations. The benign-utility sanity set is used to distinguish non-refusal from useful behavior. The annotation task does not re-quire annotators to generate harmful content. The paper reports the rubric, prompt buckets, and scor-ing rules used for this audit. Any later external-annotator expansion would additionally require re-13 porting compensation, instructions, consent pro-cess, and whether institutional review was required. 
+
+Model and code release boundaries. Causal in-terventions are released as analysis tools rather than deployment recommendations. Because some in-terventions can sharply change refusal behavior, released code separates measurement scripts from misuse-enabling attack or intervention pipelines. Release documentation states that the intended use is safety analysis, auditing, and reproducibility. 
+
+AI writing and coding assistance disclosure. 
+
+Generative AI tools were used for writing assis-tance, editing, code drafting, and debugging sup-port during manuscript and artifact preparation. The authors are responsible for all scientific claims, experimental results, citations, code, and final wording. AI-assisted text and code are reviewed by the authors before submission. Generative AI tools do not qualify for authorship. 
+
+Responsible NLP checklist mapping. The Re-sponsible NLP checklist maps to the following sections: model size, backbone, LoRA configura-tion, optimizer settings, seeds, compute, and hard-ware in the experimental setup; benchmark and dataset provenance in the behavior-evaluation sec-tion; causal operator definitions in the intervention section; limitations in the standalone Limitations section; artifact-release choices in this section; and AI writing/coding assistance in the checklist and acknowledgements. Missing or intentionally with-held artifacts are justified by dual-use risk rather than left ambiguous. 
+
+Safety conclusion. The ethical aim of this work is to improve understanding of robustness–utility tradeoffs in refusal training. The release strategy should therefore make the defensive measurement results auditable while withholding details that would directly facilitate harmful use. This is consis-tent with the paper’s central claim: the contribution is a scoped mechanism and evaluation analysis, not a new attack recipe or deployable defense. 14 0 100 200 300 400 500 
+
+> Training step
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> HarmBench ASR
+
+A     
+
+> R2D2 SFT
+> Ref 50 100 250 500
+> Anchor checkpoint
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> XSTest any-refusal
+
+B    
+
+> Ref 50 100 250 500
+> Anchor checkpoint
+> 0.10
+> 0.15
+> 0.20
+> 0.25
+> 0.30
+> 0.35
+> 0.40
+> 0.45
+> 0.50
+> StrongREJECT mean score
+
+C
+
+Frontier Overview Figure 1: Trajectory-level behavioral overview. Panel A shows dense fixed-source HarmBench ASR across training with anchor checkpoints marked. Panel B shows anchor-level XSTest any-refusal. Panel C shows anchor-level StrongREJECT mean score. R2D2 traces a robustness–over-refusal frontier: early checkpoints are highly robust but maximally over-refusal-prone, while later checkpoints recover utility-facing behavior at the cost of partial fail-open behavior. 
+
+15 Ref 50 250 500 
+
+> Anchor checkpoint
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Utility rate
+
+A   
+
+> R2D2
+> SFT
+> strict
+> lenient
+> Ref 50 250 500
+> Anchor checkpoint
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> Mean helpfulness
+
+B   
+
+> Ref 50 250 500
+> Anchor checkpoint
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> Rate
+
+C
+
+Baseline Utility Trajectory Figure 2: Baseline benign-utility trajectories across anchors. Panel A plots strict and lenient utility. Panel B plots mean helpfulness. Panel C plots refusal and empty-or-nonsensical rates. Early R2D2 robustness coincides with complete benign-utility collapse, while late recovery is real but largely partial. 
+
+16 −4 −3 
+
+Best position 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> Best layer
+
+A
+
+> Ref
+> 50 100
+> 250
+> 500
+
+R2D2 
+
+−4 −3 
+
+Best position 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+> Best layer
+> Ref
+> 50
+> 100
+> 250
+> 500
+
+SFT 
+
+Ref 50 100 250 500 
+
+Anchor checkpoint 
+
+0.25 
+
+0.50 
+
+0.75 
+
+1.00 
+
+1.25 
+
+1.50 
+
+1.75 
+
+2.00 
+
+> Score
+
+B
+
+> R2D2
+> SFT
+> best_score
+> best_s_refuse
+
+Ref 50 100 250 500 
+
+Anchor checkpoint 
+
+1.075 
+
+1.100 
+
+1.125 
+
+1.150 
+
+1.175 
+
+1.200 
+
+1.225 
+
+1.250 
+
+1.275 
+
+> Rank statistic
+
+C
+
+> R2D2
+> SFT
+> effective_rank
+> participation_ratio
+
+Geometry Reorganization Figure 3: Geometry reorganization across anchor checkpoints. Panel A plots the best admissible carrier location in position/layer space for each regime. Panel B shows best admissible score and refusal-side score. Panel C shows effective rank and participation ratio. The dominant change is carrier relocation rather than dimensional expansion. 
+
+17 0.0 0.1 0.2 0.3 0.4 0.5 0.6 
+
+HarmBench ASR 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> XSTest any-refusal
+
+A
+
+R2D2 
+
+> Step 250
+> Step 500
+> Baseline
+> Single
+> Top-3
+
+0.0 0.1 0.2 0.3 0.4 0.5 0.6 
+
+HarmBench ASR 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> XSTest any-refusal
+
+SFT 
+
+> Step 250
+> Step 500
+> Baseline
+> Single
+> Top-3
+
+Baseline Single Top-3 Baseline Single Top-3 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+1.2 
+
+1.4 
+
+> Utility value
+
+B
+
+Step 250 Step 500 strict utility lenient utility mean helpfulness 
+
+Causal Tradeoff Figure 4: Causal tradeoff between robustness, over-refusal, and utility. Panel A compares baseline, single-direction, and top-3 interventions at steps 250 and 500 in HarmBench ASR vs XSTest space for both regimes. Panel B shows the matched R2D2 intervention utility tracks. Late-stage R2D2 control is strong but utility-coupled, whereas SFT control is much weaker. 
+
+18 A Compute Metadata and Reproducibility Note 
+
+The main text reports the canonical artifact-producing budget because it maps most directly to the final on-disk artifacts used in this manuscript. Table 6 breaks the canonical ledger and additional recovered spend down by result block. Additional recovered spend includes failed, cancelled, super-seded, and debugging jobs associated with the same fixed-protocol evidence chain, and excludes sparse adaptive GCG and black-box follow-up experi-ments. The common settings are LoRA rank 64, alpha 16, dropout 0.1 on the query/key/value/output pro-jections, learning rate 2 × 10 −5, cosine scheduling, gradient accumulation 16, per-device batch size 1, maximum sequence length 2048, maximum hori-zon 500 steps, seed 42, bf16 precision, and non-reentrant gradient checkpointing. The SFT recipe additionally uses local UltraChat-200k train/test splits and an every-5-step save cadence. The R2D2 loop uses five GCG search steps, search width 512, eight refreshed test cases per step, 180 single-behavior test cases, and resets every 50 steps. 
+
+B Supplementary Figures References 
+
+A. Arditi, O. Obeso, A. Syed, D. Paleka, N. Panickssery, W. Gurnee, and N. Nanda. 2024. Refusal in lan-guage models is mediated by a single direction. In 
+
+Advances in Neural Information Processing Systems 37 .Y. Du, F. Fan, S. Zhao, J. Cao, Q. Lin, K. He, T. Liu, B. Qin, and M. Feng. 2025. Anchoring refusal direc-tion: Mitigating safety risks in tuning via projection constraint. Preprint , arXiv:2509.06795. A. Q. Jiang, A. Sablayrolles, A. Mensch, C. Bamford, D. Singh Chaplot, D. de las Casas, F. Bressand, G. Lengyel, G. Lample, and L. Saulnier. 2023. Mis-tral 7B. Preprint , arXiv:2310.06825. M. Mazeika, L. Phan, X. Yin, A. Zou, Z. Wang, N. Mu, E. Sakhaee, N. Li, S. Basart, B. Li, D. Forsyth, and D. Hendrycks. 2024. Harmbench: A standardized evaluation framework for automated red teaming and robust refusal. Preprint , arXiv:2402.04249. P. Röttger, H. R. Kirk, B. Vidgen, G. Attanasio, F. Bianchi, and D. Hovy. 2024. XSTest: A test suite for identifying exaggerated safety behaviours in large language models. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics .V. Siu, N. Crispino, Z. Yu, S. Pan, Z. Wang, Y. Liu, D. Song, and C. Wang. 2025. COSMIC: Generalized refusal direction identification in LLM activations. In Findings of the Association for Computational Linguistics: ACL 2025 .A. Souly, Q. Lu, D. Bowen, T. Trinh, E. Hsieh, S. Pandey, P. Abbeel, J. Svegliato, S. Emmons, O. Watkins, and S. Toyer. 2024. A StrongREJECT for empty jailbreaks. Preprint , arXiv:2402.10260. T. Wollschläger, J. Elstner, S. Geisler, V. Cohen-Addad, S. Günnemann, and J. Gasteiger. 2025. The geometry of refusal in large language models: Concept cones and representational independence. In Proceedings of the 42nd International Conference on Machine Learning .L. Yu, V. Do, K. Hambardzumyan, and N. Cancedda. 2025. Robust LLM safeguarding via refusal feature adversarial training. In International Conference on Learning Representations .
+
+19 Block Canonical job(s) Canonical hard-ware Canonical GPU-hours Additional recovered spend Reviewer note SFT training 44779 1×A800 2.176 1.464 Stable canonical run. R2D2 training 31079 4×H100 186.893 96.551 Slurm FAILED only after the final checkpoint was saved; the failure occurred in a later probe-stage wrapper step. Fixed-source HarmBench 47246, 47757, 47817 2×A800 48.944 296.406 Prompt-library completion plus checkpoint sweeps. Anchor +causal/XSTest 49682, 49840, 51595, 53152 Mostly 1 ×A800 3.706 2.055 Includes superseded completed jobs and lightweight paper-stage retries. StrongREJECT 52649, 52680 1×A800 /2×H100 3.031 0.000 Canonical runs are reported separately; no additional spend is broken out here because the small paper-stage retry ledger is already included above. Benign utility 54845, 54960 2×A800 /1×A800 0.735 0.000 The April 17, 2026 annotation and summary refresh leaves a minor run-level provenance gap after the April 16, 2026 GPU jobs. Total — — 245.486 396.476 Canonical artifact-producing ledger plus additional recovered spend equals 641.962 GPU-hours across 69 recovered Slurm records. 
+
+Table 6: Compute metadata for the paper’s fixed-protocol main evidence chain. Canonical GPU-hours count the best-supported artifact-producing jobs that map to the final on-disk outputs used in this manuscript. Additional recovered spend counts failed, cancelled, superseded, and debugging jobs associated with the same evidence chain. 50 100 250 500 
+
+> Anchor checkpoint
+> 0
+> 10
+> 20
+> 30
+> 40
+> 50
+> Principal angle (deg)
+
+A       
+
+> R2D2
+> SFT
+> angle 1
+> angle 2
+> angle 3
+> 20 25 30 35 40 45 50 55
+> Largest top-3 principal angle (deg)
+> 0.0
+> 0.1
+> 0.2
+> 0.3
+> 0.4
+> 0.5
+> 0.6
+> HarmBench ASR
+
+B  
+
+> 50 100
+> 250
+> 500
+> 50
+> 100 250
+> 500 R2D2
+> SFT
+
+Drift vs Robustness 
+
+Figure 5: Appendix diagnostic on drift versus robustness. Panel A shows the top three principal angles relative to the regime-specific reference checkpoint. Panel B compares the largest principal angle against fixed-source HarmBench ASR. Larger drift does not imply greater robustness. Baseline Single Top-3 Baseline Single Top-3 
+
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> Utility value
+
+A        
+
+> Step 250 Step 500 strict utility lenient utility mean helpfulness
+> Baseline Single Top-3 Baseline Single Top-3
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> 1.4
+> Utility value
+
+B 
+
+> Step 250 Step 500 strict utility
+> lenient utility
+> mean helpfulness
+> R2D2
+> SFT
+
+SFT Intervention Utility 
+
+Figure 6: Appendix comparison of intervention-side utility. Panel A shows SFT intervention utility at steps 250 and 500. Panel B overlays matched R2D2 rows for the same metrics. SFT interventions remain substantially healthier than the corresponding late-stage R2D2 interventions. 
+
+20
