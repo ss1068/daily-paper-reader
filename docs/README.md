@@ -6,31 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-02
-- 运行时间：2026-05-02 20:19:35 UTC
+- 最新运行日期：2026-05-03
+- 运行时间：2026-05-03 19:37:12 UTC
 - 运行状态：成功
-- 本次总论文数：3
-- 精读区：1
+- 本次总论文数：2
+- 精读区：0
 - 速读区：2
 
 ### 今日简报（AI）
-今日深挖 AI 智能体安全防线，重点攻克结构化工作流中的行为偏差与隐私泄露难题。
-核心结论指出“行为防火墙”能有效约束智能体轨迹，同时需警惕推理侧隐私提取及硬件代码微调中的数据投毒风险。
-建议开发者在构建复杂 AI 工作流时，优先引入行为合规性校验并强化微调阶段的数据安全审查。
-- 详情：[/202605/02/README](/202605/02/README)
+今日聚焦 LLM 智能体的安全底座，深入探索了信息流追踪与可验证水印检测的前沿方案。
+重点关注如何重定义智能体内部的信息流向以防范潜在威胁，并利用 VOW 协议实现兼具隐蔽性与可验证性的版权保护。
+建议开发者关注大模型在自动化场景下的合规性与数据确权，构建更透明、可信的 AI 应用。
+- 详情：[/202605/03/README](/202605/03/README)
 
 ### 精读区论文标签
-1. [Enforcing Benign Trajectories: A Behavioral Firewall for Structured-Workflow AI Agents](/202605/02/2604.26274v1-enforcing-benign-trajectories-a-behavioral-firewall-for-structured-workflow-ai-agents)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：大语言模型智能体的行为防火墙以强制执行良性轨迹
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Spore: Efficient and Training-Free Privacy Extraction Attack on LLMs via Inference-Time Hybrid Probing](/202605/02/2604.23711v1-spore-efficient-and-training-free-privacy-extraction-attack-on-llms-via-inference-time-hybrid-probing)  
+1. [Ghost in the Agent: Redefining Information Flow Tracking for LLM Agents](/202605/03/2604.23374v1-ghost-in-the-agent-redefining-information-flow-tracking-for-llm-agents)  
    标签：评分：7.0/10、query:llm
-   evidence：针对LLM智能体内存的隐私提取攻击
-2. [SafeTune: Mitigating Data Poisoning in LLM Fine-Tuning for RTL Code Generation](/202605/02/2604.27238v1-safetune-mitigating-data-poisoning-in-llm-fine-tuning-for-rtl-code-generation)  
-   标签：评分：7.0/10、query:llm
-   evidence：缓解大语言模型微调中的数据投毒以增强安全性
+   evidence：大语言模型智能体的信息流跟踪安全
+2. [VOW: Verifiable and Oblivious Watermark Detection for Large Language Models](/202605/03/2604.27666v1-vow-verifiable-and-oblivious-watermark-detection-for-large-language-models)  
+   标签：评分：6.0/10、query:llm
+   evidence：大语言模型安全措施与机器生成文本溯源
 
 
 <div class="dpr-home-promo-card">
