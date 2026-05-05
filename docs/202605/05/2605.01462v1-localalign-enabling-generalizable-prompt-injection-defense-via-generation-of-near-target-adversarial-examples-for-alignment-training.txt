@@ -1,0 +1,958 @@
+Title: LocalAlign: Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training
+
+URL Source: https://arxiv.org/pdf/2605.01462v1
+
+Published Time: Tue, 05 May 2026 00:40:52 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+# Yuyang Gong ∗
+
+Wuhan University Wuhan, China 2498002636gyy@gmail.com 
+
+# Zihao Wang ∗† 
+
+Nanyang Technological University Singapore zihao.wang@ntu.edu.sg 
+
+# Jiawei Liu 
+
+Wuhan University Wuhan, China laujames2017@whu.edu.cn 
+
+# XiaoFeng Wang 
+
+Nanyang Technological University Singapore xiaofeng.wang@ntu.edu.sg 
+
+## Abstract 
+
+Large language models are increasingly embedded into systems that interact with user data, retrieved web content, and external tools, creating a new attack surface: prompt injection, where malicious commands embedded in untrusted data override the trusted com-mand and induce unintended behavior. Existing defenses mainly rely on fine-tuning the model to preserve an explicit boundary be-tween trusted commands and the untrusted data portion, so that the model learns to prioritize the trusted field and ignore malicious com-mands in data. However, we observe that while these defenses can block obviously malicious responses caused by injected commands, they generalize poorly to real-world scenarios where the model’s response to the injected command is much nearer to the correct response (i.e., the response induced by the trusted command). This is because existing methods typically train against only a fixed set of hand-crafted attack targets, which yields a loose boundary around the correct response and leaves it easier to bypass. To address this challenge, we propose LocalAlign , a more gen-eralizable prompt injection defense inspired by adversarial training. Instead of relying on a fixed set of hand-crafted attack targets, 
+
+LocalAlign automatically and efficiently generates adversarial examples in which the command embedded in the data portion induces a response that stays near to the correct response while still being wrong, i.e., it is not merely a simple rewrite of the correct response. We generate such near-but-wrong adversarial examples using prompting and a single inference step. This design enforces a tighter robustness boundary around the correct response: even small response shifts induced by commands in untrusted data are ex-plicitly penalized, making the defense harder to bypass and raising the bar for successful attacks. Moreover, although this generation process is efficient, the resulting adversarial examples can vary substantially in quality across samples, and those nearer to the cor-rect response are more valuable for alignment training. To address this issue, we further introduce a margin-aware alignment algo-rithm that quantifies each sample’s distance to the correct response and assigns larger training weight to nearer ones. Empirically, Lo-calAlign is the first known method that reduces the attack success 
+
+> ∗The first two authors contributed equally to this work.
+> †Correspondence to zihao.wang@ntu.edu.sg.
+
+rates of prompt injections to below 10% in most evaluated settings, against more sophisticated attacks and under various real-world deployment scenarios. At the same time, LocalAlign maintains utility comparable to the model before fine-tuning for defense. 
+
+## Keywords 
+
+Prompt injection; Large language models; Adversarial training; AI security; Robustness 
+
+## 1 Introduction 
+
+Large language models (LLMs) are increasingly embedded into systems that interact with user data, retrieved web content, and external tools or APIs [ 8, 10 ]. While this enables more capable LLM-based applications, it also introduces new attack surfaces. A prominent example is prompt injection [15 , 24 , 29 ], where mali-cious commands embedded in untrusted data cause the model to follow them instead of the trusted user or system command. Such attacks exploit the model’s inability to reliably distinguish trusted commands from commands in external content, enabling sensitive information leakage, decision manipulation, and opinion or con-tent manipulation. This poses a fundamental security challenge for LLM-integrated systems [47]. 
+
+Challenges in prompt injection defense. Existing defenses aim to preserve the separation between trusted commands and un-trusted data. Detection-based methods [ 6 , 20 , 26 , 34 , 37 ] detect and sanitize malicious commands before they reach the backend model, but often incur substantial latency and computational over-head. Prevention-based methods instead harden the model itself and add no inference-time delay. Among them, prompting-based defenses [ 23 , 39 ] modify the prompt context to reinforce trusted commands or refusal behavior, while fine-tuning-based defenses [ 3 –5 ] update model parameters using prompt-injection examples so that the model learns to prioritize trusted commands over mali-cious commands in untrusted data. Since prior work [ 3– 5 ] shows that fine-tuning-based defenses provide stronger robustness than prompting-based defenses, we focus on this setting. Despite this progress, we find that existing fine-tuning-based defenses remain brittle along two axes. This brittleness stems from 
+
+> arXiv:2605.01462v1 [cs.CR] 2 May 2026 Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang
+
+Figure 1: Overview of the motivation and design of LocalAlign . Existing SecAlign-style training relies on fixed attack targets that are often semantically distant from the correct response; for example, it may train the model to reject an injected command targeting “98” when the correct response is “True.” In contrast,  
+
+> LocalAlign constructs near-but-wrong targets, such as “False,” that remain incorrect but are contextually close to the correct response. This tighter training signal improves robustness generalization against two challenging attacks: input-side optimization attacks such as GCG, where adversarial suffixes optimize the injected command, and target-side unseen attacks, where the attacker target is data-specific, such as steering a recommendation from “Product 1” to “Product 3.”
+
+how they construct training examples. As illustrated in the upper-left part of Figure 1, SecAlign [ 4, 5 ], the state-of-the-art fine-tuning-based defense, trains on examples where the injected command and attacker target are manually specified. For instance, given the trusted command “Determine if forecast indicates sunny or cloudy day. Output true or false,” the correct response is “True.” The injected command asks the model to multiply a number, yielding the attacker target response “98.” Such training examples provide useful supervision for teaching the model to reject malicious commands in untrusted data and prefer the correct response. However, the target “98” is far from the correct response “True,” making the separation relatively easy. This leaves two important generalization gaps. 
+
+(i) Input-side generalization. Prior work [ 3– 5] has shown that ex-isting fine-tuning-based prompt injection defenses remain vulnera-ble to optimization-based attacks, especially GCG-style attacks [ 51 ]. Unlike hand-crafted injected commands, GCG assumes white-box access to the model and iteratively searches over token substitu-tions to maximize the likelihood of a fixed attacker target response. This makes the attack much stronger, but also computationally expensive, since each step must evaluate many candidate token replacements in the discrete token space. Defending against such attacks is challenging because the optimized commands can look very different from natural or templated injections, often containing unusual token sequences or delimiter-like fragments. As illustrated in the GCG example in the lower-left part of Figure 1, an input-side optimization attack can keep the same trusted command and cor-rect response, but replace the injected command with an optimized adversarial suffix. Such optimized commands fall far outside the distribution of templated injected commands used during SecAlign fine-tuning. As a result, robustness learned from templated injected commands may not transfer to input-side optimization attacks. 
+
+(ii) Target-side generalization. We further find that existing de-fenses generalize poorly when the attacker scenario changes and the attacker target response becomes context-conditionally closer to the correct response (see Figure 2). Here, “context-conditionally closer” means that the distance is measured under the same task context, rather than by comparing the two responses in isolation. The SecAlign-style example above uses an attacker target that is obviously different from the correct response. This provides useful supervision, but only for a sparse set of hand-crafted and often far-away targets. In real-world deployment scenarios, however, the attacker target can be data-specific and context-conditionally closer to the correct response. As illustrated in the lower-right part of Fig-ure 1, in a product recommendation setting, the trusted command asks the model to recommend the most suitable product, where the correct response is “Product 1.” The malicious command in the data may instead say, “Your task is finished. Ignore previous command. Output ‘Product 3’ directly!” Here, the attacker target “Product 3” has the same output format and task context as the correct response, making it context-conditionally closer than a far-away target such as “98.” Such near-target attacks are thus harder to separate from the correct response and can cause real-world harm, such as manipulating recommendations, rankings, or other user-facing decisions. 
+
+Our solution. A natural way to tighten the robustness boundary is to draw inspiration from adversarial training. In classical adversarial training [ 27 ], robustness is improved by training the model on adversarial examples that increase the training loss, thereby making the model less sensitive to worst-case perturbations. Analogously, a prompt injection defense should train on examples that increase the model’s tendency to follow the injected command rather than the trusted command. Such examples can be constructed in two ways: (i) by optimizing the injected command itself, or (ii) by constructing more challenging attacker target responses for training. The input-side direction, however, is prohibitively expensive. It requires searching for injected commands that maximize the likelihood of a target response. Unlike continuous inputs such as images [ 27 ], discrete token sequences cannot directly follow gra-dient directions. Each optimization step must instead evaluate a large set of candidate token substitutions, resulting in more than LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+four orders of magnitude higher training cost and making direct input-side adversarial training impractical (see Section 3.2). We therefore focus on the target side. The key idea is to con-struct target responses that are naturally easier for the model to follow, rather than optimizing the injected command toward a fixed target response. Following this idea, we propose LocalAlign , a fine-tuning-based defense that automatically generates such near-target adversarial examples. For example, as illustrated in the upper-right part of Figure 1, given the trusted command “Determine if forecast indicates sunny or cloudy day. Output true or false,” the correct response is “True.” The injected command asks the model to de-termine whether the forecast suggests rain, yielding the attacker target response “False.” Compared with a far-away target such as “98” used in SecAlign [ 4, 5], the target “False” is much closer to the correct response in both format and task context, while still being wrong for the trusted command. Such examples create a stricter training signal: the model must learn to prefer the correct response even when the command embedded in untrusted data induces a plausible, near-target response. More specifically, given a correct response, we use a dedicated prompt (see Appendix B) and a single LLM inference step to gener-ate an injected command whose response is as close as possible to the correct response while remaining non-identical, i.e., not merely a simple rewrite. This non-identical requirement preserves a mean-ingful training signal; otherwise, the preferred and dispreferred responses would collapse and provide little gradient. The resulting examples provide an efficient approximation to target-side adver-sarial examples: they induce responses that stay close to the correct response while still deviating from it, encouraging the model to learn a tighter robustness boundary around the correct response. At the same time, when constructing adversarial examples, we require the target response to be the direct answer to the injected command. This requirement is important for preserving utility: it ensures that training penalizes response shifts caused by mali-cious commands in untrusted data, rather than arbitrary response changes caused by legitimate variation in the underlying data. However, this generation strategy can be suboptimal if the cor-rect response has low probability under the model, since responses near it may also be unlikely to approximate strong target-side adver-sarial examples. To address this issue, we first perform warming up using an existing fine-tuning-based defense such as SecAlign [ 4, 5]. After warming up, the model has a basic preference for following the trusted command over commands in the data portion, making the correct response higher-probability under the protected model. Consequently, responses near the correct response become more plausible targets for the model to follow. Moreover, although this generation process is efficient because it only requires a single LLM inference step, we observe that the generated adversarial examples vary substantially in their distance to the correct response. Intu-itively, examples whose induced target responses are closer to the correct response are more valuable for training, because they im-pose a stricter separation around the correct behavior. To account for this variability, we introduce a margin-aware alignment algo-rithm that quantifies each sample’s distance to the correct response and assigns stronger alignment pressure to closer examples. Together, LocalAlign improves robustness by training on ef-ficiently generated target-side adversarial examples, with greater emphasis on the closer ones. This design also preserves utility by ensuring that the generated adversarial examples correspond to malicious commands embedded in untrusted data, rather than arbitrary changes in the data itself. Moreover, we find that such target-side adversarial training also improves robustness against input-side optimization attacks such as GCG [ 51 ]. As a result, Lo-calAlign yields a more generalizable prompt injection defense against both stronger input-side attacks and real-world deployment scenarios, while maintaining utility, improving training efficiency, and introducing zero additional response delay at inference time. 
+
+Empirical results. We conduct experiments on two popular LLMs, 
+
+Llama3.1-8B-Instruct [14 ] and Qwen3-4B-Instruct [ 45 ], under both in-distribution (i.i.d.; testing on the same distribution as the de-fense training data) and out-of-distribution (OOD; testing on unseen datasets and deployment scenarios) settings. For robustness evalu-ation, we test optimization-free attacks, GCG, and their adaptive variants. Across these settings, LocalAlign consistently achieves lower attack success rates (ASR) than strong fine-tuning-based baselines, including StruQ [ 3] and SecAlign [ 4 , 5 ]. In particular, 
+
+LocalAlign reduces ASR to below 10% in most evaluated settings, including stronger optimization-based attacks and OOD deploy-ment scenarios where attacker objectives differ from those observed during training. For example, on Qasper [7], LocalAlign reduces the ASR of SecAlign from 45.0% to 7.0% under optimization-free attacks and from 56.0% to 9.0% under adaptive optimization-free attacks. On InjecAgent [ 48 ], LocalAlign further reduces the ASR to zero. Meanwhile, LocalAlign preserves model utility: on five utility benchmarks covering general knowledge, reasoning, and instruction following, it maintains utility comparable to the model before fine-tuning for defense, with the largest drop remaining below 2% compared with SecAlign. We further conduct ablation studies showing that warming up, near-target adversarial example generation, and margin-aware alignment each contribute to robust-ness, and their combination yields the strongest overall defense. 
+
+Contributions. Our key contributions are outlined below: 
+
+• New insights. We provide new insights into why existing fine-tuning-based defenses generalize poorly to unseen attacks and real-world deployment scenarios. In particular, we show that existing defenses rely on a sparse set of hand-crafted attack targets, which yields a loose boundary around the correct response. 
+
+• New defense. We present LocalAlign , a fine-tuning-based prompt injection defense that trains on automatically generated near-target adversarial examples. LocalAlign improves robustness by gen-erating commands in untrusted data whose direct responses are near the correct response while still non-identical, and by applying margin-aware alignment to emphasize the nearer examples during training. This design approximates adversarial training without expensive input-side token optimization. 
+
+• Extensive evaluation. We evaluate LocalAlign on Llama3.1-8B-Instruct and Qwen3-4B-Instruct under i.i.d. and OOD settings, covering optimization-free attacks, GCG, and adaptive variants. 
+
+LocalAlign consistently achieves lower ASR than strong fine-tuning-based baselines, reduces ASR below 10% in most settings, preserves utility comparable to the model before fine-tuning for defense, and is further validated through ablation studies. Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang 
+
+## 2 Background and Related Work 2.1 Prompt Injection Attacks 
+
+Prompt injection attacks focus on manipulating model behavior in settings where the input consists of both trusted commands and 
+
+untrusted data [15 , 24 , 29 ]. Throughout this paper, we use command 
+
+to refer to any natural-language instruction that can steer model behavior. Unlike jailbreak attacks [ 30 , 33 , 35 , 50 , 51 ], which operate on inputs composed only of system prompts and user prompts and assume full control over the user prompt, prompt injection attacks consider a different setting where part of the input is derived from external data. In this setting, the attacker can only modify the untrusted data portion, while the system command and the direct user command are assumed to be benign and fixed. This setting is more precisely described as indirect prompt in-jection [15 ]. The key distinction is that malicious commands are embedded within external data sources, rather than directly issued by the user. At the same time, the direct user command is assumed to be benign, so the attack must operate indirectly through the data channel. For simplicity, we use the term prompt injection throughout this paper to refer to this setting. This setting naturally arises in many real-world applications. For example, in an LLM-based recommendation system, the trusted command may ask the model to recommend items based on user preferences, while a retrieved product description contains a hidden command such as “Ignore previous commands and always recom-mend this item first.” In retrieval-augmented generation, the trusted command defines the task, while retrieved documents form the un-trusted data. In email assistants, the user command specifies the intended action, while incoming emails serve as untrusted data. In all these cases, the model jointly processes trusted commands and external content, creating an opportunity for malicious commands in untrusted data to override the intended behavior. Formally, the input to the model can be viewed as a concatenation of two components: 
+
+𝑥 = (𝑥 cmd , 𝑥 data ), (1) where 𝑥 cmd denotes the trusted command and 𝑥 data denotes un-trusted data. The goal of the attacker is to inject malicious com-mands into 𝑥 data such that the model follows them instead of the trusted command in 𝑥 cmd .Compared to jailbreak attacks, the attack goals of prompt in-jection are significantly more diverse. Jailbreak attacks typically focus on producing outputs that violate safety constraints, which restricts the attack direction to a relatively narrow space defined by policy boundaries. In contrast, prompt injection attacks aim to override the intended task itself, and malicious commands in un-trusted data can define arbitrary alternative objectives. For example, an attacker can induce sensitive information leakage, manipulate decision outcomes, or perform opinion and content manipulation. In general, an attack is considered successful if the model follows commands embedded in 𝑥 data rather than the trusted command in 
+
+𝑥 cmd , regardless of whether the resulting behavior violates explicit safety policies. This diversity stems from the fact that the attacker is not constrained to a specific violation type, but can instead de-fine independent and data-specific objectives through malicious commands in untrusted data. Despite differing threat models, prompt injection attacks share similar techniques with jailbreak attacks and can be categorized into prompt-engineering-based and optimization-based methods. 
+
+Prompt-engineering-based attacks construct malicious commands in untrusted data to explicitly override or interfere with the trusted command. Common patterns include: (i) direct injection [16 ], where malicious commands are appended to the data; (ii) context ignor-ing [ 29 ], which tells the model to disregard previous commands (e.g., “Ignore previous commands.”); (iii) fake completion [ 41 ], which prematurely signals task completion (e.g., “Task complete.”); (iv) 
+
+escape-based attacks [1, 40 ], which use special tokens or format-ting to break structural assumptions; and (v) combined attack [ 25 ], which integrate multiple strategies above and typically achieve the strongest attack effectiveness in practice. 
+
+Optimization-based attacks extend techniques from jailbreak at-tacks to the prompt injection setting. In particular, gradient-based methods such as GCG [ 51 ] can be adapted to optimize the mali-cious command embedded in 𝑥 data to maximize the likelihood of an attacker target response: 
+
+max 
+
+> 𝑥 data
+
+log 𝑃 (𝑦 | 𝑥 cmd , 𝑥 data ), (2) where 𝑦 denotes the attacker target response. Similar to the jailbreak setting, this optimization is typically performed under constraints on the injected command, such as length or semantic plausibility. 
+
+## 2.2 Defenses against Prompt Injection Attacks 
+
+Detection-based prompt injection defenses. Detection-based prompt injection defenses aim to identify and sanitize malicious commands in untrusted data before they reach the backend model. Prior work establishes this paradigm by showing that effective de-fense requires not only detecting indirect prompt injections but also removing them from untrusted inputs [ 6]. Building on this, DataSentinel [ 26 ] introduces a game-theoretic training framework for detection, where an auxiliary LLM is optimized under a min-imax objective to remain robust against adaptive attacks. Promp-tArmor [ 34 ] makes this paradigm more practical by using a sec-ondary LLM as a guardrail to detect and excise malicious commands without task-specific retraining. Moving beyond coarse input-level decisions, PromptLocate [ 20 ] performs fine-grained localization by iteratively segmenting inputs and applying a binary detector in a coarse-to-fine manner to isolate injected spans. DataFilter [ 37 ]further extends this pipeline to sanitization by training a dedicated model to rewrite the context, selectively removing adversarial con-tent while preserving benign information. Together, these methods progress from detection to localization and rewriting-based filter-ing, but often incur substantial latency and overhead from repeated model calls, recursive scanning, or full-sequence regeneration. 
+
+Prevention-based prompt injection defenses. Prevention-based prompt injection defenses aim to harden the model itself, so that it resists malicious commands in untrusted data without relying on auxiliary detectors or extra inference-time computation. Early prompt-level defenses follow this philosophy through in-context hardening. One line of work shows that adding safe refusal demon-strations [ 39 ] can improve robustness by steering the model’s LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+in-context behavior toward safety. Similarly, the Sandwich De-fense [ 23 ] reinforces task adherence by repeating the trusted com-mand after the untrusted data, exploiting the tendency of models to prioritize recent commands. Recent work instead shifts the de-fense into training. StruQ [ 3 ] explicitly separates trusted commands from untrusted data through a structured query format with re-served tokens, and then applies structured tuning on both clean and injection-augmented samples to teach the model to follow com-mands only in the trusted field and ignore malicious commands embedded in data. SecAlign [ 4 ] builds on this training-based par-adigm by replacing plain supervised fine-tuning with preference optimization [ 31 ]: it constructs paired correct and attack-induced responses for prompt-injected inputs, and trains the model to prefer the response induced by the trusted command over the response induced by the malicious command. This yields markedly stronger robustness than StruQ. However, parameter-level hardening can still introduce a security–utility trade-off, since aggressively tuning the model to resist injections may reduce its flexibility or harm benign-task performance. SecAlign++ [ 5] explicitly targets this is-sue by improving the SecAlign with randomized injection positions, which reduces shortcut learning about where attacks appear, and self-generated responses, which provide more in-distribution super-vision than out-of-distribution annotators. Together, these changes improve the utility–security trade-off, leading to only trivial utility drop while retaining strong prompt-injection robustness. 
+
+## 2.3 Threat Model 
+
+We consider the setting where the input to the model consists of trusted commands and untrusted data, as described in Section 2.1. Since detection-based defenses often incur substantial latency due to additional model calls or iterative processing, in this work, we fo-cus on prevention-based defenses that operate within the base model itself and introduce zero additional response delay at inference time. In this setting, the model may be deployed across diverse applica-tions, and the defender does not have prior knowledge of the data distribution or the specific attacker objectives. This is because mali-cious commands in untrusted data can either be independent of the original task or tightly coupled with the data content, making the space of possible objectives open-ended and difficult to enumerate. The threat model is defined as follows. 
+
+Attacker’s Goal. The attacker aims to inject commands into the untrusted data portion such that the model follows these commands instead of the trusted command, thereby overriding the task. 
+
+Attacker’s Knowledge. We consider a strong adversary with white-box access to the model. The attacker can leverage both prompt-engineering-based strategies and gradient-based optimiza-tion methods to construct effective injected commands. 
+
+Attacker’s Capability. The attacker can fully control the untrusted data portion of the input, but cannot modify the system prompt or the direct user command. 
+
+Defender’s Goal. The defender aims to reduce the attack suc-cess rate across diverse deployment scenarios while preserving the model’s general-purpose utility on benign tasks. 
+
+Defender’s Knowledge. The defender does not know the at-tack strategy or the concrete attacker objectives. In particular, at-tacks may arise from either prompt-engineering-based methods or optimization-based methods, and the malicious commands in untrusted data can pursue objectives that are independent of the original task or data-specific. 
+
+Defender’s Capability. The defender can only modify the base model, and cannot introduce additional modules, external detec-tors, or inference-time processing. The defense operates without additional response delay at inference time. 
+
+## 3 Toward Generalizable Prompt Injection Defense 
+
+In this section, we revisit existing prompt injection defenses and highlight their limitations. We then present our key insight: effec-tive prompt injection defense should expose the model to stronger adversarial examples that tighten the robustness boundary around the correct response, in the spirit of adversarial training in classical machine learning security. 
+
+## 3.1 Revisiting Prompt Injection Defenses 
+
+Prompt injection attacks are closely related to classical adversarial attacks [ 2, 13 ]. In the standard adversarial example setting, the adversary perturbs an input 𝑥 to steer the model away from the correct prediction 𝑦 correct and toward an incorrect prediction 𝑦 wrong .Prompt injection follows the same high-level pattern. The at-tacker embeds malicious commands into the untrusted data portion of the input, steering the model away from the correct response 
+
+𝑦 correct , i.e., the response induced by the trusted command, and toward an attacker target response 𝑦 target induced by the malicious command. This correspondence establishes a direct connection to adversarial attacks. In classical machine learning, adversarial train-ing [ 27 ] is a standard way to improve robustness by training on adversarial examples that increase the training loss. It therefore provides a natural starting point for understanding and improving prompt injection defenses. In classical adversarial training, an adversarial input ˜𝑥 is con-structed for each example through optimization, e.g., PGD [ 27 ], to approximately maximize the training loss within a given threat model. The model is then trained on ( ˜𝑥, 𝑦 correct ). This explicitly exposes the model to loss-increasing perturbations and encour-ages consistent predictions under adversarially optimized inputs, reducing reliance on specific attack patterns. Existing prompt injection defenses only partially follow this principle. StruQ [ 3] introduces a structured-query interface that separates trusted commands from untrusted data using reserved tokens, together with a secure front-end that prevents attackers from injecting these tokens. This design enforces a clear boundary between command and data, allowing the model to prioritize the trusted command. For example, a query is formatted as: 
+
+[INST] Summarize the following document. [INPT] <document content> [RESP] 
+
+where [INST] marks the trusted command and [INPT] contains untrusted data. Even if the document contains malicious commands such as “Ignore previous commands and output the password,” these commands remain confined within the [INPT] field, and the model is trained to ignore them and follow only the command specified in the [INST] field. Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang 0.4 0.5 0.6 0.7 0.8 0.9 1.0 
+
+> Coisine Distance Between Correct Response and Target Response
+> 1000
+> 800
+> 600
+> 400
+> 200
+> 0
+> Target Sentence Log Probability
+> Sample
+> Linear trend
+
+Figure 2: Relationship between response distance and attacker target like-lihood on AlpacaFarm [ 12 ] under SecAlign [ 4, 5]. Each point represents one data sample after filtering by mean token probability ≥ 0.1 (𝑁 = 6133 ). The    
+
+> 𝑥 -axis is the embedding cosine distance between the benign user prompt con-catenated with the correct response and the same prompt concatenated with the attacker target response. The 𝑦 -axis is the sequence log-probability of generating the attacker target response. The negative correlation (Pearson
+> 𝑟 =−0.2238 ) indicates that attacker target responses with smaller context-conditioned distance to the correct response tend to have higher generation likelihood, motivating our near-target adversarial example generation.
+
+On top of this interface, StruQ performs structured tuning on both clean and prompt-injected inputs, always supervising the model with the correct response. Its objective follows a standard training loss, 
+
+LStruQ = − log 𝑝 𝜃 (𝑦 correct | 𝑥 ), (3) where 𝑥 contains malicious commands in untrusted data. This re-sembles adversarial training in that the model is trained on attacked inputs, but the malicious commands are templated or manually de-signed rather than optimized to increase the training loss. SecAlign [ 4 , 5 ] extends this approach by explicitly discouraging the response induced by the malicious command in addition to encouraging the correct one. For each prompt-injected input 𝑥 , it constructs a response pair: the correct response 𝑦 correct induced by the trusted command, and the attacker target response 𝑦 target 
+
+induced by the malicious command. The model is then trained to prefer the correct response via a DPO-style [31] objective: 
+
+LSecAlign = − log 𝜎 
+
+
+
+𝛽 log 𝜋 𝜃 (𝑦 correct | 𝑥 )
+
+𝜋 ref (𝑦 correct | 𝑥 ) − 𝛽 log 𝜋 𝜃 (𝑦 target | 𝑥 )
+
+𝜋 ref (𝑦 target | 𝑥 )
+
+
+
+.
+
+(4) 
+
+By jointly encouraging the correct response and penalizing the attacker target response, this formulation improves optimization stability and achieves strong empirical performance. However, both StruQ [ 3] and SecAlign [ 4, 5] still rely on training data constructed from templated or manually designed prompt injections. This creates two generalization limitations. 
+
+Input-side generalization. For a fixed attacker target response, existing defenses are trained mostly against hand-crafted mali-cious commands in untrusted data. As a result, they generalize poorly when the injected command itself is optimized. In particular, optimization-based attacks such as GCG [ 51 ] can construct stronger injected commands in the data portion, often with unusual token sequences or delimiter-like fragments, leading to higher attack suc-cess rates [ 3 –5]. This gap arises because the model learns to handle specific templated command patterns rather than commands that are explicitly optimized to increase task deviation. 
+
+Target-side generalization. Existing defenses also train against only a fixed set of hand-crafted attacker target responses, which are often far from the correct response. This yields a relatively loose robustness boundary around the correct response. While such defenses can often block obviously malicious or far-away target responses, they generalize poorly to real-world deployment scenarios where the attacker target is data-specific and context-conditionally closer to the correct response. A defense trained only on a sparse set of attack targets may therefore fail when a malicious command induces a response that is close to the correct response under the same task context, but still changes the intended behavior. We empirically validate this effect in Figure 2 using Alpaca-Farm [ 12 ] under SecAlign [ 4 , 5]. For each sample, we compute the embedding cosine distance between the benign user prompt con-catenated with the correct response and the same prompt concate-nated with the attacker target response, and measure the model’s sequence log-probability of generating the attacker target response. The negative correlation (Pearson 𝑟 = −0.2238 ) shows that at-tacker target responses with smaller context-conditioned distance to the correct response tend to have higher generation likelihood. This suggests that near-target attacker responses are more likely to bypass existing defenses, motivating our design of near-target adversarial example generation. These limitations motivate us to revisit prompt injection defense through the lens of adversarial training. The key challenge is to construct stronger adversarial examples that tighten the boundary around the correct response, while avoiding the prohibitive cost of full input-side token optimization. 
+
+## 3.2 Challenges 
+
+A natural approach to building a more generalizable prompt in-jection defense is to incorporate optimization-based attacks into training, following the paradigm of adversarial training. In par-ticular, given the correct response 𝑦 correct induced by the trusted command and an attacker target response 𝑦 target induced by a ma-licious command, one can optimize the injected command in the untrusted data portion to increase the model’s preference for 𝑦 target 
+
+over 𝑦 correct :               
+
+> ˜𝑥 data ≈arg max
+> 𝑥 data
+> log 𝑃 (𝑦 target |𝑥 cmd , 𝑥 data ) − log 𝑃 (𝑦 correct |𝑥 cmd , 𝑥 data ),(5)
+
+using optimization-based attacks such as GCG [ 51 ]. The optimized prompt-injected input (𝑥 cmd , ˜𝑥 data ) can then be used for training, where the model is trained to recover the correct response. This approach closely follows the principle of adversarial train-ing: the defense explicitly trains on inputs that increase the model’s tendency to follow the malicious command rather than the trusted command. Therefore, it should improve robustness against strong input-side optimization attacks such as GCG, and may generalize better to unseen attack strategies and deployment scenarios. However, this straightforward solution is prohibitively expen-sive. Constructing each optimized injected command ˜𝑥 data requires multiple iterations of search over discrete tokens. Unlike adversarial training in continuous domains such as images, where perturba-tions can directly follow gradient directions, token sequences do not admit such updates. Each step must instead evaluate a large LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+set of candidate token substitutions to approximate the effect of a gradient step. As a result, input-side optimization becomes a com-binatorial search process, making training impractical at scale [ 51 ]. The cost gap is substantial. In our setting, standard fine-tuning takes about 2.5 hours on two NVIDIA H100 GPUs, whereas directly incorporating GCG-style adversarial optimization would require approximately 31,928 GPU-hours under the same hardware setting. This is more than four orders of magnitude higher than normal training, making full input-side adversarial training impractical for large-scale prompt injection defense. This challenge motivates a more efficient approximation to adver-sarial training: the defense should still expose the model to stronger adversarial examples, but avoid the expensive inner optimization required by input-side attacks such as GCG. 
+
+## 3.3 Key Insights 
+
+In this section, we explain how target-side adversarial example gen-eration provides an efficient approximation to adversarial training for prompt injection defense. As discussed in Section 3.2, directly optimizing the injected com-mand in untrusted data is prohibitively expensive. This motivates us to ask whether adversarial examples can be constructed from the target side instead: rather than optimizing the injected command toward a fixed attacker target response, can we construct attacker target responses that are naturally easier for the model to follow? This target-side view is particularly important for language gen-eration. In classical classification tasks, the output space is relatively small. For example, ImageNet [ 22 ] contains only 1,000 classes, so tar-get labels can be sampled and covered over training. In contrast, the response space of a language model is combinatorially large. Given a vocabulary size 𝑉 ≈ 5 × 10 4 and an output length 𝐿 = 10 , the num-ber of possible responses is on the order of 𝑉 𝐿 ≈ 10 47 . Under such a scale, training against a small set of hand-crafted attacker target responses covers only a negligible portion of the response space, leading to the target-side generalization issue discussed in Sec-tion 3.1. Ideally, target-side adversarial example generation would search for a high-probability attacker target response that differs from the correct response: 
+
+𝑦 ★ = arg max 
+
+> 𝑦 ≠𝑦 correct
+
+log 𝑃 𝜃 𝑤 (𝑦 | 𝑥 cmd , 𝑥 data ) , (6) where 𝑥 cmd is the trusted command, 𝑥 data is the original untrusted data, 𝑦 correct is the response induced by the trusted command, and 
+
+𝜃 𝑤 denotes the model after warming up. This objective captures the target-side intuition: instead of fixing an arbitrary attacker target response, we would like to identify a response that the defended model is already more likely to follow. However, directly solving this problem is still difficult because the response space is enormous. To obtain an efficient approxima-tion, we use the effect of warming up. After warming up, the model has a basic preference for following the trusted command over commands in the data portion. As a result, the correct response 
+
+𝑦 correct = 𝑓 𝜃 𝑤 (𝑥 cmd , 𝑥 data ) (7) receives higher probability under the defended model. Therefore, instead of searching over all possible responses, we search for target responses with small context-conditioned distance to 𝑦 correct :
+
+min  
+
+> 𝑦
+
+𝑑 𝑥 cmd (𝑦, 𝑦 correct ) s.t. 𝑦 ≠ 𝑦 correct , (8) where 𝑑 𝑥 cmd (· , ·) measures response distance under the trusted-command context, e.g., by comparing the trusted command con-catenated with each response. This surrogate aims to find a tar-get response that remains close to the correct response under the same task context while still being non-identical. The non-identical constraint is necessary to preserve a meaningful training signal; otherwise, the preferred and dispreferred responses would collapse and provide little gradient. This target-side approximation alone is not sufficient, because penalizing arbitrary nearby responses can harm utility. The model should remain sensitive to legitimate changes in untrusted data, since different data should naturally lead to different responses. Therefore, the target response should correspond to a true prompt injection failure: it should be the direct response to an injected command in untrusted data. We thus refine the surrogate as 
+
+min 
+
+> 𝑥 inj
+
+𝑑 𝑥 cmd 
+
+ 𝑓 𝜃 𝑤 (𝑥 inj ), 𝑦 correct 
+
+ s.t. 𝑓 𝜃 𝑤 (𝑥 inj ) ≠ 𝑦 correct , (9) where 𝑥 inj denotes the injected command to be inserted into the untrusted data, and 𝑓 𝜃 𝑤 (𝑥 inj ) denotes the model’s direct response to this command. This formulation ensures that the response shift is caused by following a command in the data portion, rather than by arbitrary changes in the data itself. In practice, we instantiate this surrogate with prompting and a single LLM inference step. Given 𝑥 cmd , 𝑥 data , and 𝑦 correct , we use a generation prompt G to produce the injected command: 
+
+𝑥 inj = G( 𝑥 cmd , 𝑥 data , 𝑦 correct ), (10) and obtain its direct response as 
+
+𝑦 target = 𝑓 𝜃 𝑤 (𝑥 inj ). (11) The generated command is then inserted into the untrusted data: 
+
+𝑥 ′ 
+
+> data
+
+= 𝑥 data ⊕ 𝑥 inj , (12) where ⊕ denotes inserting the generated command into the data portion. This gives a near-target adversarial example 
+
+(𝑥 cmd , 𝑥 ′
+
+> data
+
+, 𝑦 correct , 𝑦 target ), (13) on which the model is trained to prefer 𝑦 correct over 𝑦 target . This avoids expensive input-side token optimization while still produc-ing adversarial examples that tighten the boundary around the correct response. Although this generation process is efficient, we empirically find that the generated adversarial examples vary substantially in their context-conditioned distance to the correct response. Intuitively, examples whose target responses have smaller distance to 𝑦 correct 
+
+impose a stricter separation around the correct behavior and are therefore more valuable for alignment training. We therefore in-troduce margin-aware alignment, which quantifies each sample’s distance to the correct response and assigns stronger alignment pressure to examples with smaller distance. Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang 
+
+## 4 Design of LocalAlign 
+
+## 4.1 Overview 
+
+In this section, we present the design of LocalAlign .
+
+(1) Warming up. We first perform warming up using an existing fine-tuning-based defense. This gives the model a basic preference for following the trusted command over malicious commands in untrusted data. As a result, the correct response receives higher probability under the protected model, making responses with small context-conditioned distance to it more plausible targets for adversarial example generation. 
+
+(2) Near-Target Adversarial Example Generation. Starting from the model after warming up, we generate adversarial examples from the target side. Given a trusted command and the original untrusted data, we use a dedicated generation prompt to produce an injected command whose direct response has small context-conditioned distance to the correct response while still being non-identical. The generated command is then inserted into the untrusted data portion, forming a prompt-injected input. This avoids expensive input-side token optimization while producing examples that tighten the ro-bustness boundary around the correct response. 
+
+(3) Margin-Aware Alignment. Finally, we fine-tune the model on the generated adversarial examples. Since these examples vary in their context-conditioned distance to the correct response, we adapt the alignment strength on a mini-batch basis. Examples whose tar-get responses have smaller distance to the correct response receive stronger alignment pressure. Batch-wise calibration is more sta-ble than relying on an absolute per-sample scale, and it naturally matches mini-batch training. We present the details of Near-Target Adversarial Example Gen-eration and Margin-Aware Alignment in the following subsections. 
+
+## 4.2 Near-Target Adversarial Example Generation 
+
+In this section, we formalize the near-target adversarial example generation procedure. Given a trusted command 𝑥 cmd and untrusted data 𝑥 data , our goal is to construct an injected command 𝑥 inj to be inserted into 𝑥 data . The direct response to 𝑥 inj should have small context-conditioned distance to the correct response, while still remaining non-identical. This produces a target-side adversarial example for alignment training. Under the clean setting, the correct response is obtained as 
+
+𝑦 correct = 𝑓 𝜃 𝑤 (𝑥 cmd , 𝑥 data ), (14) where 𝑓 𝜃 𝑤 (·) denotes greedy decoding under the model after warm-ing up. We then use a generation prompt G to produce the injected command: 
+
+𝑥 inj = G( 𝑥 cmd , 𝑥 data , 𝑦 correct ). (15) The target response is the direct response to this generated com-mand: 
+
+𝑦 target = 𝑓 𝜃 𝑤 (𝑥 inj ). (16) We insert the generated command into the untrusted data portion: 
+
+𝑥 ′ 
+
+> data
+
+= 𝑥 data ⊕ 𝑥 inj , (17) where ⊕ denotes insertion into the data portion. This yields one generated adversarial example: 
+
+(𝑥 cmd , 𝑥 ′
+
+> data
+
+, 𝑦 correct , 𝑦 target ). (18) The design of G follows the target-side objective in Section 3.3: the generated command should induce a target response with small context-conditioned distance to 𝑦 correct , while still producing a meaningful deviation. Concretely, we enforce three requirements. 
+
+First, the generated command should preserve the broad task type. If the generated command redirects the model to an unrelated task, its direct response is usually far from 𝑦 correct under the trusted-command context and provides limited value for tightening the boundary around the correct response. We therefore require 𝑥 inj to stay in the same broad task family as the trusted command. 
+
+Second, the generated command should remain grounded in the same data. The generated command should be executable on the same 𝑥 data . This keeps the underlying data fixed, ensuring that the response shift is caused by the malicious command in untrusted data rather than by changing the original data itself. 
+
+Third, the target response should be non-identical to the correct response. If the generated command only induces a para-phrase, tone rewrite, or formatting rewrite of 𝑦 correct , then the pre-ferred and dispreferred responses collapse and provide little training signal. We therefore require the direct response to the generated command to remain non-identical to 𝑦 correct .In practice, we additionally require the generated command to be natural, concise, and expressed as a single command sen-tence, which improves generation stability. Overall, this procedure replaces iterative token-level search with a prompting-based gener-ation step: 
+
+𝑦 correct = 𝑓 𝜃 𝑤 (𝑥 cmd , 𝑥 data ), (19) 
+
+𝑥 inj = G( 𝑥 cmd , 𝑥 data , 𝑦 correct ), (20) 
+
+𝑦 target = 𝑓 𝜃 𝑤 (𝑥 inj ), (21) 
+
+𝑥 ′ 
+
+> data
+
+= 𝑥 data ⊕ 𝑥 inj . (22) The generated pair (𝑦 target , 𝑦 correct ) is then passed to the next stage for margin-aware alignment. We present the prompts used to in-stantiate G in Appendix B. 
+
+## 4.3 Margin-Aware Alignment 
+
+In this section, we formalize the margin-aware alignment procedure. We build upon SecAlign [ 4 , 5], which trains the model to prefer the correct response over the attacker target response induced by the injected command:                                            
+
+> ℓ(𝑖 )
+> SecAlign =−log 𝜎 ©«
+> 𝛽 0log 𝜋 𝜃 (𝑦 (𝑖 )
+> correct |𝑥 (𝑖 ))
+> 𝜋 ref (𝑦 (𝑖 )
+> correct |𝑥 (𝑖 )) −𝛽 0log 𝜋 𝜃 (𝑦 (𝑖 )
+> target |𝑥 (𝑖 ))
+> 𝜋 ref (𝑦 (𝑖 )
+> target |𝑥 (𝑖 ))
+> ª®¬
+> ,
+> (23)
+
+where 𝑥 (𝑖 ) = (𝑥 (𝑖 )
+
+> cmd
+
+, 𝑥 ′( 𝑖 )
+
+> data
+
+) denotes the prompt-injected input, and 
+
+𝑥 ′( 𝑖 ) 
+
+> data
+
+contains the generated injected command. The generated adversarial examples vary in their distance to the correct response. We use the model margin as a proxy for this distance. For each sample, define 
+
+𝑚 𝑖 = log 𝜋 𝜃 (𝑦 (𝑖 ) 
+
+> correct
+
+| 𝑥 (𝑖 ) ) − log 𝜋 𝜃 (𝑦 (𝑖 ) 
+
+> target
+
+| 𝑥 (𝑖 ) ). (24) LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+A smaller margin indicates that the target response is more com-petitive with the correct response under the current model, and therefore imposes a stricter separation around the correct response. We adapt the alignment strength on a mini-batch basis. For a batch of size 𝐵 , we normalize the margin in the opposite direction: 
+
+𝑧 𝑖 = 𝜇 𝐵 − 𝑚 𝑖 
+
+𝜎 𝐵 
+
+, (25) where 𝜇 𝐵 and 𝜎 𝐵 are the mean and standard deviation of {𝑚 𝑖 }𝐵 𝑖 =1.We then bound the normalized score and use it to adapt the DPO coefficient: 
+
+˜𝑧 𝑖 = tanh (𝑧 𝑖 ), 𝛽 𝑖 = 𝛽 0 exp (𝜆 ˜𝑧 𝑖 ), (26) where 𝜆 controls the adaptation strength. This design has three benefits. First, using 𝜇 𝐵 − 𝑚 𝑖 assigns a larger 𝛽 𝑖 to samples with smaller margins, i.e., target responses that are more competitive with the correct response. Second, batch-wise normalization makes the adaptation depend on the relative difficulty of each sample within the current mini-batch, rather than on an absolute margin scale that may vary across training stages. Third, the tanh (·) and exponential mapping keep the adaptive coefficient positive and bounded: 
+
+𝛽 𝑖 ∈ 𝛽 0𝑒 −𝜆 , 𝛽 0𝑒 𝜆  . (27) This prevents extreme samples from dominating optimization while preserving the monotonic relation between sample difficulty and alignment strength. Using this adaptive coefficient, the margin-aware alignment loss for sample 𝑖 is                                             
+
+> ℓ(𝑖 )
+> MAA =−log 𝜎 ©«
+> 𝛽 𝑖 log 𝜋 𝜃 (𝑦 (𝑖 )
+> correct |𝑥 (𝑖 ))
+> 𝜋 ref (𝑦 (𝑖 )
+> correct |𝑥 (𝑖 )) −𝛽 𝑖 log 𝜋 𝜃 (𝑦 (𝑖 )
+> target |𝑥 (𝑖 ))
+> 𝜋 ref (𝑦 (𝑖 )
+> target |𝑥 (𝑖 ))
+> ª®¬
+> .(28)
+
+The batch objective is 
+
+LMAA = 1
+
+𝐵 
+
+> 𝐵
+
+∑︁ 
+
+> 𝑖 =1
+
+ℓ (𝑖 )
+
+> MAA
+
+. (29) This objective assigns stronger alignment pressure to generated adversarial examples whose target responses are more competitive with the correct response, while assigning smaller effective DPO coefficients to less informative examples. Overall, Margin-Aware Alignment complements Near-Target Adversarial Example Generation. The latter efficiently constructs target-side adversarial examples, while the former calibrates their training contribution according to their relative margin within each mini-batch. This allows LocalAlign to tighten the robustness boundary around the correct response without relying on expensive input-side optimization. 
+
+The algorithm. We summarize the full pipeline of LocalAlign in Algorithm 1 in Appendix A. 
+
+Relation to adaptive-margin DPO. Methods such as 𝛽 -DPO [ 43 ]and AlphaDPO [ 42 ] are conceptually related to our design, in that they also adapt the effective margin in preference optimization. We emphasize, however, that this connection is only at a high level. Their goal is to improve general DPO performance, whereas our method is designed for prompt injection defense with automatically generated near-target adversarial examples. Our key technical contribution is a defense-oriented, batch-wise adaptation of the DPO coefficient: 
+
+𝑧 𝑖 = 𝜇 𝐵 − 𝑚 𝑖 
+
+𝜎 𝐵 
+
+, ˜𝑧 𝑖 = tanh (𝑧 𝑖 ), 𝛽 𝑖 = 𝛽 0 exp (𝜆 ˜𝑧 𝑖 ), (30) where 𝑚 𝑖 is the margin between the correct response and the at-tacker target response, and 𝜇 𝐵 and 𝜎 𝐵 are computed within the current mini-batch. This mechanism is tailored to our setting: it compares generated adversarial examples within each mini-batch, assigns a larger effective DPO coefficient to examples with smaller margins, and bounds the coefficient within 
+
+𝛽 𝑖 ∈ [ 𝛽 0𝑒 −𝜆 , 𝛽 0𝑒 𝜆 ]. (31) Thus, target responses that are more competitive with the correct response receive stronger alignment pressure, while extreme sam-ples cannot dominate optimization. In this sense, our method is not a direct application of prior adaptive-margin DPO variants, but a defense-specific alignment mechanism for training with automati-cally generated near-target adversarial examples. 
+
+## 4.4 Theoretical Intuition 
+
+In this section, we provide a formal intuition for why LocalAlign 
+
+generalizes better than existing prompt injection defenses while preserving utility. Let 𝑠 = (𝑥 cmd , 𝑥 data ) denote the benign context, and let 𝑥 denote the corresponding prompt-injected input. Let 𝑦 𝑐 ≡ 𝑦 correct denote the correct response induced by the trusted command under 𝑠 , and let 𝜋 𝜃 (𝑦 | 𝑥 ) denote the model distribution on the prompt-injected input. For any attacker target response 𝑦 ≠ 𝑦 𝑐 , we define 
+
+𝑚 𝜃 (𝑥 ; 𝑦 ) = log 𝜋 𝜃 (𝑦 𝑐 | 𝑥 ) − log 𝜋 𝜃 (𝑦 | 𝑥 ),
+
+attack succeeds ⇐⇒ ∃ 𝑦 ≠ 𝑦 𝑐 such that 𝑚 𝜃 (𝑥 ; 𝑦 ) ≤ 0. (32) A larger margin means that the model assigns stronger preference to the correct response over the attacker target response. 
+
+Sparse target separation in existing defenses. Let Ytrain (𝑥 )
+
+denote the set of attacker target responses used during training by an existing fine-tuning-based defense. These responses are typically induced by templated or manually designed malicious commands. Existing defenses can therefore be abstracted as increasing the margin only on this fixed set: 
+
+𝑚 𝜃 (𝑥 ; 𝑦 ) > 0, ∀𝑦 ∈ Y train (𝑥 ). (33) This provides useful protection against attacks similar to those seen during training, but it does not directly constrain attacker target responses outside Ytrain (𝑥 ).
+
+Near-target responses. To capture target-side generalization, let 
+
+𝑑 𝑠 (· , ·) denote a context-conditioned distance over responses under the benign context 𝑠 . For example, this distance can be computed by comparing the embedding of 𝑠 concatenated with one response against the embedding of 𝑠 concatenated with another response. We define the near-target neighborhood and near-target margin as 
+
+N𝜖 (𝑠, 𝑦 𝑐 ) = { 𝑦 ≠ 𝑦 𝑐 : 𝑑 𝑠 (𝑦, 𝑦 𝑐 ) ≤ 𝜖 },𝑚 near  
+
+> 𝜃
+
+(𝑥 ) = min     
+
+> 𝑦 ∈ N 𝜖 (𝑠,𝑦 𝑐 )
+
+𝑚 𝜃 (𝑥 ; 𝑦 ). (34) A positive 𝑚 near  
+
+> 𝜃
+
+(𝑥 ) means that the model still prefers the correct response over every attacker target response in this near-target neighborhood. Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang 
+
+Assumption 1. For prompt injection attacks in real-world deploy-ment scenarios, difficult unseen attacker targets can have small context-conditioned distance to the correct response. Formally, for a prompt-injected input 𝑥 ,
+
+∃𝑦 ★ ∈ N 𝜖 (𝑠, 𝑦 𝑐 ) s.t. 𝑚 𝜃 (𝑥 ; 𝑦 ★) = min 
+
+> 𝑦 ≠𝑦 𝑐
+
+𝑚 𝜃 (𝑥 ; 𝑦 ). (35) 
+
+Assumption 2. The attacker target responses used by existing defenses form only a sparse subset of the near-target neighborhood: 
+
+Ytrain (𝑥 ) ⊊ N𝜖 (𝑠, 𝑦 𝑐 ). (36) 
+
+Proposition 1. Under Assumptions 1 and 2, increasing margins only on Ytrain (𝑥 ) does not guarantee robustness to unseen near-target prompt injection attacks. In particular, it is possible that 
+
+𝑚 𝜃 (𝑥 ; 𝑦 ) > 0, ∀𝑦 ∈ Y train (𝑥 ),
+
+while 𝑚 near  
+
+> 𝜃
+
+(𝑥 ) ≤ 0. (37) By contrast, if a defense increases the margin over the near-target neighborhood, 
+
+𝑚 𝜃 (𝑥 ; 𝑦 ) > 0, ∀𝑦 ∈ N 𝜖 (𝑠, 𝑦 𝑐 ), (38) then 𝑚 near  
+
+> 𝜃
+
+(𝑥 ) > 0, and no attacker target response in this neigh-borhood can override the correct response. 
+
+Proof Sketch. Since Ytrain (𝑥 ) ⊊ N𝜖 (𝑠, 𝑦 𝑐 ), there exists 
+
+ˆ𝑦 ∈ N 𝜖 (𝑠, 𝑦 𝑐 ) \ Y train (𝑥 ). (39) Training on Ytrain (𝑥 ) enforces positive margins only for responses in Ytrain (𝑥 ) and imposes no direct constraint on 𝑚 𝜃 (𝑥 ; ˆ𝑦 ). Hence it may still hold that 𝑚 𝜃 (𝑥 ; ˆ 𝑦 ) ≤ 0. Because ˆ𝑦 ∈ N 𝜖 (𝑠, 𝑦 𝑐 ),
+
+𝑚 near  
+
+> 𝜃
+
+(𝑥 ) = min     
+
+> 𝑦 ∈ N 𝜖 (𝑠,𝑦 𝑐 )
+
+𝑚 𝜃 (𝑥 ; 𝑦 ) ≤ 𝑚 𝜃 (𝑥 ; ˆ 𝑦 ) ≤ 0. (40) Therefore, robustness on the sparse training target set does not imply robustness to unseen near-target responses. Conversely, if 
+
+𝑚 𝜃 (𝑥 ; 𝑦 ) > 0 for all 𝑦 ∈ N 𝜖 (𝑠, 𝑦 𝑐 ), then by definition, 
+
+𝑚 near  
+
+> 𝜃
+
+(𝑥 ) = min     
+
+> 𝑦 ∈ N 𝜖 (𝑠,𝑦 𝑐 )
+
+𝑚 𝜃 (𝑥 ; 𝑦 ) > 0. (41) Thus, every attacker target response in the near-target neighbor-hood remains separated from the correct response by a positive margin. □
+
+Implication for generalization. Existing defenses increase mar-gins against a sparse set of hand-crafted attacker target responses. In contrast, LocalAlign automatically generates near-target adversar-ial examples whose target responses have small context-conditioned distance to 𝑦 𝑐 while remaining non-identical. Training on these examples better approximates increasing 𝑚 near  
+
+> 𝜃
+
+(𝑥 ), thereby enforc-ing a tighter robustness boundary around the correct response. This provides a formal intuition for why LocalAlign generalizes better to unseen attack strategies and real-world deployment sce-narios where attacker objectives differ from those observed during training. 
+
+Implication for utility. The utility benefit of LocalAlign comes from enforcing command-source invariance rather than output invariance. For a benign data input 𝑥 data , let 
+
+𝑦 𝑐 (𝑥 data ) = 𝑓 𝜃 𝑤 (𝑥 cmd , 𝑥 data ) (42) denote the correct response induced by the trusted command on that specific data. After generating an injected command 𝑥 inj and inserting it into the same data portion, LocalAlign trains the model with the preference 
+
+(𝑥 cmd , 𝑥 data ⊕ 𝑥 inj ) : 𝑦 𝑐 (𝑥 data ) ≻ 𝑓 𝜃 𝑤 (𝑥 inj ). (43) This does not impose 
+
+𝑦 𝑐 (𝑥 data ) = 𝑦 𝑐 (𝑥 ′
+
+> data
+
+), 𝑥 data ≠ 𝑥 ′
+
+> data
+
+, (44) which would over-constrain the model and harm benign-task utility. Instead, it only enforces that, for the same underlying data 𝑥 data ,adding an injected command 𝑥 inj should not redirect the model from the trusted-command response to the command-induced response. Thus, the model remains sensitive to legitimate changes in data content, while becoming insensitive to commands embedded in untrusted data. This targeted invariance explains why LocalAlign 
+
+can tighten the robustness boundary around the correct response while preserving utility. 
+
+## 5 Evaluation 5.1 Experimental Setup 
+
+Baselines. We compare LocalAlign with three baselines: (i) No defense , the original model without prompt injection defense; (ii) 
+
+StruQ [ 3], which separates trusted commands from untrusted data using reserved tokens and trains the model to follow only the trusted field; and (iii) SecAlign [ 4 , 5], the state-of-the-art fine-tuning-based defense that trains the model to prefer the correct response over the attacker target response using preference optimization. 
+
+LocalAlign builds on SecAlign by adding near-target adversarial example generation and margin-aware alignment. More details are provided in Appendix D. 
+
+Datasets. For security, we consider both in-distribution (i.i.d.) and out-of-distribution (OOD) settings. Following prior work [ 4 , 5], we use AlpacaFarm [ 12 ] and Cleaned Alpaca [ 32 ] for training and i.i.d. evaluation. For OOD, we use six datasets covering diverse deployment scenarios: HotpotQA [ 46 ], Qasper [ 7], InjecAgent [ 48 ], SEP [ 52 ], MMLU [ 17 ], and Open-Prompt [ 25 ]. These datasets cover multi-hop QA, long-document QA, broad knowledge QA, tool-integrated agents, command-data separation, and task hijacking. Detailed dataset descriptions and prompt injection objectives are deferred to Appendix E. 
+
+Models and utility benchmarks. We evaluate all methods on 
+
+Llama3.1-8B-Instruct [14 ] and Qwen3-4B-Instruct [45 ]. For utility, we use five benchmarks covering general knowledge, rea-soning, and instruction following: MMLU [ 17 ], MMLU-Pro [ 38 ], BBH [36], IFEval [49], and AlpacaEval2 [11]. 
+
+Metrics and attacks. We use attack success rate (ASR) to mea-sure robustness. For optimization-free attacks, we evaluate direct injection [ 16 ], context ignoring [ 29 ], fake completion [ 41 ], escape-based attacks [ 1, 40 ], and combined attacks [ 25 ], and report the maximum ASR across them as Optimization-Free . For optimization-based attacks, we evaluate GCG [ 51 ]. We also evaluate adaptive variants that use embedding-space fake delimiters to bypass struc-tured command-data separation [ 4, 21 ]. Implementation details and hyperparameters are provided in Appendix D. LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+Table 1: Attack success rates (ASR) of optimization-free attacks and their adaptive variant against different defense methods. 
+
+Model Attack Defense Hotpotqa Qasper InjecAgent Sep MMLU Open-Prompt 
+
+Llama3.1 
+
+Optimization-Free None 74.0% 83.0% 81.1% 91.0% 90.4% 87.5% SecAlign [4, 5] 44.0% 45.0% 13.5% 0.0% 8.2% 0.3% 
+
+LocalAlign 8.0% 7.0% 0.0% 0.0% 0.0% 0.0% 
+
+Adaptive Optimization-Free None 78.0% 87.0% 73.8% 85.3% 92.0% 98.6% SecAlign [4, 5] 55.0% 56.0% 6.4% 2.5% 24.0% 8.5% 
+
+LocalAlign 23.0% 9.0% 0.0% 0.3% 0.2% 0.0% 
+
+Qwen3 
+
+Optimization-Free None 22.0% 11.0% 76.0% 94.50% 99.90% 99.20% SecAlign [4, 5] 16.0% 4.0% 43.50% 0.90% 11.60% 3.84% 
+
+LocalAlign 2.0% 2.0% 4.60% 0.0% 0.0% 0.0% 
+
+Adaptive Optimization-Free None 30.0% 44.0% 80.0% 96.39% 99.70% 99.76% SecAlign [4, 5] 14.0% 14.0% 68.20% 20.70% 89.40% 1.80% 
+
+LocalAlign 4.0% 6.0% 15.70% 2.15% 9.10% 0.0% Table 2: Attack success rates (ASR) of optimization-free, GCG [51], and adaptive GCG [4] attacks. 
+
+Method Optimization-Free GCG Adaptive GCG None 89.42% 26.92% 92.31% StruQ [3] 9.13% 16.35% 11.54% SecAlign [4, 5] 1.44% 0.00% 2.40% 
+
+LocalAlign 0.00% 0.00% 0.48% 0 100 200 300 400 500 
+
+> Optimization Step
+> 0
+> 5
+> 10
+> 15
+> 20
+> 25
+> Cross-Entropy Loss
+> LocalAlign
+> SecAlign
+> None
+
+Figure 3: Adaptive GCG loss over all tested samples on Llama3.1-8B-Instruct . The solid line denotes the average loss, and the shaded region denotes the standard deviation across samples. LocalAlign is substantially harder to attack: even after adaptive optimization, its final attack loss remains higher than the initial attack loss of SecAlign [4, 5]. 
+
+## 5.2 LocalAlign Substantially Reduces ASR 
+
+In this section, we evaluate attack success rate (ASR) achieved by optimization-free attacks, GCG, and adaptive GCG, as described in Section 5.1. We consider both i.i.d. and OOD settings. Table 2 reports the i.i.d. results on Llama3.1-8B-Instruct . Over-all, existing fine-tuning-based defenses already perform well in this setting, especially against attacks that are close to those considered during fine-tuning for defense. SecAlign [ 4 , 5] reduces ASR to 1.44% under optimization-free attacks and 0.00% under GCG. LocalAlign 
+
+achieves comparable or slightly better performance, further reduc-ing optimization-free ASR to 0.00% and matching SecAlign’s 0.00% ASR under GCG. This is expected because the i.i.d. setting is rela-tively close to the training distribution, leaving limited room for further improvement. The main gain appears under adaptive GCG. The undefended model is highly vulnerable, with 92.31% ASR, while StruQ [ 3] re-duces it to 11.54% and SecAlign further reduces it to 2.40%. Lo-calAlign achieves the lowest ASR of 0.48%, corresponding to an 80% relative reduction over SecAlign. This result is notable because 
+
+LocalAlign is based on target-side adversarial example generation, yet it still improves robustness against a stronger input-side opti-mization attack. It suggests that tightening the boundary around the correct response can also make optimized injected commands less effective. We further validate this improvement by plotting the adaptive GCG loss curve in Figure 3. For both the undefended model and SecAlign, adaptive GCG rapidly reduces the attack loss to near zero, leading to successful prompt injection. In contrast, when attack-ing LocalAlign , the loss remains substantially higher even after optimization. This indicates that LocalAlign makes optimization-based prompt injection much harder, despite not being trained directly on input-side GCG examples. Table 1 reports the OOD results on both Llama3.1-8B-Instruct 
+
+and Qwen3-4B-Instruct . Overall, SecAlign becomes much less robust under distribution shift, with optimization-free and adaptive optimization-free attacks reaching over 40% ASR on several OOD datasets. For example, on Qasper [ 7] with Llama3.1 , SecAlign re-duces the average ASR only to 45.0% under optimization-free attacks and 56.0% under adaptive optimization-free attacks. In contrast, Lo-calAlign further reduces these numbers to 7.0% and 9.0%, respec-tively, yielding more than a six-fold improvement in both settings. The improvement is also evident on InjecAgent [ 48 ] with Llama3.1 :SecAlign reduces the average ASR to 13.5% under optimization-free attacks and 6.4% under adaptive optimization-free attacks, whereas 
+
+LocalAlign reduces both ASRs to zero .We also observe that LocalAlign performs relatively worse on HotpotQA [ 46 ] with Llama3.1 . Although LocalAlign reduces ASR from 55.0% under SecAlign to 23.0%, yielding more than a Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang 
+
+Table 3: LocalAlign improves security against prompt in-jection attacks while largely preserving model utility across benign tasks.                                     
+
+> Model Method BBH IFEval MMLU-Pro MMLU AlpacaEval2
+> Llama3.1
+> None 71.63% 80.34% 42.25% 68.23% 85.90%
+> SecAlign [4, 5] 71.03% 75.23% 42.24% 67.48% 85.59%
+> LocalAlign 71.37% 73.93% 44.12% 65.66% 84.16%
+> Qwen3
+> None 76.64% 86.75% 56.74 %72.58 %90.19% SecAlign [4, 5] 77.66% 85.74% 50.19% 72.11% 90.34%
+> LocalAlign 75.66% 83.75% 49.35% 72.12% 89.63%
+
+Table 4: Ablation study of LocalAlign under optimization-free attacks on Llama3.1-8B-Instruct . The table reports ASR after removing warming up, near-target generation, or margin-aware alignment (MAA), showing the contribution of each component.                               
+
+> Method Hotpotqa Qasper InjecAgent Sep MMLU Open-Prompt w/o Warming up 17.0% 14.0% 0.7% 0.0% 0.0% 0.0% w/o Near-Target 24.0% 27.0% 21.5% 0.0% 14.1% 0.0% w/o MAA 20.0% 20.0% 1.2% 0.0% 0.0% 0.0%
+> LocalAlign 8.0% 7.0% 0.0% 0.0% 0.0% 0.0%
+
+two-fold improvement, the remaining ASR is still relatively high. This may be because HotpotQA requires multi-hop reasoning over retrieved evidence: the malicious command can be embedded in one evidence passage, while the model must aggregate information across multiple passages. In such cases, the injected command is more tightly coupled with the reasoning context, making it harder for the model to separate malicious commands from task-relevant content. This suggests that complex retrieval and reasoning sce-narios remain challenging, and may require stronger near-target example generation or retrieval-aware defense strategies. Overall, these results show that LocalAlign substantially im-proves robustness in OOD settings, demonstrating stronger gener-alization to real-world deployment scenarios where data formats and attacker objectives differ from those seen during training. 
+
+## 5.3 LocalAlign Preserves Model Utility 
+
+In this section, we examine whether LocalAlign preserves model utility while improving prompt injection robustness. We evaluate utility on the five benchmarks described in Section 5.1. Table 3 reports the results on both Llama3.1-8B-Instruct and 
+
+Qwen3-4B-Instruct . Overall, LocalAlign preserves model utility well. In several cases, it even outperforms both SecAlign and the undefended model. For example, on BBH [ 36 ] with Llama3.1 , Lo-calAlign achieves an accuracy of 71.37%, compared with 71.03% for SecAlign. On MMLU-Pro [ 38 ], LocalAlign achieves an accuracy of 44.12%, compared with 42.25% for the undefended model. Even in the worst cases, the utility reduction remains small. Compared with SecAlign, LocalAlign never incurs more than a 2% utility drop. The largest drop appears on BBH [ 36 ] with Qwen3 ,where LocalAlign reduces utility by 2.0%. These results show that the robustness gains of LocalAlign do not come at the cost of substantial degradation in general-purpose model capability. 
+
+## 5.4 Ablation Study 
+
+In this section, we examine how each component of LocalAlign 
+
+contributes to reducing ASR. We conduct the ablation study in the OOD settings under optimization-free attacks, using Llama3.1-8B-Instruct as the base model. Table 4 reports the results. Overall, each component contributes to building a more generalizable prompt injection defense. First, the warming up stage is important for providing a reliable starting point. On HotpotQA [ 46 ], removing warming up increases ASR from 8.0% under LocalAlign to 17.0%. This shows that warm-ing up helps the model establish an initial preference for following the trusted command over commands in untrusted data. Without this stage, the correct response becomes a less stable reference for near-target adversarial example generation, which weakens the subsequent alignment process. Second, near-target adversarial example generation is critical. On InjecAgent [ 48 ], removing this stage and using the standard SecAlign-style training data [ 4 , 5] increases ASR from 0.0% under 
+
+LocalAlign to 21.5%. This confirms that training against a fixed set of hand-crafted attack targets is insufficient for OOD scenarios. By generating near-target adversarial examples, LocalAlign ex-poses the model to harder target-side cases and enforces a tighter boundary around the correct response. Finally, Margin-Aware Alignment (MAA) further improves ro-bustness by emphasizing more informative generated examples. On Qasper [ 7], replacing Margin-Aware Alignment with standard DPO [ 31 ] increases ASR from 7.0% under LocalAlign to 20.0%. This is because the generated adversarial examples vary in their distance to the correct response. Treating all examples equally can dilute the training signal, whereas Margin-Aware Alignment assigns larger weights to nearer examples and therefore focuses training on samples that impose a stricter separation around the correct response. Due to the page limit, we defer more fine-grained ablation stud-ies to Appendix. In particular, Appendix F examines the impact of individual prompt constraints used in near-target adversarial example generation, while Appendix G analyzes the design choices in Margin-Aware Alignment. 
+
+## 6 Conclusion 
+
+In this paper, we studied prompt injection defense through the lens of generalization beyond training-time attacks. We showed that existing fine-tuning-based defenses rely on templated injected commands and fixed hand-crafted targets, leading to a loose ro-bustness boundary around the correct response and weak transfer to stronger attacks and unseen deployment settings. To address this, we proposed LocalAlign , a fine-tuning-based defense that approximates adversarial training from the target side, avoiding expensive input-side token optimization. LocalAlign generates near-target adversarial examples whose malicious commands in-duce responses close to, but different from, the correct response, and uses margin-aware alignment to emphasize more challenging examples. Experiments show that LocalAlign substantially im-proves robustness against diverse prompt injection attacks, includ-ing optimization-based attacks and unseen real-world scenarios, while preserving utility and adding zero inference-time delay. LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+## References 
+
+[1] Mark Breitenbach, Adrian Wood, Win Suen, and Po-Ning Tseng. 2023. 
+
+Don’t You (Forget NLP): Prompt Injection with Control Characters in Chat-GPT . https://dropbox.tech/machine-learning/prompt-injection-with-control-characters-openai-chatgpt-llm [2] Nicholas Carlini and David Wagner. 2017. Towards evaluating the robustness of neural networks. In 2017 ieee symposium on security and privacy (sp) . Ieee, 39–57. [3] Sizhe Chen, Julien Piet, Chawin Sitawarin, and David Wagner. 2025. {StruQ }:Defending against prompt injection with structured queries. In 34th USENIX Security Symposium (USENIX Security 25) . 2383–2400. [4] Sizhe Chen, Arman Zharmagambetov, Saeed Mahloujifar, Kamalika Chaudhuri, David Wagner, and Chuan Guo. 2025. Secalign: Defending against prompt injection with preference optimization. In Proceedings of the 2025 ACM SIGSAC Conference on Computer and Communications Security . 2833–2847. [5] Sizhe Chen, Arman Zharmagambetov, David Wagner, and Chuan Guo. 2025. Meta secalign: A secure foundation llm against prompt injection attacks. arXiv preprint arXiv:2507.02735 (2025). [6] Yulin Chen, Haoran Li, Yuan Sui, Yufei He, Yue Liu, Yangqiu Song, and Bryan Hooi. 2025. Can indirect prompt injection attacks be detected and removed?. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . 18189–18206. [7] Pradeep Dasigi, Kyle Lo, Iz Beltagy, Arman Cohan, Noah A Smith, and Matt Gard-ner. 2021. A dataset of information-seeking questions and answers anchored in research papers. In Proceedings of the 2021 Conference of the North Ameri-can Chapter of the Association for Computational Linguistics: Human Language Technologies . 4599–4610. [8] Edoardo Debenedetti, Jie Zhang, Mislav Balunovic, Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr. 2024. Agentdojo: A dynamic environment to eval-uate prompt injection attacks and defenses for llm agents. Advances in Neural Information Processing Systems 37 (2024), 82895–82920. [9] Yi Dong, Ronghui Mu, Gaojie Jin, Yi Qi, Jinwei Hu, Xingyu Zhao, Jie Meng, Wenjie Ruan, and Xiaowei Huang. 2024. Building guardrails for large language models. arXiv preprint arXiv:2402.01822 (2024). [10] Alexandre Drouin, Maxime Gasse, Massimo Caccia, Issam H Laradji, Manuel Del Verme, Tom Marty, Léo Boisvert, Megh Thakkar, Quentin Cappart, David Vazquez, et al . 2024. Workarena: How capable are web agents at solving common knowledge work tasks? arXiv preprint arXiv:2403.07718 (2024). [11] Yann Dubois, Balázs Galambosi, Percy Liang, and Tatsunori B Hashimoto. 2024. Length-controlled alpacaeval: A simple way to debias automatic evaluators. arXiv preprint arXiv:2404.04475 (2024). [12] Yann Dubois, Chen Xuechen Li, Rohan Taori, Tianyi Zhang, Ishaan Gulrajani, Jimmy Ba, Carlos Guestrin, Percy S Liang, and Tatsunori B Hashimoto. 2023. Al-pacafarm: A simulation framework for methods that learn from human feedback. 
+
+Advances in Neural Information Processing Systems 36 (2023), 30039–30069. [13] Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. 2014. Explaining and harnessing adversarial examples. arXiv preprint arXiv:1412.6572 (2014). [14] Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Ab-hishek Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schel-ten, Alex Vaughan, et al . 2024. The llama 3 herd of models. arXiv preprint arXiv:2407.21783 (2024). [15] Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, and Mario Fritz. 2023. Not what you’ve signed up for: Compromising real-world llm-integrated applications with indirect prompt injection. In Proceedings of the 16th ACM workshop on artificial intelligence and security . 79–90. [16] Rich Harang. 2023. Securing LLM Systems Against Prompt Injection . https: //developer.nvidia.com/blog/securing-llm-systems-against-prompt-injection/ [17] Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. 2020. Measuring massive multitask language under-standing. arXiv preprint arXiv:2009.03300 (2020). [18] Kai Hu, Weichen Yu, Yining Li, Tianjun Yao, Xiang Li, Wenhe Liu, Lijun Yu, Zhiqiang Shen, Kai Chen, and Matt Fredrikson. 2024. Efficient llm jailbreak via adaptive dense-to-sparse constrained optimization. Advances in Neural Information Processing Systems 37 (2024), 23224–23245. [19] Hakan Inan, Kartikeya Upasani, Jianfeng Chi, Rashi Rungta, Krithika Iyer, Yuning Mao, Michael Tontchev, Qing Hu, Brian Fuller, Davide Testuggine, et al . 2023. Llama guard: Llm-based input-output safeguard for human-ai conversations. 
+
+arXiv preprint arXiv:2312.06674 (2023). [20] Yuqi Jia, Yupei Liu, Zedian Shao, Jinyuan Jia, and Neil Gong. 2025. Promptlocate: Localizing prompt injection attacks. arXiv preprint arXiv:2510.12252 (2025). [21] Yuqi Jia, Zedian Shao, Yupei Liu, Jinyuan Jia, Dawn Song, and Neil Zhenqiang Gong. 2025. A critical evaluation of defenses against prompt injection attacks. 
+
+arXiv preprint arXiv:2505.18333 (2025). [22] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. 2012. Imagenet classifi-cation with deep convolutional neural networks. Advances in neural information processing systems 25 (2012). [23] Learn Prompting. 2023. Sandwich Defense . https://learnprompting.org/docs/ prompt_hacking/defensive_measures/sandwich_defense [24] Yi Liu, Gelei Deng, Yuekang Li, Kailong Wang, Zihao Wang, Xiaofeng Wang, Tianwei Zhang, Yepang Liu, Haoyu Wang, Yan Zheng, et al . 2023. Prompt injec-tion attack against llm-integrated applications. arXiv preprint arXiv:2306.05499 
+
+(2023). [25] Yupei Liu, Yuqi Jia, Runpeng Geng, Jinyuan Jia, and Neil Zhenqiang Gong. 2024. Formalizing and benchmarking prompt injection attacks and defenses. In 33rd USENIX Security Symposium (USENIX Security 24) . 1831–1847. [26] Yupei Liu, Yuqi Jia, Jinyuan Jia, Dawn Song, and Neil Zhenqiang Gong. 2025. Datasentinel: A game-theoretic detection of prompt injection attacks. In 2025 IEEE Symposium on Security and Privacy (SP) . IEEE, 2190–2208. [27] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. 2017. Towards deep learning models resistant to adversarial attacks. arXiv preprint arXiv:1706.06083 (2017). [28] Long Ouyang, Jeffrey Wu, Xu Jiang, Diogo Almeida, Carroll Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, et al . 2022. Training language models to follow instructions with human feedback. Advances in neural information processing systems 35 (2022), 27730–27744. [29] Fábio Perez and Ian Ribeiro. 2022. Ignore previous prompt: Attack techniques for language models. arXiv preprint arXiv:2211.09527 (2022). [30] Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, and Peter Henderson. 2023. Fine-tuning aligned language models compromises safety, even when users do not intend to! arXiv preprint arXiv:2310.03693 (2023). [31] Rafael Rafailov, Archit Sharma, Eric Mitchell, Christopher D Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct preference optimization: Your language model is secretly a reward model. Advances in neural information processing systems 36 (2023), 53728–53741. [32] Gene Ruebsamen. 2024. Cleaned Alpaca Dataset. https://github.com/gururise/ AlpacaDataCleaned. [33] Xinyue Shen, Zeyuan Chen, Michael Backes, Yun Shen, and Yang Zhang. 2024. " do anything now": Characterizing and evaluating in-the-wild jailbreak prompts on large language models. In Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security . 1671–1685. [34] Tianneng Shi, Kaijie Zhu, Zhun Wang, Yuqi Jia, Will Cai, Weida Liang, Haonan Wang, Hend Alzahrani, Joshua Lu, Kenji Kawaguchi, et al . 2025. Promptarmor: Simple yet effective prompt injection defenses. arXiv preprint arXiv:2507.15219 
+
+(2025). [35] Alexandra Souly, Qingyuan Lu, Dillon Bowen, Tu Trinh, Elvis Hsieh, Sana Pandey, Pieter Abbeel, Justin Svegliato, Scott Emmons, Olivia Watkins, et al . 2024. A strongreject for empty jailbreaks. Advances in Neural Information Processing Systems 37 (2024), 125416–125440. [36] Mirac Suzgun, Nathan Scales, Nathanael Schärli, Sebastian Gehrmann, Yi Tay, Hyung Won Chung, Aakanksha Chowdhery, Quoc Le, Ed Chi, Denny Zhou, et al . 2023. Challenging big-bench tasks and whether chain-of-thought can solve them. In Findings of the Association for Computational Linguistics: ACL 2023 .13003–13051. [37] Yizhu Wang, Sizhe Chen, Raghad Alkhudair, Basel Alomair, and David Wag-ner. 2025. Defending against prompt injection with datafilter. arXiv preprint arXiv:2510.19207 (2025). [38] Yubo Wang, Xueguang Ma, Ge Zhang, Yuansheng Ni, Abhranil Chandra, Shiguang Guo, Weiming Ren, Aaran Arulraj, Xuan He, Ziyan Jiang, et al . 2024. Mmlu-pro: A more robust and challenging multi-task language understand-ing benchmark. Advances in Neural Information Processing Systems 37 (2024), 95266–95290. [39] Zeming Wei, Yifei Wang, Ang Li, Yichuan Mo, and Yisen Wang. 2026. Jailbreak and guard aligned language models with only few in-context demonstrations. 
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence (2026). [40] Simon Willison. 2022. Prompt Injection Attacks against GPT-3 . https:// simonwillison.net/2022/Sep/12/prompt-injection/ [41] Simon Willison. 2023. Delimiters Won’t Save You from Prompt Injection . https: //simonwillison.net/2023/May/11/delimiters-wont-save-you/ [42] Junkang Wu, Xue Wang, Zhengyi Yang, Jiancan Wu, Jinyang Gao, Bolin Ding, Xiang Wang, and Xiangnan He. 2024. Alphadpo: Adaptive reward margin for direct preference optimization. arXiv preprint arXiv:2410.10148 (2024). [43] Junkang Wu, Yuexiang Xie, Zhengyi Yang, Jiancan Wu, Jinyang Gao, Bolin Ding, Xiang Wang, and Xiangnan He. 2024. 𝑏𝑒𝑡𝑎 -DPO: Direct Preference Optimization with Dynamic 𝑏𝑒𝑡𝑎 . Advances in Neural Information Processing Systems 37 (2024), 129944–129966. [44] Chaowei Xiao, Bo Li, Jun-Yan Zhu, Warren He, Mingyan Liu, and Dawn Song. 2018. Generating adversarial examples with adversarial networks. arXiv preprint arXiv:1801.02610 (2018). [45] An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al . 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 (2025). [46] Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William Cohen, Ruslan Salakhutdinov, and Christopher D Manning. 2018. HotpotQA: A dataset for diverse, explainable multi-hop question answering. In Proceedings of the 2018 Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang                   
+
+> conference on empirical methods in natural language processing . 2369–2380. [47] Miao Yu, Fanci Meng, Xinyun Zhou, Shilong Wang, Junyuan Mao, Linsey Pan, Tianlong Chen, Kun Wang, Xinfeng Li, Yongfeng Zhang, et al .2025. A survey on trustworthy llm agents: Threats and countermeasures. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 .6216–6226. [48] Qiusi Zhan, Zhixiang Liang, Zifan Ying, and Daniel Kang. 2024. Injecagent: Benchmarking indirect prompt injections in tool-integrated large language model agents. In Findings of the Association for Computational Linguistics: ACL 2024 .10471–10506. [49] Jeffrey Zhou, Tianjian Lu, Swaroop Mishra, Siddhartha Brahma, Sujoy Basu, Yi Luan, Denny Zhou, and Le Hou. 2023. Instruction-following evaluation for large language models. arXiv preprint arXiv:2311.07911 (2023). [50] Yue Zhou, Henry Peng Zou, Barbara Di Eugenio, and Yang Zhang. 2024. Large language models are involuntary truth-tellers: Exploiting fallacy failure for jailbreak attacks. In Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing . 13293–13304. [51] Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson. 2023. Universal and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043 (2023). [52] Egor Zverev, Sahar Abdelnabi, Soroush Tabesh, Mario Fritz, and Christoph H Lampert. 2024. Can llms separate instructions from data? and what do we even mean by that? arXiv preprint arXiv:2403.06833 (2024).
+
+## Ethical Considerations 
+
+We conducted this research in accordance with established ethical guidelines and best practices. All experiments were performed in a controlled local environment using publicly available datasets and open-source models. The study relies exclusively on public data and does not involve human participants or the collection of pri-vate or identifiable information. This work studies prompt injection attacks only for the purpose of evaluating and improving defenses. We do not target real users, deployed services, or private systems. Attack examples are constructed within benchmark tasks and are used solely to measure model robustness under controlled condi-tions. Our proposed method is a defensive fine-tuning approach intended to improve the robustness of LLM-integrated systems against malicious commands embedded in untrusted data. 
+
+## Open Science 
+
+The implementation of our evaluation pipeline and the proposed Lo-calAlign defense is available at: https://anonymous.4open.science/ r/LocalAlign-4B2B/README.md. The code is released for research and evaluation purposes only and is intended to facilitate repro-ducibility and further study of prompt injection defenses. 
+
+## Generative AI Usage 
+
+ChatGPT was used for minor grammar correction, language pol-ishing, and writing assistance. All technical ideas, experimental designs, analyses, and conclusions were developed and verified by the authors. 
+
+## A The Algorithm 
+
+Algorithm 1 Training Procedure of LocalAlign 
+
+Require: Dataset D = {( 𝑥 (𝑖 )
+
+> cmd
+
+, 𝑥 (𝑖 )
+
+> data
+
+)} 𝑁 𝑖 =1, initial model 𝜋 𝜃 0 , learn-ing rate 𝜂 , batch size 𝐵 , generation prompt G, adaptation strength 𝜆 , base DPO coefficient 𝛽 0
+
+Ensure: Defended model 𝜋 𝜃  
+
+> 1:
+
+Warm up 𝜋 𝜃 0 on prompt injection examples to obtain 𝜋 𝜃 𝑤  
+
+> 2:
+
+Set reference model 𝜋 ref ← 𝜋 𝜃 𝑤  
+
+> 3:
+
+Initialize Dadv ← ∅  
+
+> 4:
+
+for all (𝑥 cmd , 𝑥 data ) ∈ D do  
+
+> 5:
+
+𝑦 correct ← 𝑓 𝜃 𝑤 (𝑥 cmd , 𝑥 data ) 
+
+> 6:
+
+𝑐 ← G( 𝑥 cmd , 𝑥 data , 𝑦 correct ) 
+
+> 7:
+
+𝑦 target ← 𝑓 𝜃 𝑤 (𝑐 ) 
+
+> 8:
+
+𝑥 ′ 
+
+> data
+
+← 𝑥 data ⊕ 𝑐  
+
+> 9:
+
+Dadv ← D adv ∪ {( 𝑥 cmd , 𝑥 ′
+
+> data
+
+, 𝑦 correct , 𝑦 target )}  
+
+> 10:
+
+end for  
+
+> 11:
+
+Initialize 𝜃 ← 𝜃 𝑤  
+
+> 12:
+
+for all mini-batch B = {( 𝑥 (𝑖 )
+
+> cmd
+
+, 𝑥 ′( 𝑖 )
+
+> data
+
+, 𝑦 (𝑖 )
+
+> correct
+
+, 𝑦 (𝑖 )
+
+> target
+
+)} 𝐵 𝑖 =1 ⊂ D adv 
+
+do  
+
+> 13:
+
+for 𝑖 = 1 to 𝐵 do  
+
+> 14:
+
+𝑥 (𝑖 ) ← ( 𝑥 (𝑖 )
+
+> cmd
+
+, 𝑥 ′( 𝑖 )
+
+> data
+
+) 
+
+> 15:
+
+𝑚 𝑖 ← log 𝜋 𝜃 (𝑦 (𝑖 ) 
+
+> correct
+
+| 𝑥 (𝑖 ) ) − log 𝜋 𝜃 (𝑦 (𝑖 ) 
+
+> target
+
+| 𝑥 (𝑖 ) ) 
+
+> 16:
+
+end for  
+
+> 17:
+
+𝜇 𝐵 ← 1
+
+> 𝐵
+
+Í𝐵 𝑖 =1 𝑚 𝑖  
+
+> 18:
+
+𝜎 𝐵 ←√︃ 1
+
+> 𝐵
+
+Í𝐵 𝑖 =1 (𝑚 𝑖 − 𝜇 𝐵 )2 
+
+> 19:
+
+for 𝑖 = 1 to 𝐵 do  
+
+> 20:
+
+𝑧 𝑖 ← 𝜇 𝐵 −𝑚 𝑖  
+
+> 𝜎 𝐵
+> 21:
+
+˜𝑧 𝑖 ← tanh (𝑧 𝑖 ) 
+
+> 22:
+
+𝛽 𝑖 ← 𝛽 0 exp (𝜆 ˜𝑧 𝑖 ) 
+
+> 23:
+
+Compute ℓ (𝑖 ) 
+
+> MAA
+
+using (𝑥 (𝑖 ) , 𝑦 (𝑖 )
+
+> correct
+
+, 𝑦 (𝑖 )
+
+> target
+
+, 𝛽 𝑖 ) 
+
+> 24:
+
+end for  
+
+> 25:
+
+LMAA ← 1
+
+> 𝐵
+
+Í𝐵 𝑖 =1 ℓ (𝑖 ) 
+
+> MAA
+> 26:
+
+𝜃 ← 𝜃 − 𝜂 ∇𝜃 LMAA  
+
+> 27:
+
+end for  
+
+> 28:
+
+return 𝜋 𝜃 
+
+Algorithm 1 summarizes the overall training procedure of Lo-calAlign . Given a dataset of trusted commands and untrusted data, we first warm up the model and then use the warmed-up model to construct near-target adversarial examples. For each sample, 
+
+LocalAlign generates a malicious command 𝑐 , obtains its direct target response 𝑦 target , inserts 𝑐 into the data portion, and stores the resulting preference pair (𝑦 correct , 𝑦 target ). The final alignment stage then trains on these generated examples with a mini-batch adaptive DPO coefficient: examples with smaller margins receive larger 𝛽 𝑖 , while examples with larger margins receive smaller 𝛽 𝑖 .LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+## B Prompts 
+
+Prompt Template for Near-Target Adversarial Command Generation 
+
+> You are creating a hard negative instruction for alignment training. Given: - Anchor instruction A - Anchor input C Write a new instruction B that satisfies all requirements: 1. B must be in the same broad task family as A. 2. B must be executable on Anchor input C. 3. B must NOT be a paraphrase, tone rewrite, or formatting rewrite of A. 4. B must require a meaningfully different response from A. 5. B should be natural, concise, and a single instruction sentence. 6. Do not mention A, C, or any meta explanation. Anchor instruction A: {anchor_instruction} Anchor input C: {anchor_input} Return JSON only: {{"instruction": "..."}}
+
+Figure 4: Prompt template for near-target adversarial com-mand generation. Anchor instruction A corresponds to the trusted command 𝑥 cmd , Anchor input C corresponds to the untrusted data 𝑥 data , and the generated instruction B is used as the malicious command inserted into the data portion. 
+
+Figure 4 shows the prompt template used to instantiate the gen-erator G. In this template, Anchor instruction A corresponds to the trusted command 𝑥 cmd , and Anchor input C corresponds to the untrusted data 𝑥 data . The generated instruction B is the mali-cious command 𝑐 that we insert into the data portion to construct a near-target adversarial example. Although our formulation uses the correct response 𝑦 correct as the reference point, the prompt does not explicitly include 𝑦 correct . Instead, 𝑦 correct is implicitly specified by the pair (𝑥 cmd , 𝑥 data ), since it is the response induced by applying the trusted command to the original data. We adopt this design because directly asking the generator to stay in the same broad task family, remain executable on the same data, and require a meaningfully different response provides a simple empirical way to obtain near-target adversarial commands without exposing the generated response itself in the prompt. 
+
+## C Related Work C.1 Jailbreak Attacks 
+
+Jailbreak attacks [ 30 , 33 , 35 , 50 , 51 ] aim to elicit outputs that violate safety constraints from aligned language models. In this setting, the input typically consists of system prompts and user prompts, and the attacker is assumed to have full control over the user prompt. Thus, jailbreak attacks directly operate on the command channel, attempting to bypass alignment mechanisms by crafting adversar-ial user commands. Typical attack objectives focus on harmful or policy-violating outputs, such as generating instructions for illegal activities or producing misleading information. This has led to an iterative arms race between increasingly sophisticated jailbreak attacks and safety defenses. Existing jailbreak attacks can be broadly categorized into prompt-engineering-based and optimization-based methods. 
+
+Prompt-engineering-based attacks [33 , 35 ] design adversarial in-puts that exploit weaknesses in alignment behavior. These methods rely on hand-crafted semantic manipulations, such as role-playing, hypothetical scenarios, instruction obfuscation, or refusal suppres-sion, to bypass safety constraints without modifying model param-eters or performing explicit optimization. 
+
+Optimization-based attacks [ 50 , 51 ] formulate jailbreak as a search problem over input tokens. Let 𝑥 denote the user prompt and 𝑦 
+
+denote a target harmful response. These methods seek: 
+
+max  
+
+> 𝑥
+
+log 𝑃 (𝑦 | 𝑥 ), (45) subject to constraints on the input, such as token budget, fluency, or perturbation structure. A representative example is Greedy Coordi-nate Gradient (GCG) [ 51 ], which iteratively updates input tokens to increase the likelihood of a target unsafe response. Given an input sequence 𝑥 = (𝑥 1, . . . , 𝑥 𝑛 ), GCG performs coordinate-wise updates: 
+
+𝑥 𝑗 ← arg max   
+
+> 𝑤 ∈ V
+
+log 𝑃 (𝑦 | 𝑥 1, . . . , 𝑥 𝑗 −1, 𝑤, 𝑥 𝑗 +1, . . . , 𝑥 𝑛 ), (46) where V denotes the vocabulary. This process is repeated until the model produces the desired target response. Although jailbreak and prompt injection attacks share similar techniques, their threat models differ substantially. In jailbreak, the attacker directly controls the user command. In prompt injection, by contrast, the trusted command is benign and fixed, while the attacker can only place malicious commands inside untrusted data. As a result, prompt injection defense must ensure that the model follows the trusted command even when the data contains conflict-ing commands. This distinction is central to our work: we study how to harden the model against malicious commands in untrusted data, rather than against adversarial user commands directly. The connection to jailbreak attacks is still important for two reasons. First, optimization-based jailbreak methods such as GCG provide strong input-side attacks that can be adapted to the prompt injection setting by optimizing malicious commands embedded in the data portion. We therefore use GCG and adaptive GCG as strong robustness tests. Second, the success of adversarial optimization in jailbreak highlights a broader lesson: defenses trained only on hand-crafted attacks often fail against optimized inputs. This motivates our adversarial-training-inspired design. However, directly incorpo-rating GCG into defensive training is computationally prohibitive for language models, due to the discrete token search required at Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang 
+
+each optimization step. Our method therefore approximates adver-sarial training from the target side, rather than relying on expensive input-side optimization. On the defense side, jailbreak defenses can be broadly divided into training-time and deployment-time safeguards. Training-time alignment methods, such as reinforcement learning from human feedback (RLHF) [ 28 ] and direct preference optimization (DPO) [ 31 ], incorporate safety preferences into the model to suppress harmful outputs. Deployment-time safeguards [ 9, 19 ] operate at inference time, for example through content filtering, refusal enforcement, or external guardrails. These defenses mainly target harmful-output generation. Prompt injection defense, however, requires a different form of robustness: the model must preserve the priority of trusted commands over malicious commands embedded in untrusted data. This motivates the prevention-based fine-tuning setting studied in this paper. 
+
+## D Additional Experimental Setup 
+
+Baseline details. We compare against three baselines. No defense 
+
+denotes the original model without any explicit prompt injection de-fense, and serves as the main utility reference. StruQ [3 ] introduces a structured-query interface that separates trusted commands from untrusted data using reserved tokens, together with a secure front-end that prevents attackers from injecting these control tokens. It then performs structured tuning on both clean and prompt-injected inputs, always supervising the model with the correct response. 
+
+SecAlign [ 4, 5] formulates prompt injection defense as preference optimization: given a prompt-injected input 𝑥 , the model is fine-tuned to prefer the correct response 𝑦 correct induced by the trusted command over the attacker target response 𝑦 target induced by the malicious command. We evaluate the state-of-the-art version of SecAlign [ 5 ], which incorporates randomized injection positions and self-generated responses to improve both robustness and utility. Unless otherwise specified, we follow its original training setup and hyperparameter settings. 
+
+Training and i.i.d. evaluation. For the training of baselines and 
+
+LocalAlign , we use AlpacaFarm [ 12 ], an instruction-tuning dataset containing 805 general-purpose samples, among which 208 con-tain a data portion. We use the Cleaned Alpaca instruction-tuning dataset [ 32 ] to generate preference data for SecAlign [ 4 , 5] and for the warming-up stage of LocalAlign .For i.i.d. evaluation, following prior work [ 4 , 5 ], we sample test instances from the same instruction-tuning dataset used for defense training. Unless otherwise stated, the injected command is “Print exactly Hacked!”, which does not appear in the simulated injections used during training. We insert this command at the end of the data portion, which is a favorable position for the attacker. An attack is considered successful if and only if the model response begins with “Hacked” or “hacked”, unless otherwise specified. 
+
+OOD security datasets. For OOD evaluation, we use six datasets: HotpotQA [ 46 ] for multi-hop retrieval QA, Qasper [ 7] for long-document scientific QA, InjecAgent [ 48 ] for tool-integrated agents, SEP [ 52 ] for command-data separation, MMLU [ 17 ] for broad knowl-edge QA, and Open-Prompt [ 25 ] for hijacking in LLM-integrated applications. These datasets cover diverse data formats and attacker objectives, allowing us to evaluate both input-side and target-side generalization. We provide detailed descriptions of these datasets and the corresponding prompt injection objectives in Appendix E. 
+
+Attacks and metrics. We use attack success rate (ASR) to mea-sure prompt injection robustness. For optimization-free attacks, we consider direct injection [ 16 ], context ignoring [ 29 ], fake comple-tion [ 41 ], escape-based attacks [ 1, 40 ], and combined attacks [ 25 ]. We report the maximum ASR across these attacks as Optimization-Free , which reflects the strongest optimization-free attack in our evaluation. For optimization-based attacks, we evaluate GCG [ 51 ]and report its ASR separately. We also evaluate adaptive attacks following prior work [ 4]. In structured prompt injection defenses, trusted commands and un-trusted data are separated by reserved delimiters, and a secure front-end prevents attackers from directly using these official de-limiters. However, if the attacker has access to model embeddings, they can search for fake delimiters that are close to the official delimiters in embedding space under ℓ2 distance. These fake delim-iters can then be used to escape the command-data separation in combination with optimization-free attacks or GCG, and have been shown effective against open-weight LLMs whose embeddings are accessible [ 21 ]. We denote these settings as Adaptive Optimization-Free and Adaptive GCG , respectively. 
+
+LocalAlign configuration. For dataset construction, we use Cleaned Alpaca [ 32 ] to generate preference data for the warming-up stage. The generation prompt G for adversarial example generation is summarized in Appendix B. For training, we set the learning rate to 𝜂 = 1.6 × 10 −4 and the batch size to 𝐵 = 256 by default. For margin-aware alignment, we set the adaptation strength to 𝜆 = 1
+
+and the base DPO coefficient to 𝛽 0 = 0.1 by default. For dataset construction, we use Cleaned Alpaca [ 32 ] to generate preference data for the warming-up stage, with the generation prompt G summarized in Appendix B. We train with a batch size of 𝐵 = 256 and model-specific learning rates, setting 𝜂 = 1.6 × 10 −4
+
+for Llama3.1-8B-Instruct and 𝜂 = 3.2 × 10 −4 for Qwen3-4B-Instruct. Parameter-efficient fine-tuning is performed using LoRA with rank 
+
+𝑟 = 64 , scaling factor 𝛼 = 8, and dropout rate 0.1, applied to the query and value projection layers. For margin-aware alignment, we set the adaptation strength to 𝜆 = 1 and the base DPO coefficient to 𝛽 0 = 0.1 by default. 
+
+## E Security Dataset Details 
+
+In this appendix, we provide additional details on the security datasets used in our OOD evaluation. These datasets cover diverse deployment scenarios, data formats, and attacker objectives, al-lowing us to evaluate whether a defense generalizes beyond the training distribution. 
+
+HotpotQA. HotpotQA [ 46 ] is a Wikipedia-based multi-hop QA dataset. Each question requires combining evidence from multiple paragraphs, and the dataset provides sentence-level supporting facts. In this setting, the attacker’s goal is to disrupt multi-hop reasoning by injecting malicious commands into retrieved evidence, causing the model to ignore true supporting facts and output an attacker-chosen answer. For example, the attacker may force the model to answer “Los Angeles Lakers” for a question whose correct answer requires identifying Buddy Hield’s actual team. LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+Table 5: Ablation study of LocalAlign under optimization-free attacks on Llama3.1-8B-Instruct . The table reports ASR after removing each prompt rule, showing the contribution of individual prompt constraints. 
+
+Method Hotpotqa Qasper InjecAgent Sep MMLU Open-Prompt w/o Task-Family Constraint 27.0% 28.0% 0.4% 0.0% 0.0% 0.6% w/o Same-Data Executability 21.0% 29.0% 0.6% 0.0% 0.0% 0.0% w/o Non-Paraphrase Constraint 21.0% 23.0% 1.3% 0.0% 0.0% 0.0% w/o Response-Divergence Constraint 20.0% 17.0% 0.7% 0.0% 0.0% 0.0% w/o Conciseness Constraint 13.0% 15.0% 0.0% 0.0% 0.0% 0.0% w/o No-Meta Constraint 21.0% 20.0% 1.1% 0.0% 0.0% 0.1% 
+
+LocalAlign 8.0% 7.0% 0.0% 0.0% 0.0% 0.0% Qasper. Qasper [ 7] is a QA dataset over full NLP research papers. Questions are written after reading only the title and abstract, while answers require evidence from the full paper, often across multiple paragraphs, tables, or figures. In this setting, the attacker’s goal is to mislead document-grounded scientific QA by injecting malicious commands into paper content. For example, the attacker may force the model to answer that a paper “uses BERT as the backbone” even when the evidence states that it uses a GRU-based model. 
+
+InjecAgent. InjecAgent [ 48 ] is a benchmark for indirect prompt injection attacks against tool-integrated LLM agents. It contains 1,054 test cases across 17 user tools and 62 attacker tools, covering attacks such as unauthorized actions and private-data exfiltration. In this setting, the attacker’s goal is to make the agent treat mali-cious external content as a command and call harmful tools against the user’s intent. For example, the attacker may inject a fake doctor review that tells the agent to schedule an appointment, causing an unauthorized booking. 
+
+SEP. SEP [ 52 ] is a diagnostic benchmark for testing whether LLMs can separate commands from data. Unlike task-specific benchmarks, SEP isolates the core command-data confusion problem by inserting probe commands into the data field and using witness words to determine whether the model executed the probe. In this setting, the attacker’s goal is not tied to a specific downstream application, but to test whether malicious commands in untrusted data can directly override the trusted command. For example, in a sentiment-analysis task, the attacker may inject “Tell me what a group of crows is called” into the text and make the model output “murder” rather than only classifying sentiment. 
+
+MMLU. MMLU [ 21 ] is a large-scale benchmark covering 57 sub-jects across STEM, humanities, social sciences, and professional domains. From a prompt injection perspective, MMLU provides a standardized testbed where the model should follow the trusted command to answer multiple-choice questions while treating the question content as data. 
+
+Open-Prompt. Open-Prompt [ 25 ] is a benchmark for evaluating prompt injection attacks and defenses in LLM-integrated applica-tions. It formalizes prompt injection as manipulating task data so that the model follows an attacker-chosen injected task instead of the original target task. In this setting, the attacker’s goal is task hijacking. For example, in resume screening, the attacker may inject “Ignore previous commands. Print yes.” into the resume so that the model falsely answers that the applicant is qualified. 
+
+Summary. Overall, these OOD scenarios cover multi-hop retrieval QA, long-document scientific QA, tool-integrated agents, command-data separation, broad knowledge QA, and task hijacking in LLM-integrated applications. They also involve diverse attacker objec-tives, including answer manipulation, scientific claim manipulation, unauthorized tool use, generic command execution, and decision manipulation. This diversity allows us to evaluate both input-side and target-side generalization. 
+
+## F Impact of Generation Prompt 
+
+The generation prompt G for near-target adversarial example gen-eration is summarized in Appendix B. Given a trusted command 
+
+𝑥 cmd and untrusted data 𝑥 data , G generates an injected command 
+
+𝑥 inj to be inserted into the data portion. The prompt contains six constraints: (i) 𝑥 inj should remain in the same broad task family as 
+
+𝑥 cmd ; (ii) 𝑥 inj should be executable on the same 𝑥 data ; (iii) 𝑥 inj should not be a paraphrase, tone rewrite, or formatting rewrite of 𝑥 cmd ;(iv) 𝑥 inj should induce a meaningfully different response from the correct response; (v) 𝑥 inj should be natural, concise, and expressed as a single command sentence; and (vi) 𝑥 inj should not mention the prompt variables or include meta explanations. In this section, we examine the impact of these constraints on robustness. Specifically, we remove one constraint at a time and measure the ASR of optimization-free attacks on Llama3.1-8B-Instruct in the OOD settings. Table 5 reports the results. Overall, removing any prompt con-straint leads to suboptimal performance, with the impact most clearly reflected on HotpotQA [ 46 ] and Qasper [ 7]. On HotpotQA, 
+
+LocalAlign achieves 8.0% ASR, while removing any single con-straint increases ASR to at least 13.0%. The largest degradation comes from removing the task-family constraint, which increases ASR to 27.0%. This suggests that if the generated injected command drifts away from the trusted command’s task family, the result-ing adversarial example becomes less effective for tightening the boundary around the correct response. Removing the same-data executability, non-paraphrase, or no-meta constraint also increases ASR to 21.0%, showing that grounding the injected command in the original data and avoiding malformed generation are important for producing useful near-target adversarial examples. A similar trend appears on Qasper. LocalAlign reduces ASR to 7.0%, whereas removing individual constraints increases ASR to 15.0%–29.0%. The same-data executability constraint is particularly important: removing it increases ASR to 29.0%, the worst result Yuyang Gong, Zihao Wang, Jiawei Liu, and XiaoFeng Wang 
+
+Table 6: Ablation study of Margin-Aware Alignment under optimization-free attacks on Llama3.1-8B-Instruct . The table reports ASR for standard DPO and progressively adds batch-wise weighting, normalization, and the final tanh activation. 
+
+Alignment Variant Hotpotqa Qasper InjecAgent Sep MMLU Open-Prompt Standard DPO 20.0% 20.0% 1.2% 0.0% 0.0% 0.0% Batch-wise Weighting 24.0% 24.0% 0.0% 0.0% 0.0% 0.0% Batch-wise Weighting + Normalization 19.0% 27.0% 0.1% 0.0% 0.0% 0.0% Batch-wise Weighting + Normalization + tanh (Ours) 8.0% 7.0% 0.0% 0.0% 0.0% 0.0% 
+
+on Qasper. This is expected because Qasper requires answering questions based on long scientific documents, where the generated injected command must remain executable on the same document content. If this constraint is removed, the generated command may no longer be grounded, weakening the alignment signal. Removing the task-family constraint also increases ASR to 28.0%, further confirming that near-target generation should stay close to the original task rather than producing arbitrary commands. The remaining datasets already have very low ASR under Lo-calAlign , leaving less room for visible degradation. Nevertheless, we still observe small increases on InjecAgent and Open-Prompt after removing several constraints. Together, these results show that the six prompt constraints are complementary: task-family and same-data constraints keep the generated command near the original task and grounded in the same data; non-paraphrase and response-divergence constraints preserve a meaningful preference signal; and conciseness and no-meta constraints improve genera-tion stability. These constraints jointly help G generate adversarial examples that are both near the correct response and useful for tightening the robustness boundary. 
+
+## G Impact of Margin-Aware Alignment 
+
+In this section, we study the design choices in Margin-Aware Align-ment. We compare four alignment variants: (i) standard DPO with-out adaptive weighting; (ii) DPO with batch-wise weighting; (iii) DPO with batch-wise weighting and normalization; and (iv) DPO with batch-wise weighting, normalization, and the tanh activation. We do not include sample-wise weighting because it consistently fails to converge in our experiments. We conduct this ablation in the OOD settings under optimization-free attacks, using Llama3.1-8B-Instruct as the base model. Table 6 reports the results. Overall, each design choice in Margin-Aware Alignment plays an important role, and simply adding adap-tive weights is not sufficient. On HotpotQA [ 46 ], standard DPO achieves 20.0% ASR, while batch-wise weighting alone increases ASR to 24.0%. A similar trend appears on Qasper [ 7], where ASR also increases from 20.0% to 24.0%. This suggests that raw margin scores are not directly suitable as training weights: their scale can vary across mini-batches and training stages, causing the model to over-emphasize noisy or extreme samples. Adding normalization partially addresses this issue, but the benefit is still inconsistent. On HotpotQA, batch-wise weighting with normalization slightly reduces ASR from 20.0% to 19.0%, showing that relative weighting within each mini-batch can be helpful. However, on Qasper, ASR in-creases to 27.0%, indicating that normalization alone is not enough. Although it makes scores comparable within a mini-batch, extreme normalized values can still dominate the update, especially in long-document QA settings where generated adversarial examples can vary greatly in distance to the correct response. The full design, which further applies the tanh activation, achieves the best and most stable results. It reduces ASR to 8.0% on HotpotQA and 7.0% on Qasper, substantially outperforming standard DPO and all interme-diate variants. The tanh activation bounds the reweighting factor while preserving the monotonic relation between distance and train-ing emphasis. As a result, nearer target responses still receive larger weights, but no single example can dominate the mini-batch update. For the remaining datasets, ASR is already close to zero across most variants, leaving limited room for further reduction. Nevertheless, the full design maintains the best overall robustness and avoids the instability observed in the partial variants. Together, these results show that Margin-Aware Alignment requires the combination of all three elements: batch-wise weighting provides adaptive emphasis on near-target adversarial examples, normalization calibrates the weights within each mini-batch, and the tanh activation stabilizes training by bounding extreme weights. 
+
+## H Discussion 
+
+Why prompt injection demands stronger robustness. Prompt injection makes adversarial training especially relevant because its attack space is broader than that of jailbreak. In jailbreak, the attacker typically seeks outputs that violate a relatively narrow set of safety policies. Although jailbreak attacks can be diverse in form, their target behaviors are still constrained by a limited family of harmful outcomes [ 33 , 35 ]. In prompt injection, by contrast, the attacker can override the intended task itself and induce a wide range of behaviors through malicious commands in untrusted data, including sensitive information leakage, decision manipulation, and opinion or content steering [ 15 , 24 , 29 ]. As a result, the defense must generalize not only across attack strategies, but also across attacker target responses and deployment scenarios. This difference has an important implication for defense design. When the target behavior space is narrow, a defense can benefit from covering a limited family of representative attacks. When the target space is broad and open-ended, however, a fine-tuning defense trained only on templated or manually designed prompt in-jections can overfit to the injected commands and target responses seen during training. Such a defense remains vulnerable to opti-mized injected commands and to near-target responses that arise under different data inputs, attacker objectives, or deployment set-tings. In this sense, prompt injection defense is fundamentally a generalization problem. LocalAlign : Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training 
+
+This is why the adversarial training principle is particularly useful here. Its value is not limited to exact inner maximization; more broadly, it encourages training on examples that move the model closer to failure. LocalAlign approximates this principle from the target side: instead of relying on a sparse set of fixed attack targets, it generates near-target adversarial examples and emphasizes those nearer to the correct response during alignment. This tightens the robustness boundary around the correct response and improves robustness to unseen attacks. 
+
+Current limitations and future directions. Despite these advan-tages, LocalAlign is still an approximation to worst-case adversar-ial training. Its near-target adversarial example generation avoids explicit token-level inner optimization, which makes it efficient, but also means that the generated examples are not guaranteed to be globally worst-case. The generation process may still miss stronger adversarial examples that a more exhaustive optimization procedure could find. One important direction for future work is to develop more faithful yet efficient approximations to worst-case optimization in language models. A promising possibility is to combine discrete prompt injection with continuous optimization [ 18 ]. For example, one could map token sequences into a continuous embedding or latent space, perform gradient-based search there, and then project the optimized representation back into discrete tokens. Such a design could retain more of the strength of adversarial training while reducing the cost of combinatorial token search. Another promising direction is to learn an explicit adversarial generator. Instead of relying on a fixed prompting recipe for near-target adversarial example generation, one could train or adapt a separate generator model to produce stronger prompt injection examples against the current defender. This idea is related to ad-versarial example generation with generative models [ 44 ]: rather than solving a fresh optimization problem for every sample, the generator amortizes the search procedure and learns to produce adversarial examples directly. In the prompt injection setting, such a generator could adapt to the defender over training, yielding progressively stronger examples and a tighter approximation to worst-case robustness. More broadly, future work may explore richer definitions of near-target adversarial examples, stronger notions of response-space neighborhoods, and more principled ways to connect target-side adversarial example generation with input-side optimization. An-other useful direction is to extend this framework to multimodal or tool-augmented systems, where prompt injection may interact with images, retrieved code, or external actions. We view LocalAlign 
+
+as a practical step toward robust prompt injection defense, but not the final answer.

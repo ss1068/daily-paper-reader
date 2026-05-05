@@ -6,46 +6,58 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-04
-- 运行时间：2026-05-04 20:33:45 UTC
+- 最新运行日期：2026-05-05
+- 运行时间：2026-05-05 20:18:09 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：6
-- 速读区：2
+- 本次总论文数：12
+- 精读区：7
+- 速读区：5
 
 ### 今日简报（AI）
-今日聚焦 8 篇大模型安全前沿，深度拆解 LLM 越狱的因果逻辑与多模态视觉漏洞。
-核心结论指出越狱成功源于极简的局部因果触发，且视觉模态正成为 VLM 安全防御的最薄弱环节。
-建议开发者加强对多模态输入及微调供应链的风险排查，防范潜在的后门与毒性攻击。
-- 详情：[/202605/04/README](/202605/04/README)
+今日聚焦大模型安全攻防，深度解析角色解耦对齐与自动化越狱等 12 篇前沿成果。
+满分论文通过对抗自博弈实现角色无关的安全对齐，而 SRTJ 证明了无需训练即可实现自我演化的规则驱动越狱。
+建议警惕针对智能体记忆的“河马木马”攻击，在构建多智能体系统时需重新评估传统嵌入式防御
+- 详情：[/202605/05/README](/202605/05/README)
 
 ### 精读区论文标签
-1. [Minimal, Local, Causal Explanations for Jailbreak Success in Large Language Models](/202605/04/2605.00123v1-minimal-local-causal-explanations-for-jailbreak-success-in-large-language-models)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：越狱成功的因果解释以提高对防御的理解
-2. [Jailbreaking Vision-Language Models Through the Visual Modality](/202605/04/2605.00583v1-jailbreaking-vision-language-models-through-the-visual-modality)  
+1. [Disentangling Intent from Role: Adversarial Self-Play for Persona-Invariant Safety Alignment](/202605/05/2605.01899v1-disentangling-intent-from-role-adversarial-self-play-for-persona-invariant-safety-alignment)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：针对人格化越狱防御的对抗性自博弈
+2. [SRTJ: Self-Evolving Rule-Driven Training-Free LLM Jailbreaking](/202605/05/2605.00974v1-srtj-self-evolving-rule-driven-training-free-llm-jailbreaking)  
    标签：评分：9.0/10、query:llm
-   evidence：针对视觉语言模型的越狱攻击，绕过安全对齐
-3. [Alignment Contracts for Agentic Security Systems](/202605/04/2605.00081v1-alignment-contracts-for-agentic-security-systems)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：为智能体系统实施安全护栏和行为约束
-4. [Attention Is Where You Attack](/202605/04/2605.00236v1-attention-is-where-you-attack)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：绕过大语言模型安全对齐的白盒对抗攻击
-5. [Jailbroken Frontier Models Retain Their Capabilities](/202605/04/2605.00267v1-jailbroken-frontier-models-retain-their-capabilities)  
-   标签：评分：8.0/10、query:llm
-   evidence：评估越狱攻击及其对模型能力的影响
-6. [Stable-GFlowNet: Toward Diverse and Robust LLM Red-Teaming via Contrastive Trajectory Balance](/202605/04/2605.00553v1-stable-gflownet-toward-diverse-and-robust-llm-red-teaming-via-contrastive-trajectory-balance)  
-   标签：评分：8.0/10、query:llm
-   evidence：通过大语言模型红队测试识别安全漏洞
+   evidence：自我演化的规则驱动 LLM 越狱攻击
+3. [A Sentence Relation-Based Approach to Sanitizing Malicious Instructions](/202605/05/2605.01078v1-a-sentence-relation-based-approach-to-sanitizing-malicious-instructions)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：用于清除恶意指令的提示词净化框架
+4. [MultiBreak: A Scalable and Diverse Multi-turn Jailbreak Benchmark for Evaluating LLM Safety](/202605/05/2605.01687v1-multibreak-a-scalable-and-diverse-multi-turn-jailbreak-benchmark-for-evaluating-llm-safety)  
+   标签：评分：9.0/10、query:llm
+   evidence：用于评估 LLM 安全性的多轮越狱基准测试
+5. [Catching the Infection Before It Spreads: Foresight-Guided Defense in Multi-Agent Systems](/202605/05/2605.01758v1-catching-the-infection-before-it-spreads-foresight-guided-defense-in-multi-agent-systems)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：多智能体系统中的传染性越狱防御
+6. [TrajShield: Trajectory-Level Safety Mediation for Defending Text-to-Video Models Against Jailbreak Attacks](/202605/05/2605.01761v1-trajshield-trajectory-level-safety-mediation-for-defending-text-to-video-models-against-jailbreak-attacks)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：防御视频生成模型的越狱攻击
+7. [RefusalGuard: Geometry-Preserving Fine-Tuning for Safety in LLMs](/202605/05/2605.01913v1-refusalguard-geometry-preserving-fine-tuning-for-safety-in-llms)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：针对大模型安全与拒绝行为的微调
 
 ### 速读区论文标签
-1. [Secret Stealing Attacks on Local LLM Fine-Tuning through Supply-Chain Model Code Backdoors](/202605/04/2604.27426v1-secret-stealing-attacks-on-local-llm-fine-tuning-through-supply-chain-model-code-backdoors)  
+1. [When Embedding-Based Defenses Fail: Rethinking Safety in LLM-Based Multi-Agent Systems](/202605/05/2605.01133v1-when-embedding-based-defenses-fail-rethinking-safety-in-llm-based-multi-agent-systems)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：重新思考多智能体系统中的安全与防御
+2. [LocalAlign: Enabling Generalizable Prompt Injection Defense via Generation of Near-Target Adversarial Examples for Alignment Training](/202605/05/2605.01462v1-localalign-enabling-generalizable-prompt-injection-defense-via-generation-of-near-target-adversarial-examples-for-alignment-training)  
+   标签：评分：8.0/10、query:llm
+   evidence：通过对齐训练防御提示注入
+3. [Trojan Hippo: Weaponizing Agent Memory for Data Exfiltration](/202605/05/2605.01970v1-trojan-hippo-weaponizing-agent-memory-for-data-exfiltration)  
    标签：评分：7.0/10、query:llm
-   evidence：大语言模型中的安全漏洞和供应链攻击
-2. [STARE: Step-wise Temporal Alignment and Red-teaming Engine for Multi-modal Toxicity Attack](/202605/04/2605.00699v1-stare-step-wise-temporal-alignment-and-red-teaming-engine-for-multi-modal-toxicity-attack)  
+   evidence：大语言模型智能体的安全漏洞与威胁
+4. [When Alignment Isn't Enough: Response-Path Attacks on LLM Agents](/202605/05/2605.02187v1-when-alignment-isnt-enough-response-path-attacks-on-llm-agents)  
    标签：评分：7.0/10、query:llm
-   evidence：针对多模态毒性攻击的视觉语言模型红队测试
+   evidence：已对齐大模型智能体的安全威胁
+5. [On the Privacy of LLMs: An Ablation Study](/202605/05/2605.02255v1-on-the-privacy-of-llms-an-ablation-study)  
+   标签：评分：7.0/10、query:llm
+   evidence：大语言模型的隐私攻击与统一威胁模型
 
 
 <div class="dpr-home-promo-card">
