@@ -6,58 +6,53 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-06
-- 运行时间：2026-05-06 20:33:25 UTC
+- 最新运行日期：2026-05-07
+- 运行时间：2026-05-07 20:23:38 UTC
 - 运行状态：成功
-- 本次总论文数：12
+- 本次总论文数：10
 - 精读区：6
-- 速读区：6
+- 速读区：4
 
 ### 今日简报（AI）
-今日深度解析 12 篇安全领域论文，聚焦大模型越狱防御的底层机制与表征层突破。
-满分论文揭示了利用拒绝轨迹实现鲁棒越狱检测的新路径，并警示前沿模型在越狱后仍保留强大能力。
-建议开发者警惕 MoE 路由攻击及 Agent 提示词注入风险，从表征层加固模型安全防线。
-- 详情：[/202605/06/README](/202605/06/README)
+- 今日共生成 10 篇推荐（精读 6 篇，速读 4 篇）
+- 精读：《SoK: Robustness in Large Language Models against Jailbreak Attacks》（10.0/10）, 《You Snooze, You Lose: Automatic Safety Alignment Restoration through Neural Weight Translation》（9.0/10）
+- 速读：《Sparse Tokens Suffice: Jailbreaking Audio Language Models via Token-Aware Gradient Optimization》（8.0/10）, 《From Prompt to Physical Actuation: Holistic Threat Modeling of LLM-Enabled Robotic Systems》（7.0/10）, 《Hybrid Inspection and Task-Based Access Control in Zero-Trust Agentic AI》（7.0/10）
+- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
+- 详情：[/202605/07/README](/202605/07/README)
 
 ### 精读区论文标签
-1. [Tracing the Dynamics of Refusal: Exploiting Latent Refusal Trajectories for Robust Jailbreak Detection](/202605/06/2605.02958v1-tracing-the-dynamics-of-refusal-exploiting-latent-refusal-trajectories-for-robust-jailbreak-detection)  
+1. [SoK: Robustness in Large Language Models against Jailbreak Attacks](/202605/07/2605.05058v1-sok-robustness-in-large-language-models-against-jailbreak-attacks)  
    标签：评分：10.0/10、query:jb-def
-   evidence：利用潜在拒绝轨迹进行鲁棒的越狱检测
-2. [Revisiting JBShield: Breaking and Rebuilding Representation-Level Jailbreak Defenses](/202605/06/2605.03095v1-revisiting-jbshield-breaking-and-rebuilding-representation-level-jailbreak-defenses)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：表示层级的越狱防御及JBShield评估
-3. [Self-Mined Hardness for Safety Fine-Tuning](/202605/06/2605.03226v1-self-mined-hardness-for-safety-fine-tuning)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：利用自挖掘困难对抗提示进行安全微调
-4. [Multilingual Safety Alignment via Self-Distillation](/202605/06/2605.02971v1-multilingual-safety-alignment-via-self-distillation)  
+   evidence：越狱攻击与防御的系统分类与评估
+2. [You Snooze, You Lose: Automatic Safety Alignment Restoration through Neural Weight Translation](/202605/07/2605.04992v1-you-snooze-you-lose-automatic-safety-alignment-restoration-through-neural-weight-translation)  
    标签：评分：9.0/10、query:jb-def
-   evidence：多语言安全对齐与越狱漏洞缓解
-5. [MAGE: Safeguarding LLM Agents against Long-Horizon Threats via Shadow Memory](/202605/06/2605.03228v1-mage-safeguarding-llm-agents-against-long-horizon-threats-via-shadow-memory)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：旨在应对LLM智能体长周期威胁的防御框架
-6. [MASCing: Configurable Mixture-of-Experts Behavior via Activation Steering Masks](/202605/06/2604.27818v1-mascing-configurable-mixture-of-experts-behavior-via-activation-steering-masks)  
+   evidence：在集成适配器后恢复大语言模型的安全对齐和护栏
+3. [Redefining AI Red Teaming in the Agentic Era: From Weeks to Hours](/202605/07/2605.04019v1-redefining-ai-red-teaming-in-the-agentic-era-from-weeks-to-hours)  
+   标签：评分：8.0/10、query:llm
+   evidence：用于探测安全和安全性漏洞的AI红队代理
+4. [Misrouter: Exploiting Routing Mechanisms for Input-Only Attacks on Mixture-of-Experts LLMs](/202605/07/2605.04446v1-misrouter-exploiting-routing-mechanisms-for-input-only-attacks-on-mixture-of-experts-llms)  
+   标签：评分：8.0/10、query:llm
+   evidence：利用路由机制绕过MoE架构LLM的安全对齐
+5. [From Parameter Dynamics to Risk Scoring : Quantifying Sample-Level Safety Degradation in LLM Fine-tuning](/202605/07/2605.04572v1-from-parameter-dynamics-to-risk-scoring--quantifying-sample-level-safety-degradation-in-llm-fine-tuning)  
    标签：评分：8.0/10、query:jb-def
-   evidence：针对安全目标灵活重新配置MoE行为
+   evidence：量化LLM微调过程中的安全性退化
+6. [On the Hardness of Junking LLMs](/202605/07/2605.05116v1-on-the-hardness-of-junking-llms)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：大模型对越狱攻击和自然后门的脆弱性
 
 ### 速读区论文标签
-1. [Jailbroken Frontier Models Retain Their Capabilities](/202605/06/2605.00267v2-jailbroken-frontier-models-retain-their-capabilities)  
+1. [Sparse Tokens Suffice: Jailbreaking Audio Language Models via Token-Aware Gradient Optimization](/202605/07/2605.04700v1-sparse-tokens-suffice-jailbreaking-audio-language-models-via-token-aware-gradient-optimization)  
    标签：评分：8.0/10、query:llm
-   evidence：越狱攻击与模型能力退化
-2. [RouteHijack: Routing-Aware Attack on Mixture-of-Experts LLMs](/202605/06/2605.02946v1-routehijack-routing-aware-attack-on-mixture-of-experts-llms)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对MoE架构LLM的路由感知越狱攻击
-3. [ARGUS: Defending LLM Agents Against Context-Aware Prompt Injection](/202605/06/2605.03378v1-argus-defending-llm-agents-against-context-aware-prompt-injection)  
-   标签：评分：8.0/10、query:llm
-   evidence：防御大模型智能体的提示注入攻击
-4. [Exposing LLM Safety Gaps Through Mathematical Encoding:New Attacks and Systematic Analysis](/202605/06/2605.03441v1-exposing-llm-safety-gaps-through-mathematical-encodingnew-attacks-and-systematic-analysis)  
-   标签：评分：8.0/10、query:llm
-   evidence：通过数学编码攻击揭示安全漏洞
-5. [MEMSAD: Gradient-Coupled Anomaly Detection for Memory Poisoning in Retrieval-Augmented Agents](/202605/06/2605.03482v1-memsad-gradient-coupled-anomaly-detection-for-memory-poisoning-in-retrieval-augmented-agents)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对大语言模型智能体内存投毒的防御
-6. [Trojan Hippo: Weaponizing Agent Memory for Data Exfiltration](/202605/06/2605.01970v2-trojan-hippo-weaponizing-agent-memory-for-data-exfiltration)  
+   evidence：通过梯度优化对音频语言模型进行越狱攻击
+2. [From Prompt to Physical Actuation: Holistic Threat Modeling of LLM-Enabled Robotic Systems](/202605/07/2604.27267v1-from-prompt-to-physical-actuation-holistic-threat-modeling-of-llm-enabled-robotic-systems)  
    标签：评分：7.0/10、query:llm
-   evidence：描述了LLM智能体中的持久性记忆攻击和数据外泄
+   evidence：机器人系统中LLM安全与对抗攻击的威胁建模
+3. [Hybrid Inspection and Task-Based Access Control in Zero-Trust Agentic AI](/202605/07/2605.02682v1-hybrid-inspection-and-task-based-access-control-in-zero-trust-agentic-ai)  
+   标签：评分：7.0/10、query:llm
+   evidence：智能体AI中的安全风险与访问控制
+4. [The Infinite Mutation Engine? Measuring Polymorphism in LLM-Generated Offensive Code](/202605/07/2605.03619v1-the-infinite-mutation-engine-measuring-polymorphism-in-llm-generated-offensive-code)  
+   标签：评分：6.0/10、query:llm
+   evidence：衡量LLM生成的攻击性代码的多态性
 
 
 <div class="dpr-home-promo-card">
