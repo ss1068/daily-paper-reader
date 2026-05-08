@@ -1,0 +1,943 @@
+Title: Sealing the Audit-Runtime Gap for LLM Skills
+
+URL Source: https://arxiv.org/pdf/2605.05274v1
+
+Published Time: Fri, 08 May 2026 00:02:33 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# Sealing the Audit–Runtime Gap for LLM Skills 
+
+# Tingda Shen 
+
+Beijing University of Posts and Telecommunications Beijing, China shentingda@bupt.edu.cn 
+
+# Yebo Feng 
+
+Nanyang Technological University Singapore, Singapore yebo.feng@ntu.edu.sg 
+
+# Konglin Zhu 
+
+Beijing University of Posts and Telecommunications Beijing, China klzhu@bupt.edu.cn 
+
+# Xiaojun Jia 
+
+Nanyang Technological University Singapore, Singapore jiaxiaojunqaq@gmail.com 
+
+# Yang Liu 
+
+Nanyang Technological University Singapore, Singapore yangliu@ntu.edu.sg 
+
+# Lin Zhang 
+
+Beijing University of Posts and Telecommunications Beijing, China zhanglin@bupt.edu.cn 
+
+## Abstract 
+
+Large language model (LLM) ecosystems such as Claude Code and ChatGPT increasingly rely on skills: packages of natural-language instructions and executable tools. Once in the LLM’s context, skill content cannot be reliably separated from trusted instructions, and a skill’s executable side can invoke privileged actions, exposing the skill supply chain to injection, tampering, and rug-pull attacks. Ex-isting defenses are stage-bound: centralized signing, audit reports unbound from the runtime artifact, or policy engines that cannot attest to what was approved. We present SIGIL , the first framework that seals the audit–runtime gap for LLM skills. SIGIL delivers ver-ifiable hosting through a tamper-evident, decentralized on-chain registry from which LLMs fetch skills directly. The registry admits four publication types, Transparent, Licensed, Sealed, and Com-mitted, spanning plaintext public distribution, monetized access, custodial use, and off-chain workflows; before admission, every skill is vetted by a Decentralized Autonomous Organization (DAO) audit committee that supports pluggable auditing methods under a stake-and-slash economic model. At load time, SIGIL delivers 
+
+verified loading through a skill verification protocol executed by a Skill Verification Loader (SVL) embedded as the mandatory loading path: the SVL retrieves and decrypts the skill as its type requires, verifies its integrity against the on-chain record, and enforces its permission manifest before context injection. We evaluate SIGIL on a real-world deployment against 1,023 in-the-wild skills spanning six attack types. At publication time, SIGIL achieves strong detec-tion accuracy. At load time, the SVL verifies each skill’s integrity against its on-chain record and enforces its approved permission manifest, completing batched verification under 86 ms. Together, these results show that LLM skills can be cryptographically bound from publication through runtime at practical cost. 
+
+## CCS Concepts 
+
+• Security and privacy → Database and storage security ; Systems security ; • Information systems ;
+
+## Keywords 
+
+skill security, LLM agents, verifiable hosting, verified loading 
+
+Corresponding authors: Yebo Feng and Konglin Zhu. LLM / LLMAgent Innocent User              
+
+> Explicit Injection
+> Inherently malicious skill
+> Local Tempering
+> Vetted skill, then corrupted
+> Combined malicious
+> Cross-skill Interaction
+> +Skill ASkill B=Skill Attacks Adversary User Device
+> Use Skill xfor Task y
+> Commit Skills
+> Code Description or =
+> SkillHub
+> Load Skill X
+> Device Compromise
+> Invoke Skill xfor Task y
+
+❶❷
+
+> Install Skills
+
+❺ ❸
+
+❻ ❹
+
+❶❸❶❸ 
+
+Figure 1: Three skill-level attack categories: malicious skill content, rug pulls, and cross-skill interactions. The full six-attack taxonomy is in §3.2. 
+
+## 1 Introduction 
+
+The rise of large language models (LLMs) has introduced skills :packages of natural-language instructions and executable tools that allow agents to invoke APIs, manipulate file systems, and interact with other real-world services [ 17 ]. Access to skills relies on official and third-party platforms, such as the GPT Store, Claude Marketplace, and ClawHub. Holzbauer et al. [ 14 ] collected 238,180 unique skills from three major distribution platforms and GitHub, providing empirical evidence of a large-scale ecosystem in which thousands of developers publish skills that agents can dynamically discover and invoke. Alarmingly, the skill ecosystem is already exposed to supply-chain attacks at the marketplace level. Jiang et al. [ 20 ] identified more than 4,858 malicious skills on skill distribution platforms, while a scan of 3,984 skills from ClawHub found that 36.82% of skills contained at least one security issue and identified 1,467 malicious payloads [2]. The severity of this threat stems from the privileged role skills play in agent execution: once installed or retrieved, a skill can inject persistent instructions, steer tool selection, execute code, and access user-side resources under the agent’s trust assumptions. These findings reveal a systemic skill supply-chain threat rooted in the way LLM agents discover, trust, and execute third-party skills. The mechanism of skill-level attacks is that, once in the LLM’s context, a skill’s natural-language description and schema cannot be reliably separated from trusted instructions, and its executable 
+
+> arXiv:2605.05274v1 [cs.CR] 6 May 2026 Tingda Shen, Yebo Feng, Konglin Zhu, Xiaojun Jia, Yang Liu, and Lin Zhang
+
+side can invoke privileged actions through APIs, databases, file sys-tems, and other real-world services. As a result, a carefully crafted malicious description can subvert the agent’s behavior without altering any executable code. The attack surface therefore extends beyond traditional code-level vulnerabilities to encompass the de-scriptions and schemas that both influence agent reasoning and drive tool invocation, through which agents select, load, and use skills. Skill attacks can be launched at multiple stages of a skill’s lifecycle, including distribution, publication, storage, and loading, giving current systems a long vulnerability surface. Depending on the stage at which they occur, we distinguish six categories: explicit injection , implicit poisoning , rug pull , cross-skill interaction , auditor collusion , and local tampering ; we discuss them in detail in §3.2. Figure 1 illustrates three of the six categories. Existing defenses for skills can be organized into four technical categories across three lifecycle stages. At the submission stage, static scanning methods inspect skill files and bundled code for known risky patterns, such as suspicious commands, secret ac-cess, or unsafe network operations [ 29 ]. Semantic detection meth-ods analyze the intended behavior of skills from natural-language instructions and heterogeneous artifacts, using LLM-based clas-sification, behavioral verification, or graph reasoning to detect prompt injection and malicious workflows [ 24 , 28 , 37 ]. At the anchoring stage, supply-chain governance methods propose in-tegrity verification [ 18 ], permission models [ 49 ], marketplace vet-ting [ 15 , 17 , 29 , 43 ], and trust-tiered execution to secure skill dis-tribution, yet these mechanisms remain early-stage and are not consistently enforced in current registries [ 3, 19 , 25 ]. At the invoca-tion stage, runtime protection methods monitor or constrain agent behavior during skill execution [ 35 , 49 ], such as filtering external inputs, checking tool calls, or isolating execution, but they cannot prevent malicious skills from entering marketplaces [ 48 ]. Existing defenses cover different stages of the skill lifecycle, but none pro-vides end-to-end protection from skill auditing and publication, through marketplace provenance, to runtime loading. To address this gap, we propose SIGIL , the first framework to seal the audit–runtime gap for LLM skills, providing end-to-end protection from skill submission to invocation: every submitted skill is vetted as secure, every stored skill is tamper-proof, every loaded skill is fully verified before execution, and every step of this lifecycle is publicly traceable. Specifically, SIGIL operates in three stages: Submission , Anchoring , and Invocation . SIGIL instan-tiates these stages on a permissioned blockchain that provides decentralized, tamper-evident storage and public traceability; de-ployments may instead use a trusted operator’s tamper-evident database without altering the protocol. At Submission , a developer commits a skill to an on-chain Skill Pre-Registry, after which a De-centralized Autonomous Organization (DAO) [ 21 ] audit committee reviews it through reputation-weighted consensus; the committee is pluggable, allowing auditors to apply static analysis, LLM-based vetting [ 18 ], sandbox testing [ 5 ], or any combination, while a stake-and-slash mechanism penalizes non-consensus or retrospectively overturned votes. At Anchoring , approved skills migrate from the Pre-Registry to a tamper-evident Skill Registry that stores each skill’s content (or content hash), permission manifest, audit report, and version history. The registry supports four publication types: 
+
+Transparent (plaintext on-chain), Licensed (encrypted on-chain with paid access), Sealed (encrypted on-chain with developer-held keys), and Committed (hash-only on-chain, content retained locally). At 
+
+Invocation , the Skill Verification Loader (SVL), integrated into the AI Service Provider, acts as the sole entry point for skill loading: it queries the on-chain registry, hashes content as needed, and cryptographically binds the loaded skill to its audited record, com-plementing existing runtime defenses such as Progent [ 35 ] and MiniScope [49]. We evaluate SIGIL on 1,023 in-the-wild skills against six external defenses. SIGIL is the only defense that resists all six representative attacks: 97.6% accuracy on explicit injection and implicit poisoning, 95.1% on rug pull, 100% on local tampering, 90.2% on cross-skill interaction, and stable accuracy under 20–40% colluding auditors; the DAO Committee reaches 97.6% accuracy and 1.5% false-negative (FN) rate. In terms of overhead, the SVL adds at most 7 ms to load 15 skills on Ethereum Sepolia, and audit token usage stays under 3% of a typical $20 monthly LLM subscription. A game-theoretic analysis and a 600-round simulation show that honest auditing is the unique Nash equilibrium and the dominant long-run strategy. This paper makes the following contributions: (1) SIGIL . The first end-to-end skill-security framework that pro-tects LLM agent skills across their full lifecycle, sealing the audit–runtime gap so that what is audited is exactly what the agent later loads. (2) A DAO-based audit framework. A pluggable, reputation-weighted audit framework that replaces single-entity vetting with decentralized consensus, supporting heterogeneous audit-ing methods under one common admission protocol. (3) The SVL. An efficient agent-side loader that provides crypto-graphic integrity guarantees, blocks post-audit tampering, and ensures every loaded skill faithfully reflects the audited record. (4) An economic model for sustainable operations. A token-credit settlement aligned with stake-and-slash incentives, de-signed so that honest participation remains profitable over time and the ecosystem sustains itself without a central operator. 
+
+## 2 Related Work 2.1 Attack Vectors on LLM Skills 
+
+LLM skills face risks at every lifecycle stage [ 26 ] and inherit supply-chain risks from conventional software ecosystems [ 7, 23 , 39 ]. Fig-ure 1 groups skill attacks into three lifecycle categories: Explicit Injection at submission , Local Tampering after anchoring , and 
+
+cross-skill interaction during invocation .Malicious skill content embeds adversarial payloads in descrip-tions or metadata. Because LLMs cannot separate instructions from data [ 5, 45 , 46 ], prompt injection underlies most skill-level attacks [ 33 ]: direct injection places instructions in user input [ 12 ]; 
+
+indirect injection hides them in external data the agent later re-trieves [ 1 , 6]; tool poisoning embeds them in a skill description so the LLM follows them during tool selection, even when the skill is never executed [ 40 , 42 ]; and metadata attacks [ 31 ] optimize meta-data to raise the chance of invocation. Rug pull attacks silently modify a skill after it passes review [ 18 ]; when the registry stores only a mutable reference (e.g., a URL), such modifications evade re-inspection while users still trust the approved version. Sealing the Audit–Runtime Gap for LLM Skills 
+
+Table 1: Capability comparison of representative defenses. Defense Submission stage screening Anchoring stage integrity Invocation stage enforcement Version traceability                                                     
+
+> SkillScan [29] ✓✗✗✗
+> Semantic auditing [28, 37] ✓✗✗✗
+> Chord [24] ✓✗✗✗
+> Signed MCP packages [18] ✓✓✓✗
+> Trust-tiered governance [3, 19, 26] ✓✗✗✗
+> Mainstream markets [15, 17, 29, 43] ✓✗✗✗
+> Progent [35] ✗✗✓✗
+> MiniScope [49] ✗✗✓✗
+> MindGuard [41] ✗✗✓✗
+> ClawGuard [48] ✗✗✓✗
+> AgentSentinel [16] ✗✗✓✗
+> AgentFuzz [27] ✗✗✓✗
+> SIGIL ✓✓✓✓
+
+Cross-skill interaction attacks exploit the shared agent context: individually benign skills jointly induce harm. Shadowing mimics a legitimate skill’s name to hijack invocations [ 36 ], and the Pup-pet Attack injects control directives that redirect subsequent tool calls [50]. Per-skill scanning is therefore insufficient [26]. 
+
+## 2.2 Existing Defenses 
+
+We organize prior defenses by the three lifecycle stages of §2.1 [ 26 ]. Submission-stage defenses inspect skills before admission. Static methods scan files and bundled code for risky patterns [ 29 ]; seman-tic methods analyze descriptions via LLM classification, behavioral verification, or graph reasoning [ 28 , 37 ], and Chord [24 ] scans tool definitions for Cross-Tool Harvesting and Polluting (XTHP) attacks; structured queries also resist prompt injection [ 4 ]. None of these methods binds the verdict cryptographically to the bytes later loaded by the agent. Anchoring-stage defenses govern skill storage and trust. Jamshidi et al. [ 18 ] sign Model Context Protocol (MCP) packages with RSA and add LLM vetting plus runtime guardrails, but rely on a centralized signer. Trust-tiered governance [3, 19, 26] structures registry screening but remains inconsistently enforced. Audits of mainstream marketplaces [ 15 , 17 , 29 , 43 ] report false negatives and undetected post-publication modifications. None binds publication provenance to a tamper-evident on-chain record. Invocation-stage defenses constrain agent behavior when a skill is loaded. Policy-based methods restrict tool calls or assign least-privilege permissions at runtime [ 35 , 49 ]; dependency-graph de-fenses constrain agent execution against tool-invocation attacks [ 1 ]; runtime monitors detect abnormal behavior and intercept dan-gerous file, process, and operations [ 16 , 41 , 48 ]; directed fuzzing drives attacker-controlled prompts toward sensitive sinks [ 27 ]; and adversarial agents and graph neural networks discover and counter attacks [ 13 , 37 , 38 ]. These defenses reduce runtime harm but remain post-admission: they neither prevent malicious entry nor bind loaded skills to audited artifacts. Benchmarks and sur-veys [8, 44, 47, 50] reinforce the need for full-lifecycle protection. Table 1 summarizes this fragmentation: prior defenses are stage-bound and largely centralized. SIGIL instead combines an on-chain skill registry, a DAO audit committee with stake-and-slash incen-tives, and an SVL that binds every loaded skill to its audited record, covering all three stages and version traceability in one framework. 
+
+## 3 Background and Problem Statement 3.1 Background 
+
+LLM skills are packages of natural-language instructions and ex-ecutable tools that let agents call APIs, access file systems, and interact with external services [ 17 ]. Although packaging differs across platforms, what the model consumes is still text: the skill name, description, parameter schema, and usage instructions enter the agent’s context and guide tool selection and execution. The agent must rely on these textual fields to decide when and how to invoke a skill, even when the skill wraps benign code. Because LLMs cannot reliably separate instructions from data, prompt-level attacks extend to skill-level attacks. A malicious skill description can steer the agent before any code runs, and poi-soned metadata can raise the chance that a harmful skill is se-lected [ 6 , 31 , 40 , 42 ]. The security problem therefore extends be-yond executable payloads: prompt injection, tool poisoning, and metadata manipulation all exploit how skills are trusted as text inside the model’s context [26, 33]. 
+
+## 3.2 Threat Model 
+
+This section defines the threat model for SIGIL : the actor classes and trust boundaries, the attacker’s goals and capabilities, and six representative attacks across the submission, anchoring, and invocation stages of SIGIL .The SIGIL system model has four classes of actors. (1) Skill developers publish skills to the on-chain registry and may be benign or malicious. (2) Auditors review submitted skills and stake tokens to vote on approval; individual auditors may be malicious, but we assume the reputation-weighted majority remains honest at any given time. (3) Users discover, install, and invoke skills through their LLM agents and rely on the on-chain audit outcome rather than re-verifying skill content. (4) LLMs or LLM agents execute skills on behalf of users and are treated as untrusted instruction followers that may obey poisoned descriptions once such content enters their context. We further assume a standard blockchain trust base: transactions are tamper-evident, ordering is determined by consensus, and finalized state cannot be altered. The adversary aims either to push a malicious skill through DAO audit into the registry, or to alter an approved skill without trig-gering re-audit. To achieve these goals, the adversary may submit arbitrary skills, register Sybil staked auditor identities to bias voting, modify a published skill after approval when it is not immutably anchored on-chain, craft poisoned descriptions and adversarial metadata to bias the LLM’s tool selection, or compromise an end-user device to tamper with a locally cached skill so that what the agent loads diverges from the on-chain audited record. We assume the adversary cannot rewrite finalized blockchain state or compro-mise consensus, cannot corrupt the reputation-weighted majority of the auditing stake, and cannot replace the LLM’s weights or the SVL integrated into the AI Service Provider. From the goals and capabilities above, we define six represen-tative attacks. (1) Explicit injection embeds overtly harmful in-structions in a skill before publication, so the malicious behavior is present at submission time and should be detectable by content-based auditing. (2) Implicit poisoning hides malicious intent in benign-looking descriptions or adversarially optimized metadata Tingda Shen, Yebo Feng, Konglin Zhu, Xiaojun Jia, Yang Liu, and Lin Zhang 
+
+Table 2: The four publication types of SIGIL skills, grouped by public distribution and the developer’s exclusive use.                    
+
+> Type Usage scope Description Registry content Access control Load source
+> Transparent Public distribution Plaintext and free; anyone can inspect and reuse the skill. Plaintext None Registry
+> Licensed Copyrighted; access granted per paid license. Ciphertext Purchase Registry
+> Sealed Developer’s exclusive use Hosted on the registry; decryptable only by the developer. Ciphertext Key custody Registry
+> Committed Hosted on a local device; only its hash is registered. Hash Local custody Local file
+
+that bias the LLM’s tool selection [ 31 , 42 ]; the skill looks accept-able, but its wording or metadata raises the chance that the agent invokes it in unsafe ways. (3) Rug pull involves passing a benign skill through audit and then silently performing publisher-side or registry-side modification of the published artifact after approval, opening a gap between what was audited and what is later loaded. (4) Cross-skill interaction combines individually benign skills so that harm emerges only when they interact through the shared LLM context [ 36 , 50 ]; no single skill is dangerous in isolation, and the harm comes from their runtime composition. (5) Auditor col-lusion controls or coordinates staked auditor identities to approve a malicious skill, targeting the trust decision rather than the skill content; the registry may then certify a malicious skill as legitimate. (6) Local tampering modifies a cached or locally stored approved skill through a user-side tampering path after audit but before in-vocation, so the local artifact diverges from the on-chain audited record while the registry still treats the skill as approved. 
+
+## 3.3 Design Goals 
+
+SIGIL is designed to satisfy four goals. Integrity : an approved skill version remains immutable, its content, manifest, and meta-data bound to its content-addressed identifier until a new audit cycle is initiated. Auditability : each skill version carries an im-mutable, publicly verifiable record of reviewer identities, individual votes, and the final outcome. Accountability : auditor participation carries explicit economic responsibility, with each vote subject to staking, reward, and slashing. Least privilege : each skill executes with only the minimum permissions declared at publication time and authorized by the user. 
+
+## 4 Methodology 4.1 Overview 
+
+This section presents the design and workflow of SIGIL , whose primary goal is to ensure that every skill loaded by an LLM agent matches the exact artifact approved at publication time. Its sec-ondary goal is to integrate skill security auditing into the admission path, filtering malicious or non-compliant skills before they are admitted to the Skill Registry. To accommodate diverse developer and user scenarios, SIGIL 
+
+supports four publication types, listed in Table 2, that span a disclo-sure spectrum from public plaintext to a local-only commitment. 
+
+Transparent and Licensed skills are intended for public distribution: the former publishes plaintext to the registry for free inspection and reuse, whereas the latter publishes ciphertext and gates decryption behind a purchase, letting the developer retain copyright and earn revenue per use. Sealed and Committed skills are reserved for the developer’s exclusive use: the former publishes ciphertext to the registry with decryption keys held in developer custody, whereas the latter records only a cryptographic commitment (a content hash, in our implementation) with the registry and keeps the skill file on the developer’s local device. The registry itself is conceptually a secure database; in our implementation, we instantiate it on a permissioned blockchain for its decentralization, immutability, and native support for a DAO. 
+
+SIGIL ’s workflow proceeds in three stages (illustrated in Fig-ure 2), each implemented by a dedicated set of modules. Stage I (Submission) records the developer’s skill commitment in the Skill Pre-Registry and dispatches the submission to the DAO Audit Com-mittee, whose auditors analyze the skill independently through pluggable methods and return signed verdicts. Stage II (Anchor-ing) aggregates the verdicts through the Voting Contract, writes the audit outcome to the Skill Registry, and applies the correspond-ing reward or slash to participating auditors via the Reputation & Staking Contract. Stage III (Invocation) routes every user request through the SVL, which performs type-specific verification and injects the verified skill into the LLM or LLM agent. 
+
+## 4.2 Submission Stage 
+
+The submission stage commits a developer’s skill to an immutable reference state, against which the DAO Audit Committee inspects it before admission. The stage proceeds through four steps: the developer commits the skill to the Skill Pre-Registry; the registry emits an audit request that dispatches the submission to the Skill Pool; auditors independently analyze the skill through pluggable methods; and each auditor returns a signed verdict. The registry, audit pool, and verdict log share a common backing substrate that must be tamper-evident; we choose a blockchain in the implementation for two reasons. First, its decentralization and immutability fit a public skill marketplace, where no single operator should favor or suppress submissions. Second, blockchain natively executes a DAO , a governance structure in which independent participants stake assets and cast votes that smart contracts enforce without a central administrator. In SIGIL , this DAO is the audit committee. The architecture is nonetheless modular: a platform operator or trusted third party can swap the blockchain backend for an append-only database without altering the protocol. The submission process begins with 1 Skill Commitment. The Skill Pre-Registry, the on-chain entry point for every submission, records each skill before admission to the Skill Registry; this binding Sealing the Audit–Runtime Gap for LLM Skills Stage I. Submission Stage II. Anchoring Stage III. Invocation  
+
+> Skill Pre-Registry
+> Skill Content /Content Hash
+> Permission Manifest
+> Perform Skill Audit Skill Commitment
+
+❶
+
+> Skill Developers
+> Blockchain
+> Skill Pool
+> Skill B Skill A Skill C
+> AI Service Provider
+> LLM / LLM Agent
+> Permission Check
+> SVL
+> Verification
+> Decryption
+> Transition Local Skill Verification
+
+❿
+
+❷
+
+> Audit Request
+> Signed Verdict
+
+❹  
+
+> Skill Registry
+> Skill ID (Skill Name)
+> Audit Status Version
+> Skill Content /Content Hash
+> Permission Manifest
+> Transparent Licensed Sealed Committed
+> Reputation & Staking Contract
+> Reward / Slash Update
+
+❻ 
+
+> Status Update
+
+❺ Hash 
+
+> Cipher text
+> Plaintext
+
+❽   
+
+> Skill Query User
+> Voting Contract
+> Ballot Aggregation
+> DAO Audit Committee
+> Auditors
+
+❸ 
+
+> Pluggable
+> Methods
+> √×√
+> Skill Auditing
+
+❾
+
+> 11
+
+❼
+
+> Skill Request
+> Skill ID (Skill Name)
+> 12
+> Verified Skill
+
+Figure 2: SIGIL ’s three-stage architecture. A developer commits a skill (Submission), the DAO Audit Committee vets and anchors it (Anchoring), and users load it through the SVL (Invocation). 
+
+ties every audit to a fixed reference. A submitted skill carries the following fields: 
+
+• Skill content. The skill payload, recorded in the form prescribed by the publication type: plaintext for Transparent skills; cipher-text together with the plaintext hash for Licensed and Sealed 
+
+skills; and a content hash for Committed skills, whose plaintext file is retained on the developer’s local device. We refer to this on-chain payload as content in the rest of this section. 
+
+• Skill ID. A content-addressed identifier computed as 
+
+skill _id = 𝐻 (content ∥ developer ∥ prev _version ∥ timestamp ),
+
+where 𝐻 is a collision-resistant hash function. Because skill _id is derived from these fields, any modification (notably to content )produces a distinct identifier, making the registry inherently tamper-evident. 
+
+• Permission manifest. A structured on-chain declaration of the skill’s intended capabilities, comprising declared _tools [ ] ,
+
+data _scope [ ] , and behavior _bounds . Anchoring the manifest on-chain enables permission checks during both audit and invoca-tion. Once the commitment is recorded, the protocol issues an 2
+
+Audit Request. The Skill Pre-Registry emits a SkillAudit event carrying the skill _id and metadata, and this event places the sub-mission in the Skill Pool, a queue that isolates pending skills from approved ones during review. Auditors claim the task by staking additional tokens as a commitment deposit, and at least 𝑁 auditors (configurable; e.g., 𝑁 = 5) must claim before the audit proceeds. Once enough auditors have claimed the task, they perform 3
+
+Skill Auditing. Each auditor independently analyzes the submit-ted skill with a method of their choice. The audit framework is 
+
+pluggable by design: auditors may apply static analysis, LLM-based semantic review, sandbox testing, or any combination of these. De-coupling the audit protocol from specific detection techniques lets 
+
+SIGIL adopt new methods as the field advances, without changing the protocol itself. To deter dishonest audits and to encourage au-ditors to deploy more advanced methods, SIGIL couples the audit framework with an economic model formalized in §4.5. Auditing of Licensed , Sealed , and Committed skills relies on an off-chain content-delivery protocol, since plaintext is never exposed on-chain. For Licensed and Sealed skills, the registry holds an encrypted blob that each auditor decrypts via per-auditor key delivery; for 
+
+Committed skills, the registry holds only the content hash, and the developer transmits the encrypted skill content to auditors directly off-chain through the same key exchange. In all three cases, each auditor registers an asymmetric public key pk 𝑖 on-chain at registration time, and the developer derives a per-auditor delivery key via Elliptic Curve Diffie–Hellman (ECDH) [ 10 , 11 ] followed by an HMAC-based Key Derivation Function (HKDF) [22]: 
+
+𝑆 𝑖 = sk 𝑑 · pk 𝑖 ,𝑘 𝑖 = HKDF (𝑆 𝑖 , audit , skill _id ∥pk 𝑖 ∥pk 𝑑 ),
+
+where sk 𝑑 is the developer’s private key, pk 𝑑 is the corresponding developer public key, and pk 𝑖 is the public key of auditor 𝑖 . The de-veloper encrypts the symmetric content key 𝑘 content under 𝑘 𝑖 using AES-GCM and either posts the ciphertext on-chain (for Licensed 
+
+and Sealed skills) or transmits it off-chain (for Committed skills); each auditor recovers 𝑘 content with their private key and decrypts the skill. Plaintext is never written to the chain. Each auditor claiming an off-chain task additionally stakes a 
+
+confidentiality bond . Proven content leakage forfeits the bond and resets the auditor’s reputation to zero, which discourages disclosure. After completing the review, each auditor returns a 4 Signed Verdict. The verdict is a signed report containing a vote 𝑣 ∈{safe , unsafe , abstain }, a list of risk _findings , and a confidence score 𝑐 ∈ [ 0, 1]. The auditor submits the report to the Voting Con-tract, which aggregates non-abstaining ballots into the admission decision detailed in §4.3. 
+
+## 4.3 Anchoring Stage 
+
+The anchoring stage commits every approved skill, together with its audit report and metadata, to the on-chain Skill Registry, and set-tles auditor incentives by rewarding consensus-aligned voters and slashing those whose votes diverged. It proceeds through two steps: the Voting Contract aggregates non-abstaining ballots through Tingda Shen, Yebo Feng, Konglin Zhu, Xiaojun Jia, Yang Liu, and Lin Zhang 
+
+reputation-weighted voting and writes the resulting record to the Skill Registry; the Reputation & Staking Contract then applies the corresponding reward or slash to each participating auditor. Once the signed verdicts are received, the protocol performs a  
+
+> 5
+
+Status Update. Beyond updating the audit-status flag, this step migrates every approved skill from the Pre-Registry to the Skill Registry, where the skill becomes invocable. The Voting Contract gates this promotion by aggregating the non-abstaining verdicts through reputation-weighted voting, with vote weight set in pro-portion to reputation alone, 𝑤 𝑖 = 𝑟 𝑖 , where 𝑟 𝑖 ∈ [ 0, 1000 ] is auditor 
+
+𝑖 ’s accumulated reputation score, governed by the update rule in §4.3. We exclude stake from the weight formula because including stake would let a capital-rich adversary dominate voting regardless of audit track record; stake instead serves only as an anti-Sybil en-try barrier and a source of slash funds. The aggregate safety score is 
+
+SafeScore =
+
+Í𝑖 ∈ A safe 𝑤 𝑖 
+
+Í𝑖 ∈ A\A abstain 𝑤 𝑖 
+
+, (1) where A is the set of participating auditors, Asafe the subset voting 
+
+safe , and Aabstain the subset abstaining. The skill is approved if and only if SafeScore ≥ 𝜃 , for a governance-configurable threshold 
+
+𝜃 (e.g., 𝜃 = 0.6). A minimum-auditor requirement of 𝑁 ≥ 5 further prevents a single colluding auditor from unilaterally approving a malicious skill. Once approved, the skill is migrated from the Pre-Registry to the Skill Registry, an on-chain store that holds, for each accepted skill, its content or cryptographic digest, permission manifest, au-dit report, and versioning metadata. The audit report records the participating auditors and the detailed audit result; entries in the Skill Registry are by definition approved . A prev _version pointer links each skill to its predecessor, forming a chain of versions for full release traceability. Updates publish a new version: the devel-oper submits revised content, which produces a fresh skill _id and re-enters the audit cycle, while the previously approved version remains available until the new version passes review, so service continues across transitions. After the admission decision is finalized, the protocol applies a 6 Reward / Slash Update. The audit outcome is forwarded to the Reputation & Staking Contract, which applies asymmetric rewards and penalties: stake settles immediately at audit close, while reputation updates follow from the skill’s downstream behavior. We formalize the underlying economic model and prove its incentive properties in §4.5. A new auditor enters the system by staking at least 𝑠 min and receiving an initial reputation score 𝑟 0 = 100 , a conservative start-ing value that forces new auditors to build a track record before exercising significant voting influence. Once a skill survives a mon-itoring window Δ𝑡 mon without incident, every auditor who voted 
+
+safe earns a positive reputation increment 𝛿 +. Conversely, when a previously approved skill is later proven malicious, the protocol penalizes auditors asymmetrically: 
+
+• Auditors who voted safe lose reputation ( 𝑟 𝑖 ← 𝑟 𝑖 − 𝛿 − , with 
+
+𝛿 − > 𝛿 +) and forfeit a fixed slash amount 𝑆 slash from their stake. 
+
+• Auditors who correctly voted unsafe receive a reputation bonus and share the slashed tokens. Two design choices keep this rule incentive-compatible: 𝛿 − > 𝛿 +
+
+prevents an attacker from offsetting one proven bad vote with many trivial correct votes on benign skills, and a fixed 𝑆 slash (rather than stake-proportional) deters auditors from staking only 𝑠 min to minimize exposure. Reputation also undergoes slow time decay, 𝑟 𝑖 (𝑡 + 1) = 𝛼 · 𝑟 𝑖 (𝑡 )
+
+with 𝛼 slightly below 1 (e.g., 𝛼 = 0.995 per epoch). Decay prevents long-past audits from shielding inactive auditors from the cost of newer mistakes, and ties voting weight to continuous participa-tion. Finally, when accumulated slashing reduces an auditor’s stake below 𝑠 min , the auditor is deactivated until the stake is replenished. 
+
+## 4.4 Invocation Stage 
+
+The invocation stage releases every approved skill into the LLM agent’s context only through the SVL, a component integrated into the AI Service Provider that serves both the LLM and the LLM agent. The LLM or agent decides which skill _id or skill name to invoke; the SVL decides whether and how to release the corresponding artifact, querying the Skill Registry, decrypting the content when necessary, and computing the effective permission envelope before release. Because the SVL is the only loading path, every skill that reaches the agent’s context is, by construction, audit-approved and intact, while any tampered skill is blocked. The stage proceeds through six steps shared across all four publication types, with type-specific branches at the access-check (Step 8 ), payload-return (Step 9 ), and local-integrity (Step 10 )steps: the LLM forwards a user’s Skill Request to the SVL; the SVL submits a Skill Query to the on-chain Skill Registry; the registry returns Hash, Ciphertext, or Plaintext per publication type; the SVL performs Local Skill Verification for Committed skills; the SVL runs Permission Check over the relevant manifest(s); and the SVL releases the Verified Skill into the LLM agent’s context. The invocation phase begins with a 7 Skill Request. A user supplies a skill _id or skill name, or a set of such identifiers when the task needs multiple skills, optionally accompanied by a path to a local file (for Committed skills), and the LLM agent forwards the request to the SVL. Because the SVL is the sole entry point for skill loading, the LLM may decide which skill to load, but it cannot decide whether to verify or permission-check it, and a previously loaded skill cannot trick the LLM into skipping either control. The request reaches the SVL, which issues a 8 Skill Query. 
+
+The SVL queries the Skill Registry with the supplied skill _id or skill name. All four publication types share two common precon-ditions: the skill must be present in the Skill Registry (admitted as 
+
+approved ), and the requesting user must satisfy the publication type’s access control. The branches differ only in what the access check verifies: 
+
+• For a Transparent skill, no access control applies; any user with a valid skill _id or skill name may proceed. 
+
+• For a Licensed skill, the SVL verifies that the on-chain delivery record for this user is non-empty, indicating that the developer has posted an encrypted content key for this buyer (wrapped via ECDH with the buyer’s keypair, as detailed in Step 9 ). 
+
+• For a Sealed skill, no on-chain access record is checked: the on-chain ciphertext is publicly downloadable, but only a holder of Sealing the Audit–Runtime Gap for LLM Skills 
+
+the developer-controlled private key sk 𝑑 can decrypt it. Access is therefore proven implicitly through the decryption in Step 9 .
+
+• For a Committed skill, possession of a local file matching the on-chain content _hash constitutes the access proof; the user supplies a path to this file, whose integrity is verified separately in Step 10 .If both preconditions hold, the registry returns the corresponding payload as 9 Hash / Ciphertext / Plaintext. The payload format and the SVL’s subsequent operation branch by publication type: 
+
+• For a Transparent skill, the registry returns the plaintext directly. Content-addressing of the entry guarantees integrity, so the SVL performs no further cryptographic operation at this step. 
+
+• For a Licensed skill, the registry returns the on-chain ciphertext. The SVL recovers the symmetric content key 𝑘 content by com-puting the ECDH shared secret 𝑆 𝑏 = sk 𝑏 · pk 𝑑 from the buyer’s private key sk 𝑏 and the developer’s public key pk 𝑑 , deriving a delivery key 
+
+𝑘 𝑏 = HKDF (𝑆 𝑏 , license , skill _id ∥ pk 𝑏 ∥ pk 𝑑 ),
+
+and unwrapping 𝑘 content from the developer-posted record un-der 𝑘 𝑏 . It then decrypts the on-chain ciphertext under 𝑘 content 
+
+and verifies 𝐻 (plaintext ) = content _hash . The license info tag domain-separates buyer delivery from auditor delivery in §4.2 (info tag audit ), so the same key pair derives independent de-livery keys across the two contexts. We use ECDH with HKDF rather than a single symmetric key shared with every buyer be-cause the developer never learns any buyer’s private key, and per-buyer key derivation limits the impact of a buyer-side key compromise to that buyer alone. 
+
+• For a Sealed skill, the registry returns the encrypted blob. The SVL computes 𝑆 seal = sk 𝑑 ·pk 𝑑 through an ECDH self-handshake 1
+
+on the developer’s own keypair. It then derives a per-skill sealing key using a domain-separated HKDF invocation, 
+
+𝑘 seal = HKDF (𝑆 seal , sealed , skill _id ),
+
+where sealed is an explicit domain-separation tag and skill _id 
+
+is included in the HKDF info field. The SVL decrypts the blob under 𝑘 seal with AES-256-GCM and verifies 𝐻 (plaintext ) =
+
+content _hash . Successful decryption confirms possession of sk 𝑑 
+
+and thereby constitutes the access proof for Sealed skills, with no separate on-chain check required. The self-handshake binds each per-skill key to the developer’s identity, and the domain-separated HKDF tag prevents key reuse across audit, license, and sealed-skill derivation contexts, without ever placing decryption keys on-chain. 
+
+• For a Committed skill, the registry returns only the on-chain 
+
+content _hash ; the plaintext is supplied off-chain by the user, and integrity verification is deferred to Step 10 .For a Committed skill, the SVL then performs 10 Local Skill Verification. Given the user-supplied path, the SVL computes 
+
+ℎ′ = 𝐻 (local _content ) and tests ℎ′ = content _hash . A mismatch indicates post-audit tampering of the local file, and the SVL aborts the invocation. We restrict this step to Committed skills because, for Transparent, Licensed, and Sealed skills, the registry already holds 
+
+> 1For Sealed skills the developer is also the user (or an internal organization), so we re-use the ECDH primitive with the developer’s own keypair as a deterministic single-party key derivation.
+
+an integrity-checked copy of the content (plaintext for Transpar-ent; hash-anchored ciphertext for Licensed and Sealed), whereas a Committed skill’s plaintext lives only on the developer’s device and must therefore be re-checked against the on-chain hash at every load. With both content and integrity established, the SVL performs  
+
+> 11
+
+Permission Check against the on-chain Permission Manifest. For a single loaded skill, the check is: 
+
+declared _tools ⊆ T user ∧ data _scope ⊆ D user , (2) where Tuser and Duser are the tool set and data scope authorized for the current user. If the skill requests permissions beyond the user’s scope, the SVL prompts the user for additional authorization, or aborts the invocation. For a multi-skill invocation, let 𝐾 = {𝑠 1, . . . , 𝑠 𝑛 } be the set of skills loaded for the same user request, and let each skill carry 
+
+𝑀 𝑖 = (T 𝑖 , D𝑖 , B𝑖 ) for declared tools, data scopes, and behavior bounds. The SVL computes the common permission envelope as the manifest intersection: 
+
+T∩ =
+
+> 𝑛
+
+Ù
+
+> 𝑖 =1
+
+T𝑖 , D∩ =
+
+> 𝑛
+
+Ù
+
+> 𝑖 =1
+
+D𝑖 , B∩ =
+
+> 𝑛
+
+Û
+
+> 𝑖 =1
+
+B𝑖 . (3) The intersection (T ∩, D∩, B∩) is injected into the LLM as the de-fault executable permission envelope: actions inside it may proceed without further escalation only if T∩ ⊆ T user and D∩ ⊆ D user also hold. If the intersection itself exceeds the user’s authorized scope, the excess permissions require explicit user authorization, or the invocation is aborted. The SVL also computes the non-common permissions 
+
+TΔ =
+
+> 𝑛
+
+Ø
+
+> 𝑖 =1
+
+T𝑖 
+
+!
+
+\ T ∩, DΔ =
+
+> 𝑛
+
+Ø
+
+> 𝑖 =1
+
+D𝑖 
+
+!
+
+\ D ∩, (4) and marks them as requiring explicit user authorization before execution. Thus, a permission exposed by only one loaded skill cannot silently become available to the whole multi-skill context. This default-deny treatment of TΔ and DΔ limits cross-skill interac-tion attacks in which one skill attempts to induce the LLM to use another skill’s broader manifest. Once the permission check succeeds, the SVL releases the 12 
+
+Verified Skill by injecting the verified content and the effective permission envelope into the LLM agent’s context. Permission validation lives in this common closing step rather than in the per-type branches because the Permission Manifest is anchored on-chain by every publication type, so the check is identical regardless of how the content was retrieved or decrypted. 
+
+## 4.5 Economic Model 
+
+The economic model keeps SIGIL ’s audit ecosystem sustainable and secure over time. It does so in two ways: rewarding honest auditors so that they keep participating, and steadily eroding the stake and reputation of malicious or persistently inaccurate auditors until they exit. The model is method-agnostic: an auditor running static analysis, sandbox testing, or LLM-based semantic review earns the same token credit (TC) for the same correct vote on the same skill, so method choice is an internal economic decision of each auditor. A single TC settles every flow in the protocol: publication fees, audit rewards, auditor stakes, slashes, confidentiality bonds, and Tingda Shen, Yebo Feng, Konglin Zhu, Xiaojun Jia, Yang Liu, and Lin Zhang 
+
+Licensed-skill prices. The exchange rate 
+
+1 TC = 𝜅 tc LLM tokens (5) is set by the on-chain governance and ties the size-scaling term of the audit reward (Eq. 6) to the system’s main cost driver. Four roles exchange TC: developer, auditor, user, and Protocol Treasury, through the flows detailed below. At publication, the developer prefunds an audit budget that the contract distributes atomically at audit close. The reference reward 
+
+𝑅 base ( 𝑗 ) = 𝛽 0 + 𝛽 1 · 𝐿 𝑗 
+
+𝜅 tc 
+
+, (6) combines a flat floor 𝛽 0 for method-independent overhead with a size-scaling term 𝛽 1 𝐿 𝑗 /𝜅 tc calibrated so that token-heavy methods stay viable on long skills; 𝐿 𝑗 is the skill content length in LLM tokens, and both 𝛽 0 and 𝛽 1 are governance-set DAO parameters. The publication fee 
+
+𝐶 pub ( 𝑗 ) = 𝑁 · 𝑅 base ( 𝑗 ), (7) splits into a protocol-fee cut 𝜑 proto · 𝑁 · 𝑅 base ( 𝑗 ) to Treasury and a remainder (1 − 𝜑 proto ) · 𝑁 · 𝑅 base ( 𝑗 ) funding the audit pool. At audit close, the contract atomically pays each consensus-aligned auditor 
+
+𝑅 𝑖 ( 𝑗 ) = (1 − 𝜑 proto ) · 𝑅 base ( 𝑗 ) · 𝑟 𝑖 
+
+𝑟 max 
+
+· 1𝑣 𝑖 = cons ( 𝑗 ) , (8) where 𝑟 max = 1000 is the reputation cap from §4.3 and cons ( 𝑗 )
+
+denotes the consensus verdict on skill 𝑗 . The contract also slashes each non-consensus vote 
+
+𝑆 slash ( 𝑗 ) = 𝛾 · 𝑅 base ( 𝑗 ), 𝛾 = 2, (9) and refunds the residual pool to the developer. Three calibration choices together enforce incentive compatibil-ity: 𝛾 = 2 ensures 𝑆 slash ( 𝑗 ) > 𝑅 base ( 𝑗 ), as required by the analysis in §5.6; 𝛿 − = 2𝛿 + (concretely −30 vs +15 ) makes reputation loss exceed gain; and 𝑟 0/𝑟 max = 0.1 caps a fresh identity’s per-vote re-ward at 10% of 𝑅 base ( 𝑗 ) even when aligned with consensus, while a single non-consensus vote forfeits the full 𝛾 · 𝑅 base ( 𝑗 ). A one-shot game analysis in §5.6.1 shows that, under this calibration, truthful voting is the unique strict Nash equilibrium even when developers can offer bribes. 
+
+Sybil resistance follows from the asymmetric payoff. A bloc of fresh identities earns at most 0.1 𝑅 base ( 𝑗 ) per aligned vote but for-feits 𝛾 · 𝑅 base ( 𝑗 ) per non-consensus vote, regardless of stake size, so stacking the DAO with Sybil identities is unprofitable. 
+
+Retrospective slashing handles skills later shown malicious via third-party evidence or a stakeholder arbitration submission that triggers a re-audit. If the re-audit reverses the original verdict, the approving auditors are slashed, and the retrospective slash pool 
+
+Σ = Í𝑖 ∈ A safe 𝑆 slash ( 𝑗 ) splits as 0.3 Σ to the whistleblower, 0.4 Σ
+
+to dissenting auditors, and 0.3 Σ to the Protocol Treasury. The pool splits three ways: dissenting auditors who correctly voted 
+
+unsafe share 40% as a reward for the correct minority vote; the whistleblower receives 30% to compensate the cost of gathering evidence; and the remaining 30% replenishes the Protocol Treasury. Honest dissenters may not fully recover their immediate slash from this TC share alone when the originally approving group is small; the subsequent reputation bonus complements the monetary compensation. Capping the dissenters’ share below 100% removes the incentive to delay evidence until that share is large enough. If a re-audit confirms the original verdict, the submitter pays the re-audit fee with no payout, which deters frivolous challenges. Licensed-skill monetization runs an escrow flow in parallel: the developer freezes a delivery bond 𝐵 deliver at publication and sets a per-access price 𝑃 . A user pays Total = 𝑃 (1 + 𝜑 proto ), split 𝑃 to developer and 𝜑 proto 𝑃 to Treasury. If the developer fails to post the encrypted key within 𝜏 deliver = 24 hours of purchase, 𝐵 deliver 
+
+is forfeit, the user receives a full refund of 𝑃 , and the remainder 
+
+𝐵 deliver − 𝑃 flows to Treasury. The Protocol Treasury is seeded with an initial allocation 𝑇 0
+
+minted at protocol launch and is refilled by the protocol-fee cut, immediate slashes from auditors whose votes diverged from consen-sus, the 30% retrospective-slash share, and forfeited delivery bonds. Treasury outflows fund dispute arbitration, contract upgrades, an emergency reserve, and a slippage subsidy that raises the reference reward when fewer than 𝑁 auditors claim a pending skill within the base wait interval Δ𝑡 :
+
+𝑅 base ( 𝑗, 𝑡 ) = 𝑅 base ( 𝑗 ) · 
+
+
+
+1 + 𝜎  𝑡 −𝑡 0
+
+> Δ𝑡
+
+ 
+
+, (10) with a slippage rate 𝜎 = 0.25 per interval, ensuring that unpopular-but-legitimate skills (e.g., those requiring specialized auditor exper-tise) still attract reviewers. All system parameters ( 𝑇 0, 𝜑 proto , 𝛽 0, 𝛽 1,
+
+𝛾 , 𝜎 , slash split) are subject to DAO vote. 
+
+## 5 Evaluation 
+
+We organize the evaluation around four research questions (RQs): 
+
+• RQ1. Does SIGIL resist the six representative attacks of §3.2, and how does it compare with existing defenses? 
+
+• RQ2. What runtime and economic overhead does SIGIL incur? 
+
+• RQ3. How effective is each pluggable audit method standalone, and what does the DAO committee gain by aggregating them? 
+
+• RQ4. Does the economic mechanism of §4.5 make honest audit-ing incentive-compatible? 
+
+## 5.1 Setup and Implementation 
+
+We implement SIGIL with on-chain components in Solidity on a Hardhat development chain, and off-chain components in Python. Four core contracts realize the on-chain protocol: 
+
+• Token Credit Contract : the contract that issues the TC of §4.5, used for auditor stakes, rewards, and slashes. 
+
+• Skill Pre-Registry and Skill Registry : the former records pend-ing submissions and audit requests; the latter stores, for each approved skill, its content or cryptographic digest, permission manifest, audit report, and versioning metadata across all four publication types. 
+
+• Voting Contract : aggregates signed auditor verdicts through reputation-weighted DAO voting and gates promotion from the Skill Pre-Registry to the Skill Registry. 
+
+• Reputation & Staking Contract : manages auditor reputation, stake deposits, and reward/slash updates. 
+
+SIGIL provides six pluggable audit methods that auditors run in-dependently: Static [18 ], LLM , SkillScan [29 ], Manifest [ 35 ], Repello SkillCheck [32 ], and Security Scanner [30 ]. The SVL is implemented as a Python module on the agent’s loading path. Sealing the Audit–Runtime Gap for LLM Skills 
+
+Table 3: Resistance of SIGIL and six baselines against the six representative attacks of §3.2. Defense Pre-anchoring attacks Post-anchoring Explicit injection Implicit poisoning Cross-skill interaction Auditor collusion Rug pull Local tampering                                                           
+
+> SkillScan [29] ✓86.7% ✓70.5% ✗—⃝⃝
+> SkillProbe [9] ✓90% ✓86% ✓87% —⃝⃝
+> MalSkills [37] ✓95% ✓85% ✗—⃝⃝
+> AgentFuzz[27] ✗✗✓97.14% —✓92.8% ✗
+> Mainstream markets [15] ⃝⃝✗—✗✗
+> Agentsentinel [16] ✗✗✓87% —⃝✗
+> SIGIL ✓97.6% ✓97.6% ✓90.2% ✓40% †✓95.1% ✓100%
+
+✓ resists; ⃝ partially resists; ✗ does not resist; — not applicable. Blue: empirical accuracy. Red: mechanism-level guarantees in SIGIL ; 40% † is the highest tolerable ratio of malicious auditors. 
+
+The dataset evolved in this evaluation contains 1,023 real-world skills collected from ClawHub, GitHub repositories, and other pub-lic skill registries. We label each skill through automated security scanning [ 2 ], metadata analysis, and manual review, yielding 723 malicious and 300 benign skills; 93 of the malicious skills correspond to explicit injection or implicit poisoning . To our knowledge, this corpus is among the most comprehensive skill-security bench-marks to date. Because of page limits, the main evaluation does not present the parameter-selection experiments behind SIGIL ’s default con-figuration. Appendix A reports sensitivity sweeps for the initial reputation ratio 𝑟 0/𝑟 max , the approval threshold 𝜃 , the number of audit methods, and the slash coefficient 𝛾 , and justifies the values used throughout this section. 
+
+## 5.2 Security Analysis 
+
+We argue that SIGIL ’s design mitigates the six representative attacks of Section 3.2, assuming an honest majority of auditor voting power. For explicit injection and implicit poisoning , the attack suc-ceeds only if a harmful skill passes DAO audit. SIGIL requires inde-pendent auditors, aggregates their verdicts by reputation-weighted consensus (Equation 1), and records signed verdicts for later ac-countability. The stake-and-slash mechanism (§4.5) makes dishon-est approval costly and enables retrospective punishment when an approved skill is later shown malicious. For rug pull , the modification is introduced on the registry-side. Through smart-contract-enforced constraints, an approved skill can only be updated through a new DAO audit process. For local tampering , SIGIL relies on content-addressed skill identifiers and SVL hash checks. Any modification after approval changes the recomputed content hash, so the SVL rejects the artifact before it enters the agent context (§4.4). This covers all four publication types: Transparent plaintext is anchored on-chain; Licensed and Sealed ciphertexts are verified against the on-chain content hash after decryption (Step 9 ); and Committed skills are re-hashed against the on-chain record at every load (Step 10 ). For cross-skill interaction , SIGIL bounds the permissions avail-able to a multi-skill context rather than treating loaded skills as a permission union. During invocation, the SVL performs Permission 0 20 40 60 80 100    
+
+> Voting Round
+> 70
+> 80
+> 90
+> 100
+> Accuracy (%)
+> Malicious Auditor Ratio 20% 30% 40%
+
+Figure 3: Audit accuracy over voting rounds under dynamic reputation updates. 
+
+Check (Step 11 ) over the loaded skills’ manifests (§4.4): only the manifest intersection that also lies within the user’s authorized scope is injected as the default executable envelope, while permis-sions in the union-minus-intersection set require explicit user au-thorization or cause the invocation to abort. A malicious skill there-fore cannot silently induce the LLM to use another loaded skill’s broader tool or data permissions. For auditor collusion , stake, reputation-weighted voting, slashing, and signed audit records make coordinated dishonest approval accountable. 
+
+## 5.3 Defense Effectiveness 
+
+End-to-end resistance is the strongest property a skill-security framework can claim: regardless of how an attacker enters the supply chain, the framework should keep harmful content out of the agent’s context. We therefore evaluate SIGIL against the six representative attacks of §3.2 and compare it with six external de-fenses: SkillScan [ 29 ], SkillProbe [ 9 ], MalSkills [ 37 ], AgentFuzz [ 27 ], mainstream marketplace review [15], and AgentSentinel [16]. Explicit injection and implicit poisoning use the 93 malicious skill-content samples from the corpus; rug pull and local tampering use 250 tampered artifacts derived from 50 clean skills; cross-skill interaction uses 10 synthetic scenarios; and auditor collusion is evaluated through a discrete-event voting simulation. We classify each defense as fully resistant, partially resistant, not resistant, or not applicable to a given attack. Table 3 reports the results; full-corpus audit quality is evaluated separately in §5.5. For explicit injection and implicit poisoning , we use the same 93 malicious skill-content samples for both attacks because they jointly cover overt instructions to access credentials, invoke undeclared tools, or exfiltrate results [ 6, 34 ], as well as semantically disguised descriptions and metadata that bias tool selection [ 31 , 42 ]. 
+
+SIGIL reaches 97.6% accuracy on this set by combining semantic review with permission-manifest checks. Content-auditing base-lines (SkillScan, SkillProbe, MalSkills) also perform well when at-tacks leave lexical, structural, or semantic evidence at submission, whereas runtime-only defenses and marketplace review do not target submission-time content. 
+
+Rug pull is evaluated by approving 50 clean skills and applying five post-approval tampering patterns, yielding 250 attempts [ 18 ,36 ]. Because SIGIL stores approved skills as immutable on-chain versions, none can silently replace the approved artifact; each must enter a new DAO audit cycle, where 95.1% are rejected before admission. Although re-auditing and runtime testing may detect Tingda Shen, Yebo Feng, Konglin Zhu, Xiaojun Jia, Yang Liu, and Lin Zhang 1 5 10 15 
+
+Batch Size (Skills Loaded) 
+
+0
+
+5
+
+10 
+
+15 
+
+20 
+
+25 
+
+30 
+
+35 
+
+> Payload Size (KB)
+> 1.5
+> 7.4
+> 14.8
+> 26.3
+
+Request 
+
+Response 
+
+Total 
+
+Figure 4: Invoke skill pay-load size (request, response, total) versus batch size. 1 5 10 15 
+
+Batch Size (Skills Loaded) 
+
+65 
+
+70 
+
+75 
+
+80 
+
+85 
+
+90 
+
+95 
+
+100 
+
+105 
+
+> Invocation Latency (ms)
+
+Average Latency 
+
+Figure 5: Per-round query latency versus batch size on Sepolia (100 rounds each). 72 80 88 96 104 
+
+Invocation Latency (ms) 
+
+0.0 
+
+0.2 
+
+0.4 
+
+0.6 
+
+0.8 
+
+1.0 
+
+> CDF
+
+Batch=1 
+
+Batch=5 
+
+Batch=10 
+
+Batch=15 
+
+Figure 6: Cumulative distri-bution functions (CDFs) of batched skill-load latency. 1 5 10 15 
+
+Batch Size (Skills Loaded) 
+
+80 
+
+85 
+
+90 
+
+95 
+
+100 
+
+105 
+
+110 
+
+115 
+
+> Tail Latency (ms)
+
+P95 P99 
+
+Figure 7: Tail latency (P95/P99) versus batch size. 
+
+some modifications, they do not cryptographically bind the audited artifact to the artifact later loaded by the agent. 
+
+Cross-skill interaction is evaluated on 10 scenarios covering shadowing, Puppet attacks, permission aggregation, and output injection [ 36 , 50 ]. SIGIL reaches 90.2% accuracy through the Per-mission Check argued in §5.2. The one missed case stays within the user-authorized manifest intersection, which marks the limit of manifest-based checks. Baselines that reason across skills or inter-cept runtime actions provide partial to strong coverage; single-skill static review does not capture this class. 
+
+Auditor collusion targets governance rather than skill content. To evaluate, we simulate 20 auditors over 100 voting rounds with coordinated malicious auditors at 20%, 30%, and 40%. Figure 3 shows that dynamic reputation and slashing improve audit accuracy across all three malicious-auditor ratios. 
+
+Local tampering reuses the 250 rug-pull artifacts as user-side modifications to cached or committed skills [ 26 ]. SIGIL blocks every attempt (100% accuracy) by comparing the local hash with the on-chain record on the default loading path. Static and semantic scanners help only if the user re-scans manually; runtime defenses and marketplace review do not verify local integrity before loading. 
+
+Answer to RQ1: SIGIL is the only system that resists all six representative attacks: 97.6% accuracy on explicit injection and implicit poisoning, 95.1% on rug pull, 100% on local tamper-ing, 90.2% on cross-skill interaction, and stable accuracy under collusion at 20%–40% malicious auditors. 
+
+## 5.4 System Overhead 
+
+A defense is useful only if its overhead is acceptable. Two overheads matter for SIGIL : the LLM tokens consumed by auditing (an eco-nomic cost paid once per submission) and the latency added by the SVL on the loading path (a runtime cost paid on every invocation). We measure both. Audit-token usage is sampled on a 100-skill subset and normal-ized against a 15 ,000 K-token monthly GPT quota for a $20 sub-scription plan, taken as a conservative reference for typical paid users. Static is rule-based and uses no LLM tokens; Repello [ 32 ] is excluded because its hosted interface does not expose per-request token usage. For loading, the SVL issues one WebSocket JSON-RPC batch request to Alchemy Sepolia for 𝐵 ∈ { 1, 5, 10 , 15 } skills, with 100 rounds per setting; registry reads are Solidity view calls. Table 4 reports the token-usage results: Manifest has the low-est LLM cost (34.87K tokens, 0.232%), followed by LLM (84.02K, 0.560%) and SkillScan (137.70K, 0.918%). Security Scanner is high-est (418.79K, 2.792%) because its script-derived findings require LLM normalization. Every measured method stays below 3% of the $20-plan quota. Figures 4–7 report the loading results. Average latency grows from 79 ms to 86 ms as the batch size increases from 1 to 15 skills, with P95/P99 below 100 ms. Payload size grows from 1.5 KB to 26.3 KB, but latency is dominated by the client-to-RPC round trip rather than transmission cost. 
+
+Answer to RQ2: SIGIL ’s overhead is minor: audit token usage stays under 3% of a $20-plan monthly quota, and SVL query latency adds at most 7 ms to load 15 skills. 
+
+## 5.5 Audit Effectiveness 
+
+SIGIL ’s audit framework is pluggable: any auditor that passes the DAO threshold can contribute, and the committee should perform at least as well as any single auditor on its own. We evaluate both halves of this design — how each method performs standalone and how much the DAO Committee gains by aggregating them. 
+
+Table 4: Audit token usage on a 100-skill subsample. Quota Share is the share of a 15 ,000 K-token GPT subscription quota.                                    
+
+> Method Cost distribution Avg. Tokens Quota Share
+> (K tokens) (%) Static [18] —0.00 0.000 LLM 0200 400 600 800 84.02 0.560 SkillScan [29] 0200 400 600 800 137.70 0.918 Manifest [35] 0200 400 600 800 34.87 0.232 Security Scanner [30] 0200 400 600 800 418.79 2.792 Sealing the Audit–Runtime Gap for LLM Skills 025 50 75 100
+
+SIGIL 
+
+Scanner 
+
+Repello 
+
+Manifest 
+
+SkillScan 
+
+LLM 
+
+Static 
+
+Accuracy     
+
+> 97.6
+> 48.3
+> 83.5
+> 72.6
+> 96.0
+> 91.6
+> 72.1
+> 025 50 75 100
+
+Precision     
+
+> 98.1
+> 97.1
+> 96.0
+> 77.2
+> 100
+> 100
+> 75.0
+> 025 50 75 100
+
+Recall     
+
+> 98.5
+> 27.7
+> 79.9
+> 87.0
+> 94.3
+> 88.1
+> 90.9
+> 025 50 75 100
+
+F1-score     
+
+> 98.3
+> 43.1
+> 87.2
+> 81.8
+> 97.1
+> 93.7
+> 82.2
+> 025 50 75 100
+
+FN Rate     
+
+> 1.5
+> 72.3
+> 20.1
+> 13.0
+> 5.7
+> 11.9
+> 9.1
+> 025 50 75 100
+
+FP Rate 
+
+> 4.5
+> 2.0
+> 8.0
+> 62.0
+> 0.0
+> 0.0
+> 73.0
+
+Score (%) 
+
+Figure 8: Aggregate audit metrics across six skill audit methods and DAO Committee voting. 
+
+We benchmark six audit methods on the 1,023-skill corpus (723 malicious, 300 benign): Static , LLM , SkillScan [29 ], Manifest ,
+
+Repello SkillCheck [32 ], and Security Scanner [ 30 ]. For each method we compute a binary confusion matrix and report accuracy, precision, recall, F1-score, FN rate, and false-positive (FP) rate. The DAO Committee aggregates the six methods with equal weight and approves a skill only when at least two-thirds vote safe . To isolate each method’s marginal contribution, we run a leave-one-out ablation that removes one auditor at a time and recomputes the verdict over the remaining five with a 3-of-5 majority. Figure 8 shows that SkillScan is the strongest standalone auditor, reaching 96.0% accuracy, 100.0% precision, 94.3% recall, and 97.1% F1-score. Compared to the bare LLM auditor, SkillScan’s skill-aware prompting raises recall from 88.1% to 94.3% and F1-score from 93.7% to 97.1% without false positives. Static and Manifest keep high recall (90.9% and 87.0%) but over-reject benign skills, whereas 
+
+Security Scanner has high precision (97.1%) but low recall (27.7%). The DAO Committee improves the tradeoff to 97.6% accuracy, 98.5% recall, 98.3% F1-score, and 1.5% FN rate. The per-method error breakdown explains the gain: SkillScan has the best standalone operating point (5.7% FN rate, 0% FP rate; 41 FN, 0 FP), and LLM 
+
+also keeps 0% FP rate but misses 86 malicious skills. Static and 
+
+Manifest over-block benign skills (73.0% and 62.0% FP rate; 219 and 186 FP), Security Scanner under-flags malicious skills (72.3% FN rate), and Repello SkillCheck sits in the middle (20.1% FN rate, 8.0% FP rate). These complementary failure modes support the pluggable DAO design of §4.3. SkillScan is strongest overall but does not dom-inate every attack class and still incurs LLM inference cost, so the committee draws on structural over-blocking ( Static , Mani-fest ), LLM judgment ( LLM , SkillScan , Repello SkillCheck ), and 
+
+Table 5: Leave-one-out ablation of the six audit methods. Each row removes one auditor from the DAO committee; metrics in percent.                                                                                                                         
+
+> Variant Accuracy Precision Recall F1-score FN Rate FP Rate
+> W/o Static 95.64 ▼1.98 99.96 ▲1.83 93.88 ▼4.64 96.82 ▼1.50 6.12 ▲4.64 0.10 ▼4.42
+> W/o LLM 95.00 ▼2.62 98.06 ▼0.07 94.80 ▼3.72 96.40 ▼1.92 5.20 ▲3.72 4.52 –
+> W/o SkillScan 93.82 ▼3.80 98.02 ▼0.11 93.14 ▼5.38 95.52 ▼2.80 6.86 ▲5.38 4.52 –
+> W/o Manifest 96.23 ▼1.39 99.95 ▲1.82 94.71 ▼3.81 97.26 ▼1.06 5.29 ▲3.81 0.12 ▼4.40
+> W/o Repello SkillCheck 96.56 ▼1.06 99.61 ▲1.48 95.51 ▼3.01 97.51 ▼0.81 4.49 ▲3.01 0.91 ▼3.61
+> W/o Security Scanner 97.42 ▼0.20 98.49 ▲0.36 97.85 ▼0.67 98.17 ▼0.15 2.15 ▲0.67 3.62 ▼0.90
+> SIGIL 97.62 98.13 98.52 98.32 1.48 4.52
+> ▼: decrease; ▲: increase, relative to full SIGIL .
+
+scanner-style signals ( Security Scanner ) as peer evidence rather than relying on a single auditor. Table 5 reports the leave-one-out ablation. Precision remains above 98% (98.02%–99.96%), F1-score above 95.5%, and accuracy above 93.8% in every variant, so no single removal collapses the verdict. Every removal nonetheless reduces F1 relative to full SIGIL 
+
+(98.32%): removing SkillScan is most damaging (93.14% recall, 95.52% F1, 6.86% FN rate); removing Static or Manifest improves precision (99.95%–99.96%) and FP rate (0.10%–0.13%) at the cost of about 4.6 pp recall; removing Security Scanner has the smallest effect (98.17% F1). 
+
+Answer to RQ3: The DAO Committee outperforms every standalone auditor (97.6% accuracy, 1.5% FN rate vs. SkillScan’s 96.0% / 5.7%), and the leave-one-out ablation shows every method contributes. 
+
+## 5.6 Incentive Compatibility 
+
+An audit committee remains vulnerable if dishonest voting is more profitable than truthful voting. SIGIL ’s economic mechanism (§4.5) must therefore make honest auditing strictly preferable in both a single round and over many rounds. We test this in two complementary ways. A one-shot game-theoretic analysis identifies the equilibrium of a single audit round under SIGIL ’s reward and slash rules; a multi-round simulation then tracks stake and reputation across 600 rounds under the full update rule, including reward, slash, and decay. 
+
+5.6.1 Game-Theoretic Analysis. We model one audit round as a two-player game between a developer 𝑑 and an auditor 𝑎 . The developer submits either a benign (B) or malicious (M) skill; the auditor either cooperates (C) by voting truthfully or defects (D) by voting safe . Under the honest-majority assumption of §5.2, the other 𝑁 −1 =19 auditors vote truthfully, so the reputation-weighted verdict matches ground truth and losing-side auditors are slashed. We reuse the reward 𝑅 (Eq. 8), slash 𝑆 = 𝛾𝑅 base ( 𝑗 ) with 𝛾 = 2
+
+(Eq. 9), publication fee 𝐶 pub ( 𝑗 ) (Eq. 7), benign-skill utility 𝑈 legit , and bribe 𝐵 . Since 𝑆 = 2𝑅 base ( 𝑗 ) > 𝑅 base ( 𝑗 ) ≥ 𝑅 and a rational briber pays 𝐵 < 𝑆 , we have 𝑆 > 𝐵 > 0. The resulting payoff matrix is shown in Table 6. Under these parameters, truthful auditing is the only stable au-ditor strategy. For benign skills, C and D both receive +𝑅 because the verdict is safe. For malicious skills, C receives +𝑅 , whereas D receives 𝐵 − 𝑆 < 0. Thus C weakly dominates D overall and strictly dominates it on malicious submissions. For the developer, Tingda Shen, Yebo Feng, Konglin Zhu, Xiaojun Jia, Yang Liu, and Lin Zhang 
+
+Table 6: One-round payoff matrix (𝑈 𝑑 , 𝑈 𝑎 ) between developer 
+
+𝑑 and auditor 𝑎 .                              
+
+> d\aCDB(𝑈 legit −𝐶 pub ,+𝑅 )(𝑈 legit −𝐶 pub ,+𝑅 )
+> M(− 𝐶 pub ,+𝑅 )(− 𝐶 pub −𝐵, 𝐵 −𝑆 )
+> 𝑅 : consensus-aligned reward; 𝑆 : slash with 𝑆 >𝑅 base (𝑗 ) ≥ 𝑅 >𝐵 ;𝐶 pub : publication fee; 𝑈 legit : developer revenue from an approved skill; 𝐵 : bribe to a defecting auditor.
+
+M yields at most −𝐶 pub , while B yields 𝑈 legit − 𝐶 pub > 0 when-ever the skill has positive legitimate value. Therefore (B, C) is the unique Nash equilibrium; any unilateral deviation loses at least 
+
+min {𝑈 legit , 𝑆 − 𝐵 } > 0.
+
+5.6.2 Multi-Round Simulation. The one-shot result does not cap-ture accumulated stake and reputation updates. We therefore simu-late 𝑁 =20 auditors (15 honest, 5 malicious) over 600 rounds, with 5 auditors sampled per round. We set 𝑅 base = 0.56 TC, 𝛾 = 2, 𝑟 𝑖 = 𝑟 max ,and 𝜑 proto → 0, which gives a +0.56 TC reward for correct votes and a 1.12 TC slash for incorrect votes against an initial 100 TC balance. Reputation starts at 𝑟 0 =100 and uses 𝛿 + =+15 , 𝛿 − =−30 ,and decay 𝛼 = 0.995 . We compare four auditor types: fully hon-est, 80% honest, default malicious (30% correct votes), and stealthy malicious (defects in 50% of the rounds in which it is sampled). Figure 9 shows a clear separation. Fully honest auditors grow from 100 TC to 189.25 TC after 600 rounds, and the 80%-correct cohort remains viable at 147.66 TC. The default malicious cohort is depleted to 0 TC, and the stealthy malicious cohort falls to 34.59 TC. Reputation follows the same pattern: fully honest auditors reach 744.84, the 80%-correct cohort reaches 327.24, and the malicious cohorts collapse to 5.96 and 11.69. The game and the simulation jointly validate the mechanism of §4.5: honest auditors absorb realistic errors, while repeated mali-cious voting drains both stake and reputation. With the auditor collusion analysis in §5.3, the results show that malicious auditors cannot participate sustainably under SIGIL ’s rules. 
+
+Answer to RQ4: Honest auditing is the unique one-shot Nash equilibrium and the dominant long-run strategy: across 600 simulated rounds, honest auditors gain stake and reputation while malicious cohorts are depleted to near zero. 
+
+## 6 Discussion 
+
+SIGIL narrows the audit–runtime gap for LLM skills along the four design goals of §3.3, but several aspects deserve explicit discussion. Defensive coverage is bounded by the audit methods plugged into the DAO Committee. Content auditing catches attacks that leave lexical, structural, or behavioral evidence at submission, but a skill operating within its declared permissions can still misuse them, for example through semantically valid database queries. Aggregating six methods reduces single-method blind spots (§5.5) without eliminating them; this bound is shared with policy-based approaches such as Progent [35]. Off-chain content delivery to auditors (Licensed, Sealed, and Committed skills) relies on a confidentiality bond rather than cryp-tographic enforcement. The bond and reputation reset of §4.2 pe-nalize confirmed leaks but cannot prevent disclosure once a skill 0      
+
+> 50
+> 100
+> 150
+> 200
+> Auditor
+> Stake
+> 0100 200 300 400 500 600
+> Audit Round
+> 200
+> 400
+> 600
+> Reputation
+> Score
+> Audit
+> Accuracy:
+> 100%
+> 80%
+> 50%
+> 0%
+> Initial
+> level
+
+Figure 9: The TC balance (top) and reputation (bottom) over 600 audit rounds. 
+
+is decrypted, and attributing a leak to a specific auditor without content fingerprinting remains an open question. Audit verdicts can age. Detection patterns and auditor LLMs evolve, so a skill approved months ago under contemporary criteria may not be flagged by newer methods. Retrospective slashing (§4.5) provides a reactive correction once a missed attack surfaces, but proactive re-auditing against newer methods is left to governance. Several directions follow. Stronger auditor plugins, including attention-based detectors such as MindGuard [ 41 ], can extend se-mantic coverage; per-auditor content fingerprinting would attribute confirmed leaks to a specific identity; and formal verification of the on-chain contracts would strengthen confidence beyond the equilibrium argument of §5.6.1. Deployment also requires LLM providers to integrate registry queries into their agent runtimes and the DAO to reach a critical mass of auditors for timely reviews. 
+
+## 7 Conclusion 
+
+We presented SIGIL , the first framework that seals the audit–runtime gap for LLM agent skills, providing end-to-end protection from skill submission to invocation. SIGIL operates in three stages. At Sub-mission , a developer commits a skill and a DAO Audit Committee reviews it through reputation-weighted consensus under stake-and-slash incentives. At Anchoring , approved skills migrate into a tamper-evident on-chain Skill Registry that supports four pub-lication types: Transparent, Licensed, Sealed, and Committed. At 
+
+Invocation , the SVL, integrated into the AI Service Provider, queries the registry, hashes content as needed, and binds every loaded skill to its audited record before it enters the agent’s context. On 1,023 in-the-wild skills, SIGIL is the only defense that resists all six representative attacks: 97.6% accuracy on explicit injection and implicit poisoning, 95.1% on rug pull, 100% on local tampering, 90.2% on cross-skill interaction, and stable accuracy under 20%– 40% colluding auditors. The DAO Audit Committee reaches 97.6% accuracy, 98.3% F1-score, and a 1.5% FN Rate; the SVL adds at most 7 ms to load 15 skills on Ethereum Sepolia. A game-theoretic anal-ysis and a 600-round simulation show that honest auditing is the unique Nash equilibrium and the dominant long-run strategy. To-gether, these results show that LLM skills can be submitted, audited, anchored, and loaded with stronger end-to-end trust guarantees. 
+
+## References  
+
+> [1] Hengyu An, Jinghuai Zhang, Tianyu Du, Chunyi Zhou, Qingming Li, Tao Lin, and Shouling Ji. 2025. Ipiguard: A novel tool dependency graph-based defense against
+
+Sealing the Audit–Runtime Gap for LLM Skills 
+
+indirect prompt injection in llm agents. In Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing . 1023–1039. [2] Luca Beurer-Kellner, Aleksei Kudrinskii, Marco Milanta, Kristian Bonde Nielsen, Hemang Sarkar, and Liran Tal. 2026. Snyk Finds Prompt Injection in 36%, 1467 Malicious Payloads in a ToxicSkills Study of Agent Skills Supply Chain Com-promise. https://snyk.io/blog/toxicskills-malicious-ai-agent-skills-clawhub/. Accessed: 2026-04-12. [3] Vedant P. Bhardwaj. 2026. Formal Analysis and Supply Chain Security for Agentic AI Skills. arXiv preprint arXiv:2603.00195 (2026). https://arxiv.org/abs/2603.00195 [4] Sizhe Chen, Julien Piet, Chawin Sitawarin, and David Wagner. 2025. {StruQ }:Defending against prompt injection with structured queries. In 34th USENIX Security Symposium (USENIX Security 25) . 2383–2400. [5] Edoardo Debenedetti, Jie Zhang, Mislav Balunovic, Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr. 2024. Agentdojo: A dynamic environment to eval-uate prompt injection attacks and defenses for llm agents. Advances in Neural Information Processing Systems 37 (2024), 82895–82920. [6] Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, and Mario Fritz. 2023. Not what you’ve signed up for: Compromising real-world llm-integrated applications with indirect prompt injection. In Proceedings of the 16th ACM workshop on artificial intelligence and security . 79–90. [7] Yacong Gu, Lingyun Ying, Yingyuan Pu, Xiao Hu, Huajun Chai, Ruimin Wang, Xing Gao, and Haixin Duan. 2023. Investigating package related security threats in software registries. In 2023 IEEE Symposium on Security and Privacy (SP) . IEEE, 1578–1595. [8] Yongjian Guo, Puzhuo Liu, Wanlun Ma, Zehang Deng, Xiaogang Zhu, Peng Di, Xi Xiao, and Sheng Wen. 2025. Systematic Analysis of MCP Security. arXiv preprint arXiv:2508.12538 (2025). [9] Zihan Guo, Zhiyu Chen, Xiaohang Nie, Jianghao Lin, Yuanjian Zhou, and Weinan Zhang. 2026. SkillProbe: Security Auditing for Emerging Agent Skill Market-places via Multi-Agent Collaboration. arXiv preprint arXiv:2603.21019 (2026). [10] Rakel Haakegaard and Joanna Lang. 2015. The elliptic curve diffie-hellman (ecdh). Online at https://koclab. cs. ucsb. edu/teaching/ecc/pro-ject/2015Projects/Haakegaard+ Lang. pdf 5 (2015), 74. [11] Feng Hao and Paul C van Oorschot. 2022. SoK: password-authenticated key exchange–theory, practice, standardization and real-world lessons. In Proceedings of the 2022 ACM on Asia conference on computer and communications security .697–711. [12] Feng He, Tianqing Zhu, Dayong Ye, Bo Liu, Wanlei Zhou, and Philip S Yu. 2025. The emerged security and privacy of llm agent: A survey with case studies. 
+
+Comput. Surveys 58, 6 (2025), 1–36. [13] Pengfei He, Yuping Lin, Shen Dong, Han Xu, Yue Xing, and Hui Liu. 2025. Red-teaming llm multi-agent systems via communication attacks. In Findings of the Association for Computational Linguistics: ACL 2025 . 6726–6747. [14] Florian Holzbauer, David Schmidt, Gabriel Gegenhuber, Sebastian Schrittwieser, and Johanna Ullrich. 2026. Malicious Or Not: Adding Repository Context to Agent Skill Classification. arXiv preprint arXiv:2603.16572 (2026). [15] Xinyi Hou, Yanjie Zhao, and Haoyu Wang. 2025. On the (in) security of llm app stores. In 2025 IEEE Symposium on Security and Privacy (SP) . IEEE, 317–335. [16] Haitao Hu, Peng Chen, Yanpeng Zhao, and Yuqi Chen. 2025. Agentsentinel: An end-to-end and real-time security defense framework for computer-use agents. In Proceedings of the 2025 ACM SIGSAC Conference on Computer and Communications Security . 3535–3549. [17] Umar Iqbal, Tadayoshi Kohno, and Franziska Roesner. 2024. LLM platform security: Applying a systematic evaluation framework to OpenAI’s ChatGPT plugins. In Proceedings of the AAAI/ACM Conference on AI, Ethics, and Society ,Vol. 7. 611–623. [18] Saeid Jamshidi, Kawser Wazed Nafi, Arghavan Moradi Dakhel, Negar Shahabi, Foutse Khomh, and Naser Ezzati-Jivan. 2025. Securing the Model Context Pro-tocol: Defending LLMs against tool poisoning and adversarial attacks. arXiv preprint arXiv:2512.06556 (2025). [19] Yanna Jiang, Delong Li, Haiyu Deng, Baihe Ma, Xu Wang, Qin Wang, and Guang-sheng Yu. 2026. SoK: Agentic Skills–Beyond Tool Use in LLM Agents. arXiv preprint arXiv:2602.20867 (2026). [20] Yukun Jiang, Yage Zhang, Michael Backes, Xinyue Shen, and Yang Zhang. 2026. HarmfulSkillBench: How Do Harmful Skills Weaponize Your Agents? arXiv preprint arXiv:2604.15415 (2026). [21] Markus Jungnickel, Ferda Özdemir Sönmez, Cathy Mulligan, and William J Knot-tenbelt. 2024. DAO Governance: Voting Power, Participation, and Controversy-A Review and an Empirical Analysis. Distributed Ledger Technologies: Research and Practice (2024). [22] Hugo Krawczyk. 2010. Cryptographic extraction and key derivation: The HKDF scheme. In Annual Cryptology Conference . Springer, 631–648. [23] Piergiorgio Ladisa, Henrik Plate, Matias Martinez, and Olivier Barais. 2023. Sok: Taxonomy of attacks on open-source software supply chains. In 2023 IEEE Sym-posium on Security and Privacy (SP) . IEEE, 1509–1526. [24] Zichuan Li, Jian Cui, Xiaojing Liao, and Luyi Xing. 2025. Les Dissonances: Cross-Tool Harvesting and Polluting in Pool-of-Tools Empowered LLM Agents. arXiv preprint arXiv:2504.03111 (2025). [25] Z. Li, J. Wu, X. Ling, X. Cui, and T. Luo. 2026. Towards Secure Agent Skills: Archi-tecture, Threat Taxonomy, and Security Analysis. arXiv preprint arXiv:2604.02837 
+
+(2026). https://arxiv.org/abs/2604.02837 [26] Zhiyuan Li, Jingzheng Wu, Xiang Ling, Xing Cui, and Tianyue Luo. 2026. Towards Secure Agent Skills: Architecture, Threat Taxonomy, and Security Analysis. arXiv preprint arXiv:2604.02837 (2026). [27] Fengyu Liu, Yuan Zhang, Jiaqi Luo, Jiarun Dai, Tian Chen, Letian Yuan, Zhengmin Yu, Youkun Shi, Ke Li, Chengyuan Zhou, et al . 2025. Make agent defeat agent: Automatic detection of {Taint-Style } vulnerabilities in {LLM-based } agents. In 
+
+34th USENIX Security Symposium (USENIX Security 25) . 3767–3786. [28] Yi Liu, Zhihao Chen, Yanjun Zhang, Gelei Deng, Yuekang Li, Jianting Ning, Ying Zhang, and Leo Yu Zhang. 2026. Malicious Agent Skills in the Wild: A Large-Scale Security Empirical Study. arXiv preprint arXiv:2602.06547 (2026). https://arxiv.org/abs/2602.06547 [29] Yi Liu, Weizhe Wang, Ruitao Feng, Yao Zhang, Guangquan Xu, Gelei Deng, Yuekang Li, and Leo Zhang. 2026. Agent Skills in the Wild: An Empirical Study of Security Vulnerabilities at Scale. arXiv preprint arXiv:2601.10338 (2026). https://arxiv.org/abs/2601.10338 [30] MCP Market. 2026. Skill Security Scanner. https://mcpmarket.com/zh/tools/ skills/skill-security-scanner. Accessed: 2026-04-18. [31] Kanghua Mo, Li Hu, Yucheng Long, and Zhihao li. 2026. Attractive Metadata Attack: Inducing LLM Agents to Invoke Malicious Tools. In The Thirty-ninth Annual Conference on Neural Information Processing Systems . https://openreview. net/forum?id=oLGtPYdRzU [32] Repello AI. 2026. SkillCheck: Security Scanner for Agent Skills. https://repello. ai/tools/skills. Accessed: 2026-04-18. [33] David Schmotz, Luca Beurer-Kellner, Sahar Abdelnabi, and Maksym An-driushchenko. 2026. Skill-inject: Measuring agent vulnerability to skill file attacks. arXiv preprint arXiv:2602.20156 (2026). [34] Sander Schulhoff, Jeremy Pinto, Anaum Khan, Louis-François Bouchard, Chenglei Si, Sid Anber, Michele Catasta, James Rector-Brooks, Maximilian Mozes, et al .2023. Ignore this title and HackAPrompt: Exposing systemic vulnerabilities of LLMs through a global prompt hacking competition.. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing (EMNLP) .[35] Tianneng Shi, Jingxuan He, Zhun Wang, Hongwei Li, Linyu Wu, Wenbo Guo, and Dawn Song. 2025. Progent: Programmable Privilege Control for LLM Agents. 
+
+arXiv preprint arXiv:2504.11703 (2025). [36] Hao Song, Yiming Shen, Wenxuan Luo, Leixin Guo, Ting Chen, Jiashui Wang, Beibei Li, Xiaosong Zhang, and Jiachi Chen. 2025. Beyond the Protocol: Unveil-ing Attack Vectors in the Model Context Protocol Ecosystem. arXiv preprint arXiv:2506.02040 (2025). [37] Shenao Wang, Junjie He, Yanjie Zhao, Yayi Wang, Kan Yu, and Haoyu Wang. 2026. “Elementary, My Dear Watson.” Detecting Malicious Skills via Neuro-Symbolic Reasoning across Heterogeneous Artifacts. arXiv preprint arXiv:2603.27204 (2026). https://arxiv.org/abs/2603.27204 [38] Shilong Wang, Guibin Zhang, Miao Yu, Guancheng Wan, Fanci Meng, Chongye Guo, Kun Wang, and Yang Wang. 2025. G-Safeguard: A Topology-Guided Secu-rity Lens and Treatment on LLM-based Multi-agent Systems. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Moham-mad Taher Pilehvar (Eds.). Association for Computational Linguistics, Vienna, Austria, 7261–7276. doi:10.18653/v1/2025.acl-long.359 [39] Shenao Wang, Yanjie Zhao, Xinyi Hou, and Haoyu Wang. 2025. Large lan-guage model supply chain: A research agenda. ACM Transactions on Software Engineering and Methodology 34, 5 (2025), 1–46. [40] Shang Wang, Tianqing Zhu, Bo Liu, Ming Ding, Dayong Ye, Wanlei Zhou, and Philip Yu. 2025. Unique security and privacy threats of large language models: A comprehensive survey. Comput. Surveys 58, 4 (2025), 1–36. [41] Zhiqiang Wang, Haohua Du, Guanquan Shi, Junyang Zhang, Haoran Cheng, Yunhao Yao, Kaiwen Guo, and Xiang-Yang Li. 2025. MindGuard: Intrinsic Deci-sion Inspection for Securing LLM Agents Against Metadata Poisoning. arXiv preprint arXiv:2508.20412 (2025). [42] Zhiqiang Wang, Yichao Gao, Yanting Wang, Suyuan Liu, Haifeng Sun, Haoran Cheng, Guanquan Shi, Haohua Du, and Xiangyang Li. 2026. MCPTox: A Bench-mark for Tool Poisoning on Real-World MCP Servers. In Proceedings of the AAAI Conference on Artificial Intelligence , Vol. 40. 35811–35819. [43] Chuan Yan, Ruomai Ren, Mark Huasong Meng, Liuhuo Wan, Tian Yang Ooi, and Guangdong Bai. 2024. Exploring chatgpt app ecosystem: Distribution, deploy-ment and security. In Proceedings of the 39th IEEE/ACM International Conference on Automated Software Engineering . 1370–1382. [44] Junjie Ye, Sixian Li, Guanyu Li, Caishuang Huang, Songyang Gao, Yilong Wu, Qi Zhang, Tao Gui, and Xuan-Jing Huang. 2024. Toolsword: Unveiling safety issues of large language models in tool learning across three stages. In Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) . 2181–2211. [45] Jingwei Yi, Yueqi Xie, Bin Zhu, Emre Kiciman, Guangzhong Sun, Xing Xie, and Fangzhao Wu. 2025. Benchmarking and defending against indirect prompt injection attacks on large language models. In Proceedings of the 31st ACM Tingda Shen, Yebo Feng, Konglin Zhu, Xiaojun Jia, Yang Liu, and Lin Zhang             
+
+> SIGKDD Conference on Knowledge Discovery and Data Mining V. 1 . 1809–1820. [46] Miao Yu, Fanci Meng, Xinyun Zhou, Shilong Wang, Junyuan Mao, Linsey Pan, Tianlong Chen, Kun Wang, Xinfeng Li, Yongfeng Zhang, et al .2025. A survey on trustworthy llm agents: Threats and countermeasures. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2 .6216–6226. [47] Qiusi Zhan, Zhixiang Liang, Zifan Ying, and Daniel Kang. 2024. InjecAgent: Benchmarking Indirect Prompt Injections in Tool-Integrated LLM Agents. In
+> Findings of the Association for Computational Linguistics: ACL 2024 .[48] Wei Zhao, Zhe Li, Peixin Zhang, and Jun Sun. 2026. ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection. arXiv preprint arXiv:2604.11790 (2026). https://arxiv.org/abs/2604.11790 [49] Jinhao Zhu, Kevin Tseng, Gil Vernik, Xiao Huang, Shishir G. Patil, Vivian Fang, and Raluca Ada Popa. 2025. MiniScope: A Least Privilege Framework for Autho-rizing Tool Calling Agents. arXiv preprint arXiv:2512.11147 (2025). [50] Xuanjun Zong, Zhiqi Shen, Lei Wang, Yunshi Lan, and Chao Yang. 2026. MCP-SafetyBench: A Benchmark for Safety Evaluation of Large Language Models with Real-World MCP Servers. In arXiv preprint arXiv:2512.15163 .
+
+## A Parameter Calibration 
+
+This appendix reports additional parameter-sensitivity experiments for SIGIL and justifies the parameter values chosen in §4. Unless otherwise stated, each experiment follows the evaluation setup in §5 and varies one parameter at a time while keeping the remaining configuration fixed. 
+
+## A.1 Initial Reputation Ratio 
+
+We sweep the initial reputation ratio 𝑟 0/𝑟 max around the calibration used in §4.3. Figure 10 reports the Sybil-resistance side of this sweep under a five-auditor committee, approval threshold 𝜃 = 0.6, and 20,000 Monte Carlo trials per setting. Malicious auditors vote safe 
+
+on a malicious skill, while honest auditors vote unsafe ; the plotted metric is the resulting malicious-skill FN Rate under reputation-weighted voting. 0.0 0.1 0.2 0.3 0.4 
+
+Initial Reputation Ratio r0/rmax 
+
+0
+
+2
+
+4
+
+6
+
+8
+
+> False Negative Rate (%)
+
+Malicious Auditor Ratio 20% 30% 40% 
+
+Figure 10: Sensitivity of malicious-skill FN Rate to the initial reputation ratio 𝑟 0/𝑟 max under reputation-weighted voting. 
+
+The FN Rate remains near zero when fresh identities receive little initial weight, and then rises as 𝑟 0/𝑟 max increases. At the calibrated value 𝑟 0/𝑟 max = 0.10 , the malicious FN Rate is only 0.18% with 30% malicious auditors and 0.84% even when the malicious auditor ratio increases to 40%. In contrast, larger initial reputations substantially weaken this margin: at 𝑟 0/𝑟 max = 0.30 , the FN Rate reaches 1.58% for 30% malicious auditors and 4.95% for 40% malicious auditors; at 𝑟 0/𝑟 max = 0.40 , it further rises to 2.79% and 7.89%, respectively. Thus, the interval 𝑟 0/𝑟 max ∈ [ 0.10 , 0.30 ] remains acceptable for the 
+
+Table 7: Sensitivity to the number of audit methods in the DAO Committee. Accuracy, F1-score, FN Rate, and FP Rate are reported as percentages.                                                                             
+
+> Setting Rule Acc. F1 FN Rate FP Rate
+> 𝑁 =4empirical subsets 3-of-4 91.96% ▼5.66% 94.66% ▼3.66% 2.37% ▲0.89% 21.69% ▲17.17%
+> 𝑁 =5empirical subsets 3-of-5 95.78% ▼1.84% 96.95% ▼1.37% 5.02% ▲3.54% 2.30% ▼2.22%
+> 𝑁 =6full committee 4-of-6 97.62% 98.32% 1.48% 4.52%
+> 𝑁 =7average plugin 5-of-7 95.06% ▼2.57% 96.60% ▼1.72% 0.59% ▼0.89% 15.43% ▲10.91%
+> 𝑁 =7strong plugin 5-of-7 98.42% ▲0.80% 98.89% ▲0.57% 0.36% ▼1.12% 4.52% –
+
+▼: decrease; ▲: increase, relative to the 𝑁 = 6 full committee. 
+
+30% malicious-auditor reference setting, but the lower end of the interval provides a substantially larger safety margin under stronger Sybil pressure. This supports the conservative choice 𝑟 0/𝑟 max = 0.10 
+
+in §4.3. 
+
+## A.2 Number of Audit Methods 
+
+We next vary the number of audit methods available to the DAO Committee. This experiment asks how many independent audit signals are needed before the committee reaches a stable operating point. We evaluate committees with 𝑁 = 4, 5, 6, 7 audit methods. Because the current implementation contains six empirical audit methods, the 𝑁 = 4 and 𝑁 = 5 cases enumerate all subsets of the six empirical methods and report the mean across subsets; 𝑁 = 6
+
+corresponds to the full empirical committee. The 𝑁 = 7 cases are extrapolations that add one modeled future method on top of the six empirical methods. The “average plugin” models a future method whose per-dataset safe-vote rate matches the average behavior of existing methods, while the “strong plugin” models a future method with behavior similar to the best existing audit method. These two variants separate the effect of adding one more audit method from the quality of the added method. To keep the decision rule consistent with the main evaluation, a committee with 𝑁 methods approves a skill when at least ⌈0.6𝑁 ⌉ methods vote safe . Thus, 
+
+𝑁 = 4, 5, 6, 7 correspond to 3-of-4, 3-of-5, 4-of-6, and 5-of-7 voting rules, respectively. The results show that adding an audit method is beneficial only when the new method provides high-quality and complementary ev-idence. Four methods are not sufficient as a robust default: the aver-age FP Rate remains high (21.69%), indicating frequent benign-skill rejections when the committee has limited independent evidence. Moving to five methods reduces the FP rate to 2.30%, but increases the FN Rate to 5.02%, indicating a weaker safety margin against malicious skills. The six-method committee provides the best empir-ically supported trade-off, achieving the highest measured accuracy and F1-score among real configurations while keeping FN Rate and FP Rate low. A modeled seventh method can improve safety-oriented metrics when it is strong, but an average-quality plugin increases the FP Rate and reduces overall performance. Therefore, 
+
+SIGIL uses the six-method committee as the default deployment setting and admits additional audit methods only when validation shows that they improve coverage without substantially increasing benign-skill rejection. Sealing the Audit–Runtime Gap for LLM Skills 
+
+## A.3 Slash Coefficient 
+
+We finally study the slash coefficient 𝛾 in Eq. 9. This parameter controls the monetary penalty applied to an auditor whose vote diverges from the final committee consensus. The value must be large enough to make low-quality or bribed voting unattractive, but not so large that honest auditors avoid difficult cases because occasional mistakes create excessive downside risk. To characterize this trade-off, we sweep 𝛾 ∈ [ 0.25 , 4.00 ] and simulate auditors with per-round correctness probabilities from 55% to 100%. Each setting runs 600 audit rounds with 𝑅 base = 0.56 TC, an initial balance of 200 TC, 𝑟 0 = 100 , 𝑟 max = 1000 , 𝛿 + = +15 , 𝛿 − = −30 , and reputation decay 𝛼 = 0.995 . Figure 11 reports the final payoff, measured as the final TC balance minus the initial balance. 0.5  
+
+> 1
+> 1.5
+> 2
+> 2.5
+> 3
+> 3.5
+> 4
+> Slash Coefficient γ
+> 55%
+> 60%
+> 65%
+> 70%
+> 80%
+> 90%
+> 95%
+> 100%
+> Auditor Accuracy
+> -200
+> 0
+> 200
+> Final Payoff (TC)
+
+Figure 11: Sensitivity of auditor payoff to the slash coefficient 
+
+𝛾 . The color scale reports final payoff after 600 audit rounds for auditors with different correctness probabilities. 
+
+The sweep identifies a narrow useful range for 𝛾 . Small slash co-efficients provide weak deterrence: when 𝛾 = 1.5, auditors with only 65% accuracy can still remain profitable, making the system more tolerant of unreliable or strategically biased voting. In contrast, very large coefficients become punitive for useful but imperfect auditors; for example, when 𝛾 = 4.0, an 80%-accuracy auditor loses 64.71 TC over 600 rounds. The default 𝛾 = 2 provides the best balance. It makes low-quality auditors with 65%–70% accuracy unprofitable from cold start while still allowing higher-quality auditors to earn positive long-run returns. Thus, 𝛾 = 2 is large enough to discour-age low-quality or bribed voting while preserving participation incentives for accurate auditors. In practice, 𝛾 ∈ [ 2, 3] is a rea-sonable operating range: smaller values preserve participation in ambiguous cases, whereas larger values impose stricter penalties on inaccurate or strategically biased auditors.

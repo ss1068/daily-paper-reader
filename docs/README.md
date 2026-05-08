@@ -6,53 +6,61 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-07
-- 运行时间：2026-05-07 20:23:38 UTC
+- 最新运行日期：2026-05-08
+- 运行时间：2026-05-08 20:28:18 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：6
-- 速读区：4
+- 本次总论文数：13
+- 精读区：7
+- 速读区：6
 
 ### 今日简报（AI）
-- 今日共生成 10 篇推荐（精读 6 篇，速读 4 篇）
-- 精读：《SoK: Robustness in Large Language Models against Jailbreak Attacks》（10.0/10）, 《You Snooze, You Lose: Automatic Safety Alignment Restoration through Neural Weight Translation》（9.0/10）
-- 速读：《Sparse Tokens Suffice: Jailbreaking Audio Language Models via Token-Aware Gradient Optimization》（8.0/10）, 《From Prompt to Physical Actuation: Holistic Threat Modeling of LLM-Enabled Robotic Systems》（7.0/10）, 《Hybrid Inspection and Task-Based Access Control in Zero-Trust Agentic AI》（7.0/10）
-- 这些结果覆盖了当下较热的方向，建议先看精读区论文的关键问题与方法。
-- 详情：[/202605/07/README](/202605/07/README)
+今日精选 13 篇前沿论文，深度剖析大模型对抗训练与多轮对话安全防御。
+重点关注信息论指导下的 LLM 对抗训练，以及针对多轮对话中隐藏恶意意图的实时防御策略。
+建议优先研读两篇满分论文，掌握从底层理论到多轮交互场景的最新安全加固方案。
+- 详情：[/202605/08/README](/202605/08/README)
 
 ### 精读区论文标签
-1. [SoK: Robustness in Large Language Models against Jailbreak Attacks](/202605/07/2605.05058v1-sok-robustness-in-large-language-models-against-jailbreak-attacks)  
+1. [Information Theoretic Adversarial Training of Large Language Models](/202605/08/2605.05415v1-information-theoretic-adversarial-training-of-large-language-models)  
    标签：评分：10.0/10、query:jb-def
-   evidence：越狱攻击与防御的系统分类与评估
-2. [You Snooze, You Lose: Automatic Safety Alignment Restoration through Neural Weight Translation](/202605/07/2605.04992v1-you-snooze-you-lose-automatic-safety-alignment-restoration-through-neural-weight-translation)  
+   evidence：提升大模型鲁棒性的对抗训练框架
+2. [One Turn Too Late: Response-Aware Defense Against Hidden Malicious Intent in Multi-Turn Dialogue](/202605/08/2605.05630v1-one-turn-too-late-response-aware-defense-against-hidden-malicious-intent-in-multi-turn-dialogue)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：针对多轮对话中隐藏恶意意图的防御
+3. [SafeHarbor: Hierarchical Memory-Augmented Guardrail for LLM Agent Safety](/202605/08/2605.05704v1-safeharbor-hierarchical-memory-augmented-guardrail-for-llm-agent-safety)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：用于LLM代理安全的分层内存增强护栏
+4. [AgentTrust: Runtime Safety Evaluation and Interception for AI Agent Tool Use](/202605/08/2605.04785v1-agenttrust-runtime-safety-evaluation-and-interception-for-ai-agent-tool-use)  
    标签：评分：9.0/10、query:jb-def
-   evidence：在集成适配器后恢复大语言模型的安全对齐和护栏
-3. [Redefining AI Red Teaming in the Agentic Era: From Weeks to Hours](/202605/07/2605.04019v1-redefining-ai-red-teaming-in-the-agentic-era-from-weeks-to-hours)  
-   标签：评分：8.0/10、query:llm
-   evidence：用于探测安全和安全性漏洞的AI红队代理
-4. [Misrouter: Exploiting Routing Mechanisms for Input-Only Attacks on Mixture-of-Experts LLMs](/202605/07/2605.04446v1-misrouter-exploiting-routing-mechanisms-for-input-only-attacks-on-mixture-of-experts-llms)  
-   标签：评分：8.0/10、query:llm
-   evidence：利用路由机制绕过MoE架构LLM的安全对齐
-5. [From Parameter Dynamics to Risk Scoring : Quantifying Sample-Level Safety Degradation in LLM Fine-tuning](/202605/07/2605.04572v1-from-parameter-dynamics-to-risk-scoring--quantifying-sample-level-safety-degradation-in-llm-fine-tuning)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：量化LLM微调过程中的安全性退化
-6. [On the Hardness of Junking LLMs](/202605/07/2605.05116v1-on-the-hardness-of-junking-llms)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：大模型对越狱攻击和自然后门的脆弱性
+   evidence：AI智能体的运行时安全评估与拦截
+5. [GLiNER Guard: Unified Encoder Family for Production LLM Safety and Privacy](/202605/08/2605.05277v1-gliner-guard-unified-encoder-family-for-production-llm-safety-and-privacy)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：用于大模型安全审核的统一编码器
+6. [XL-SafetyBench: A Country-Grounded Cross-Cultural Benchmark for LLM Safety and Cultural Sensitivity](/202605/08/2605.05662v1-xl-safetybench-a-country-grounded-cross-cultural-benchmark-for-llm-safety-and-cultural-sensitivity)  
+   标签：评分：9.0/10、query:llm
+   evidence：LLM安全和越狱提示词的跨文化基准测试
+7. [Safety Anchor: Defending Harmful Fine-tuning via Geometric Bottlenecks](/202605/08/2605.05995v1-safety-anchor-defending-harmful-fine-tuning-via-geometric-bottlenecks)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：通过几何瓶颈防御有害微调
 
 ### 速读区论文标签
-1. [Sparse Tokens Suffice: Jailbreaking Audio Language Models via Token-Aware Gradient Optimization](/202605/07/2605.04700v1-sparse-tokens-suffice-jailbreaking-audio-language-models-via-token-aware-gradient-optimization)  
+1. [SecureMCP: A Policy-Enforced LLM Data Access Framework for AIoT Systems via Model Context Protocol](/202605/08/2605.05260v1-securemcp-a-policy-enforced-llm-data-access-framework-for-aiot-systems-via-model-context-protocol)  
    标签：评分：8.0/10、query:llm
-   evidence：通过梯度优化对音频语言模型进行越狱攻击
-2. [From Prompt to Physical Actuation: Holistic Threat Modeling of LLM-Enabled Robotic Systems](/202605/07/2604.27267v1-from-prompt-to-physical-actuation-holistic-threat-modeling-of-llm-enabled-robotic-systems)  
+   evidence：AIoT系统中针对提示词注入的防御
+2. [Conceal, Reconstruct, Jailbreak: Exploiting the Reconstruction-Concealment Tradeoff in MLLMs](/202605/08/2605.05709v1-conceal-reconstruct-jailbreak-exploiting-the-reconstruction-concealment-tradeoff-in-mllms)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：针对多模态大模型的意图混淆越狱攻击
+3. [Adversarial Update-Based Federated Unlearning for Poisoned Model Recovery](/202605/08/2605.02110v1-adversarial-update-based-federated-unlearning-for-poisoned-model-recovery)  
    标签：评分：7.0/10、query:llm
-   evidence：机器人系统中LLM安全与对抗攻击的威胁建模
-3. [Hybrid Inspection and Task-Based Access Control in Zero-Trust Agentic AI](/202605/07/2605.02682v1-hybrid-inspection-and-task-based-access-control-in-zero-trust-agentic-ai)  
+   evidence：联邦学习中的中毒模型恢复
+4. [MEMSAD: Gradient-Coupled Anomaly Detection for Memory Poisoning in Retrieval-Augmented Agents](/202605/08/2605.03482v2-memsad-gradient-coupled-anomaly-detection-for-memory-poisoning-in-retrieval-augmented-agents)  
    标签：评分：7.0/10、query:llm
-   evidence：智能体AI中的安全风险与访问控制
-4. [The Infinite Mutation Engine? Measuring Polymorphism in LLM-Generated Offensive Code](/202605/07/2605.03619v1-the-infinite-mutation-engine-measuring-polymorphism-in-llm-generated-offensive-code)  
-   标签：评分：6.0/10、query:llm
-   evidence：衡量LLM生成的攻击性代码的多态性
+   evidence：防御大模型智能体的记忆投毒攻击
+5. [Sealing the Audit-Runtime Gap for LLM Skills](/202605/08/2605.05274v1-sealing-the-audit-runtime-gap-for-llm-skills)  
+   标签：评分：7.0/10、query:llm
+   evidence：防御大模型技能中的注入和篡改
+6. [Beyond Accuracy: Policy Invariance as a Reliability Test for LLM Safety Judges](/202605/08/2605.06161v1-beyond-accuracy-policy-invariance-as-a-reliability-test-for-llm-safety-judges)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：大模型安全评判器的可靠性测试
 
 
 <div class="dpr-home-promo-card">
