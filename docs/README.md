@@ -6,58 +6,74 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-11
-- 运行时间：2026-05-11 20:20:21 UTC
+- 最新运行日期：2026-05-12
+- 运行时间：2026-05-12 21:05:32 UTC
 - 运行状态：成功
-- 本次总论文数：12
-- 精读区：6
-- 速读区：6
+- 本次总论文数：18
+- 精读区：7
+- 速读区：11
 
 ### 今日简报（AI）
-今日深度研读 12 篇安全领域论文，聚焦多智能体防御与大模型微调安全瓶颈。
-满分成果揭示了前瞻性引导防御及几何瓶颈技术，能有效阻断系统感染并抵御恶意微调。
-建议开发者警惕 RAG 隐私泄露与工具调用攻击，从底层架构加固 AI 应用的安全性。
-- 详情：[/202605/11/README](/202605/11/README)
+今日深度研读 18 篇 AI 安全前沿，重点攻克大模型多轮越狱防御与推理模型安全内
+- 详情：[/202605/12/README](/202605/12/README)
 
 ### 精读区论文标签
-1. [Catching the Infection Before It Spreads: Foresight-Guided Defense in Multi-Agent Systems](/202605/11/2605.01758v2-catching-the-infection-before-it-spreads-foresight-guided-defense-in-multi-agent-systems)  
+1. [Mitigating Many-shot Jailbreak Attacks with One Single Demonstration](/202605/12/2605.08277v1-mitigating-many-shot-jailbreak-attacks-with-one-single-demonstration)  
    标签：评分：10.0/10、query:jb-def
-   evidence：多智能体系统中的传染性越狱防御
-2. [Safety Anchor: Defending Harmful Fine-tuning via Geometric Bottlenecks](/202605/11/2605.05995v2-safety-anchor-defending-harmful-fine-tuning-via-geometric-bottlenecks)  
+   evidence：缓解多样本越狱攻击
+2. [Internalizing Safety Understanding in Large Reasoning Models via Verification](/202605/12/2605.08930v1-internalizing-safety-understanding-in-large-reasoning-models-via-verification)  
    标签：评分：10.0/10、query:jb-def
-   evidence：通过正则化防御有害微调
-3. [Multilingual Safety Alignment via Self-Distillation](/202605/11/2605.02971v2-multilingual-safety-alignment-via-self-distillation)  
+   evidence：通过验证训练内化安全理解
+3. [Guaranteed Jailbreaking Defense via Disrupt-and-Rectify Smoothing](/202605/12/2605.10582v1-guaranteed-jailbreaking-defense-via-disrupt-and-rectify-smoothing)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：通过平滑处理提供保证的大模型越狱防御方法
+4. [Re-Triggering Safeguards within LLMs for Jailbreak Detection](/202605/12/2605.10611v1-re-triggering-safeguards-within-llms-for-jailbreak-detection)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：防御攻击的越狱检测方法
+5. [Sparse Autoencoders as Plug-and-Play Firewalls for Adversarial Attack Detection in VLMs](/202605/12/2605.07447v1-sparse-autoencoders-as-plug-and-play-firewalls-for-adversarial-attack-detection-in-vlms)  
    标签：评分：9.0/10、query:jb-def
-   evidence：多语言安全对齐与越狱漏洞
-4. [A Systematic Investigation of The RL-Jailbreaker in LLMs](/202605/11/2605.07032v1-a-systematic-investigation-of-the-rl-jailbreaker-in-llms)  
-   标签：评分：9.0/10、query:llm
-   evidence：对基于强化学习的越狱攻击进行系统性研究
-5. [Hard to Read, Easy to Jailbreak: How Visual Degradation Bypasses MLLM Safety Alignment](/202605/11/2605.07250v1-hard-to-read-easy-to-jailbreak-how-visual-degradation-bypasses-mllm-safety-alignment)  
+   evidence：稀疏自编码器作为攻击检测防火墙
+6. [Defense effectiveness across architectural layers: a mechanistic evaluation of persistent memory attacks on stateful LLM agents](/202605/12/2605.08442v1-defense-effectiveness-across-architectural-layers-a-mechanistic-evaluation-of-persistent-memory-attacks-on-stateful-llm-agents)  
    标签：评分：9.0/10、query:jb-def
-   evidence：视觉退化绕过多模态大模型安全对齐
-6. [GPO-V: Jailbreak Diffusion Vision Language Model by Global Probability Optimization](/202605/11/2605.07399v1-gpo-v-jailbreak-diffusion-vision-language-model-by-global-probability-optimization)  
+   evidence：针对持久内存攻击的防御有效性评估
+7. [Why Do Aligned LLMs Remain Jailbreakable: Refusal-Escape Directions, Operator-Level Sources, and Safety-Utility Trade-off](/202605/12/2605.08878v1-why-do-aligned-llms-remain-jailbreakable-refusal-escape-directions-operator-level-sources-and-safety-utility-trade-off)  
    标签：评分：9.0/10、query:llm
-   evidence：针对视觉语言模型的越狱攻击
+   evidence：对已对齐LLM仍可被越狱的机理研究
 
 ### 速读区论文标签
-1. [OrchJail: Jailbreaking Tool-Calling Text-to-Image Agents by Orchestration-Guided Fuzzing](/202605/11/2605.07414v1-orchjail-jailbreaking-tool-calling-text-to-image-agents-by-orchestration-guided-fuzzing)  
+1. [When Routine Chats Turn Toxic: Unintended Long-Term State Poisoning in Personalized Agents](/202605/12/2605.06731v1-when-routine-chats-turn-toxic-unintended-long-term-state-poisoning-in-personalized-agents)  
    标签：评分：8.0/10、query:llm
-   evidence：针对大语言模型及工具调用智能体的越狱攻击
-2. [LeakDojo: Decoding the Leakage Threats of RAG Systems](/202605/11/2605.05818v1-leakdojo-decoding-the-leakage-threats-of-rag-systems)  
+   evidence：个性化LLM代理中的长期状态投毒
+2. [GPO-V: Jailbreak Diffusion Vision Language Model by Global Probability Optimization](/202605/12/2605.07399v2-gpo-v-jailbreak-diffusion-vision-language-model-by-global-probability-optimization)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：通过全局概率优化对扩散视觉语言模型进行越狱
+3. [Not All Turns Matter: Credit Assignment for Multi-Turn Jailbreaking](/202605/12/2605.08778v1-not-all-turns-matter-credit-assignment-for-multi-turn-jailbreaking)  
+   标签：评分：8.0/10、query:llm
+   evidence：多轮越狱攻击与信用分配
+4. [The Art of the Jailbreak: Formulating Jailbreak Attacks for LLM Security Beyond Binary Scoring](/202605/12/2605.09225v1-the-art-of-the-jailbreak-formulating-jailbreak-attacks-for-llm-security-beyond-binary-scoring)  
+   标签：评分：8.0/10、query:llm
+   evidence：为大语言模型安全制定越狱攻击
+5. [Metis: Learning to Jailbreak LLMs via Self-Evolving Metacognitive Policy Optimization](/202605/12/2605.10067v1-metis-learning-to-jailbreak-llms-via-self-evolving-metacognitive-policy-optimization)  
+   标签：评分：8.0/10、query:llm
+   evidence：通过策略优化学习越狱大语言模型
+6. [Break the Brake, Not the Wheel: Untargeted Jailbreak via Entropy Maximization](/202605/12/2605.10764v1-break-the-brake-not-the-wheel-untargeted-jailbreak-via-entropy-maximization)  
+   标签：评分：8.0/10、query:llm
+   evidence：针对视觉语言模型的无特定目标越狱攻击
+7. [Seed Hijacking of LLM Sampling and Quantum Random Number Defense](/202605/12/2605.08313v1-seed-hijacking-of-llm-sampling-and-quantum-random-number-defense)  
    标签：评分：7.0/10、query:llm
-   evidence：RAG系统中的对抗性指令与泄露威胁
-3. [Pop Quiz Attack: Black-box Membership Inference Attacks Against Large Language Models](/202605/11/2605.06423v1-pop-quiz-attack-black-box-membership-inference-attacks-against-large-language-models)  
+   evidence：供应链攻击面与量子随机数防御
+8. [Single-Configuration Attack Success Rate Is Not Enough: Jailbreak Evaluations Should Report Distributional Attack Success](/202605/12/2605.09070v1-single-configuration-attack-success-rate-is-not-enough-jailbreak-evaluations-should-report-distributional-attack-success)  
    标签：评分：7.0/10、query:llm
-   evidence：隐私与成员推理攻击
-4. [Graph Representation Learning Augmented Model Manipulation on Federated Fine-Tuning of LLMs](/202605/11/2605.07961v1-graph-representation-learning-augmented-model-manipulation-on-federated-fine-tuning-of-llms)  
+   evidence：越狱评估与威胁特征描述
+9. [When Prompts Become Payloads: A Framework for Mitigating SQL Injection Attacks in Large Language Model-Driven Applications](/202605/12/2605.10176v1-when-prompts-become-payloads-a-framework-for-mitigating-sql-injection-attacks-in-large-language-model-driven-applications)  
    标签：评分：7.0/10、query:llm
-   evidence：LLM联邦微调中的安全威胁
-5. [Laundering AI Authority with Adversarial Examples](/202605/11/2605.04261v1-laundering-ai-authority-with-adversarial-examples)  
+   evidence：缓解大模型驱动应用中的SQL注入漏洞
+10. [PRISM: Generation-Time Detection and Mitigation of Secret Leakage in Multi-Agent LLM Pipelines](/202605/12/2605.10614v1-prism-generation-time-detection-and-mitigation-of-secret-leakage-in-multi-agent-llm-pipelines)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：缓解大语言模型流水线中的秘密泄露
+11. [Memory Efficient Full-gradient Attacks (MEFA) Framework for Adversarial Defense Evaluations](/202605/12/2605.06357v1-memory-efficient-full-gradient-attacks-mefa-framework-for-adversarial-defense-evaluations)  
    标签：评分：6.0/10、query:llm
-   evidence：视觉语言模型中影响权威性的对抗样本
-6. [SOCpilot: Verifying Policy Compliance for LLM-Assisted Incident Response](/202605/11/2605.05501v1-socpilot-verifying-policy-compliance-for-llm-assisted-incident-response)  
-   标签：评分：6.0/10、query:jb-def
-   evidence：验证大模型辅助响应的策略合规性
+   evidence：在白盒攻击下评估对抗防御的鲁棒性
 
 
 <div class="dpr-home-promo-card">
