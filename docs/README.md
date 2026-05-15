@@ -6,43 +6,40 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-05-14
-- 运行时间：2026-05-14 20:50:54 UTC
+- 最新运行日期：2026-05-15
+- 运行时间：2026-05-15 20:22:40 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：4
+- 本次总论文数：6
+- 精读区：3
 - 速读区：3
 
 ### 今日简报（AI）
-今日深度研读 7 篇大模型安全前沿论文，重点攻克模型人格对齐与动态攻防演进。
-核心结论指出，无需提及具体伤害即可通过潜人格对齐提升安全性，且外部化的攻防协同是实现终身安全的关键。
-建议关注多身份红队测试及生存分析方法，以更科学地量化并防御 SQL 注入等高频重复的对抗性攻击。
-- 详情：[/202605/14/README](/202605/14/README)
+今日深挖大模型安全护城河，重点攻克防越狱对齐与微调中的对齐保持技术。
+满分佳作 EVA 提出的对齐编辑与 GradShield 的梯度保护是当前防御核心，同时需警惕位置编码等隐蔽后门攻击。
+建议开发者优先研读 EVA 的编辑策略，在追求微调性能的同时同步构建针对新型攻击的防御屏障。
+- 详情：[/202605/15/README](/202605/15/README)
 
 ### 精读区论文标签
-1. [Latent Personality Alignment: Improving Harmlessness Without Mentioning Harms](/202605/14/2605.08496v1-latent-personality-alignment-improving-harmlessness-without-mentioning-harms)  
+1. [EVA: Editing for Versatile Alignment against Jailbreaks](/202605/15/2605.14750v1-eva-editing-for-versatile-alignment-against-jailbreaks)  
    标签：评分：10.0/10、query:jb-def
-   evidence：潜人格对齐用于高效样本防御
-2. [Model-Agnostic Lifelong LLM Safety via Externalized Attack-Defense Co-Evolution](/202605/14/2605.13411v1-model-agnostic-lifelong-llm-safety-via-externalized-attack-defense-co-evolution)  
+   evidence：通过直接模型编辑进行针对越狱的安全对齐
+2. [GradShield: Alignment Preserving Finetuning](/202605/15/2605.14194v1-gradshield-alignment-preserving-finetuning)  
    标签：评分：9.0/10、query:jb-def
-   evidence：外部化攻防协同演化框架
-3. [Metis: Learning to Jailbreak LLMs via Self-Evolving Metacognitive Policy Optimization](/202605/14/2605.10067v2-metis-learning-to-jailbreak-llms-via-self-evolving-metacognitive-policy-optimization)  
+   evidence：在微调期间保护LLM的过滤方法
+3. [The Great Pretender: A Stochasticity Problem in LLM Jailbreak](/202605/15/2605.14418v1-the-great-pretender-a-stochasticity-problem-in-llm-jailbreak)  
    标签：评分：8.0/10、query:llm
-   evidence：通过策略优化学习越狱大语言模型以发现安全漏洞
-4. [Before the Last Token: Diagnosing Final-Token Safety Probe Failures](/202605/14/2605.12726v1-before-the-last-token-diagnosing-final-token-safety-probe-failures)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：诊断针对越狱提示的安全性探测器失效问题
+   evidence：大语言模型越狱创建与评估中的随机性问题
 
 ### 速读区论文标签
-1. [Adversarial SQL Injection Generation with LLM-Based Architectures](/202605/14/2605.11188v1-adversarial-sql-injection-generation-with-llm-based-architectures)  
+1. [Verifiable Model-Free Safety Filters via Reinforcement Learning](/202605/15/2605.05989v1-verifiable-model-free-safety-filters-via-reinforcement-learning)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：通过强化学习实现可验证的安全过滤器
+2. [BadSKP: Backdoor Attacks on Knowledge Graph-Enhanced LLMs with Soft Prompts](/202605/15/2605.11996v1-badskp-backdoor-attacks-on-knowledge-graph-enhanced-llms-with-soft-prompts)  
    标签：评分：7.0/10、query:llm
-   evidence：用于衡量防御能力的对抗性SQL注入生成
-2. [Persona-Conditioned Adversarial Prompting (PCAP): Multi-Identity Red-Teaming for Enhanced Adversarial Prompt Discovery](/202605/14/2605.12565v1-persona-conditioned-adversarial-prompting-pcap-multi-identity-red-teaming-for-enhanced-adversarial-prompt-discovery)  
+   evidence：知识图谱增强型大模型的后门攻击与鲁棒性
+3. [MetaBackdoor: Exploiting Positional Encoding as a Backdoor Attack Surface in LLMs](/202605/15/2605.15172v1-metabackdoor-exploiting-positional-encoding-as-a-backdoor-attack-surface-in-llms)  
    标签：评分：7.0/10、query:llm
-   evidence：多身份红队测试用于发现越狱提示词
-3. [Quantifying LLM Safety Degradation Under Repeated Attacks Using Survival Analysis](/202605/14/2605.12869v1-quantifying-llm-safety-degradation-under-repeated-attacks-using-survival-analysis)  
-   标签：评分：7.0/10、query:llm
-   evidence：使用生存分析量化大语言模型的越狱漏洞
+   evidence：后门攻击作为大模型的安全威胁
 
 
 <div class="dpr-home-promo-card">

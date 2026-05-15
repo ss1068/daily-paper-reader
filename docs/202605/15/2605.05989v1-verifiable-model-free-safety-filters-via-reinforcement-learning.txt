@@ -1,0 +1,498 @@
+Title: Verifiable Model-Free Safety Filters via Reinforcement Learning
+
+URL Source: https://arxiv.org/pdf/2605.05989v1
+
+Published Time: Fri, 08 May 2026 01:10:47 GMT
+
+Number of Pages: 8
+
+Markdown Content:
+# Verifiable Model-Free Safety Filters via Reinforcement Learning 
+
+Bihui Yin ∗ Yiwen Lu ∗ Yuchen Jiang ∗∗ Yilin Mo ∗∗ Department of Automation and BNRist, Tsinghua University (e-mail: yinbh25@mails.tsinghua.edu.cn, luyw20@tsinghua.org.cn, ylmo@tsinghua.edu.cn)  
+
+> ∗∗
+
+Control and Simulation Center, National Key Laboratory of Complex System Control and Intelligent Agent Cooperation, Harbin Institute of Technology (e-mail: yc.jiang@hit.edu.cn) 
+
+Abstract: 
+
+This paper presents a reinforcement learning approach of a model-free safety filter, drawing inspiration from the framework of model-based Predictive Safety Filters (PSFs). Similar to conventional PSFs, our method adopts a Quadratic Programming (QP) formulation by representing the filter as an unrolled QP solver network. However, unlike existing PSFs that derive QP parameters explicitly from system models, we learn these parameters directly through Deep Reinforcement Learning (DRL), thereby eliminating the dependency on accurate system identification. Furthermore, compared to traditional neural network-based methods, this QP structure allows us to furnish a formal certificate for the persistent safety of the learned filter. Numerical results demonstrate that our method outperforms both conventional model-based PSFs and RL-trained Multi-Layer Perceptron (MLP) baselines in terms of safety guarantees, minimal intervention, and per-step computational load. 
+
+Keywords: Safety filter, Reinforcement learning, Quadratic Programming, Safe learning-based control, Control of constrained systems 1. INTRODUCTION The rapid advancement of modern control systems has expanded their applications into numerous domains, in-cluding industrial automation, transportation, and health-care. However, ensuring safety in these systems remains a fundamental challenge (Ames et al., 2017), as inaccurate system models, environmental uncertainties, and aggres-sive control policies can lead to constraint violations that may cause catastrophic failures. Safety filters (Hsu et al., 2023) have emerged as a modular solution to this challenge, modifying unsafe control inputs to ensure persistent constraint satisfaction with minimal intervention. As shown in Fig. 1, the safety filter is placed between the controller and the physical system. Its role is to safeguard the system against the proposed control action ˆ u, which may originate from a controller that is untrusted, aggressive, or whose safety characteristics are unverified. Applying such an input directly could lead to constraint violations. To prevent this, the filter first evaluates the safety of proposed control action ˆ u based on current state x. When ˆ u is safe, the filter passes it through unmodified ( u = ˆ u); otherwise, it computes a minimally modified safe alternative u that satisfies all constraints. With the safety filter, we turn the constrained dynamical system into an unconstrained safe system (Wabersich and Zeilinger, 2021). Several works have developed model-based safety filters that require accurate knowledge of system dynamics. Safe System   
+
+> Controller Safety Filter System
+
+ˆu u
+
+> x
+> x
+
+Fig. 1. Safety filter integrated in control architecture, situated between an open-loop/closed-loop controller and the real system to enforce safety. It validates the proposed input ˆ u and computes a minimally invasive correction u to guarantee constraint satisfaction. 
+
+Hamilton-Jacobi (HJ) reachability analysis provide formal safety guarantees by computing reachable sets through partial differential equations (Margellos and Lygeros, 2011). While effective for low-dimensional systems, HJ methods exhibit exponential computational complexity in high dimensions (Herbert et al., 2021), which persists even with GPU acceleration (Long et al., 2024). Control Barrier Functions (CBFs) (Wieland and Allg¨ ower, 2007; So et al., 2024; Mestres et al., 2025) and their extensions (Agrawal and Sreenath, 2017; Cosner et al., 2022) convert safety constraints into forward invariance problems, avoiding ex-plicit trajectory computation. However, constructing valid CBFs requires significant manual effort and restrictive assumptions. Another popular model-based alternative is Predictive Safety Filters (PSFs) , which formulate safety enforcement 
+
+> arXiv:2605.05989v1 [math.OC] 7 May 2026
+
+as real-time optimization problems similar to Model Pre-dictive Control (MPC) (Wabersich and Zeilinger, 2018, 2021). Though effective, PSFs require solving optimization problems at each time step through iterative numerical methods, resulting in substantial and unpredictable com-putational load that hinder real-time deployment (Viljoen et al., 2024). While these model-based approaches can provide formal safety guarantees, they face practical lim-itations including dependency on accurate system models and computational complexity. In contrast, data-driven safety filters avoid reliance on explicit system models by learning from data (Choi et al., 2025; Tang et al., 2024). Among these, some efforts use Deep Reinforcement Learning (DRL) to approximate Hamilton-Jacobi-Bellman solutions (Bansal and Tomlin, 2021) or learn safety certificates (Lavanakul et al., 2024). Other lines of work focus on learning Control Barrier Functions (CBFs), either from demonstrations (Robey et al., 2020) or sampled state data (Dawson et al., 2022). Meanwhile, shielding methods combine learned controllers with model-based monitors (Bastani, 2021), but inherit the computational cost of online verification. Although effective in many settings, these data-driven methods typ-ically entail trade-offs between formal safety-verification capability and computational efficiency (Hsu et al., 2023). To integrate the complementary strengths of model-based structure and data-driven adaptation, we propose a QP-structured safety filter and employ DRL to learn its parameters. Inspired by a recent paradigm that frames MPC controllers as learnable QP problems (Lu et al., 2023), we parameterize the PSF as an unrolled QP solver network. Crucially, instead of deriving the QP parameters from an explicit system model, we treat them as learnable parameters and optimize them directly via DRL. This innovative approach allows for end-to-end training of a filter that is computationally efficient and model-free, while preserving the interpretable and verifiable structure inherent to conventional PSFs. 
+
+Contributions: This work presents an approach of con-structing a model-free safety filter by parameterizing the filter as an unrolled QP solver network with parameters learned via DRL. This approach eliminates the model dependency and computational cost while preserving an interpretable QP structure that enables formal verifica-tion. Specifically, we provide a safety certificate for the learned filter under linear system dynamics. Furthermore, extensive benchmark experiments are conducted, which confirmed the superior performance and computational efficiency of our method compared to both conventional PSFs and DRL-trained Multi-Layer Perceptron (MLP) baselines. The rest of the paper is organized as follows: Section 2 formulates the PSF problem for nominal linear systems and establishes its QP representation. Section 3 details our learning-based approach, including the unrolled QP architecture, the reinforcement learning framework for pa-rameter optimization, and the design of reward function tailored for safety filtering. Section 4 provides theoretical analysis, establishing a formal certificate for the persistent safety of the learned filter. Section 5 reports experimental results on stabilization and tracking tasks across bench-mark systems, with comparative analysis against baseline methods. Conclusions and future work are discussed in the final section. 
+
+Notations: Rn denotes the n-dimensional Euclidean space. 
+
+Sn 
+
+> +
+
+and Sn 
+
+> ++
+
+denote the sets of symmetric positive semi-definite and definite n×n matrices, respectively. Subscripts indicate time indices (e.g., xk denotes system state at step k). The Kronecker product is denoted by ⊗, and diag( A1, . . . , A n) represents a block diagonal matrix. The set of integers in the interval [ a, b ] ⊂ R is I[a,b ].2. PROBLEM FORMULATION AND PRELIMINARIES This section formulates the conventional Predictive Safety Filter (PSF) problem and establishes its quadratic pro-gramming (QP) representation. We begin by presenting the optimization-based formulation of PSF for nominal linear systems, then detail the transformation of this con-strained optimization problem into a standard QP form. This formulation lays the foundation for the learning-based approach developed in the subsequent section. 
+
+2.1 PSF for Nominal Linear Systems 
+
+The Predictive Safety Filter (PSF) acts as a supervisory module that modifies an arbitrary (and potentially unsafe) reference control input ˆ u to ensure system safety. For a discrete-time linear time-invariant (LTI) system, at each time step, given the current state x0 and reference input ˆu, the PSF solves the following optimization problem: min  
+
+> u0: N−1
+
+∥ˆu − u0∥2, (1a) s.t. xk+1 = Ax k + Bu k, ∀k ∈ I [0 ,N −1] , (1b) 
+
+SX xk+1 ≥ dX , ∀k ∈ I [0 ,N −1] , (1c) 
+
+SU uk ≥ dU , ∀k ∈ I [0 ,N −1] , (1d) 
+
+xN ∈ X f , (1e) where N is the prediction horizon. The components of this optimization problem are defined as follows: - Objective function (1a): Minimizes the squared deviation between the reference input ˆ u and the filtered control u0,ensuring minimal intervention. - System dynamics (1b): Enforces the discrete-time linear time-invariant system dynamics throughout the prediction horizon, where xk ∈ Rnsys is the state vector, uk ∈ Rmsys 
+
+is the control input, and A ∈ Rnsys ×nsys , B ∈ Rnsys ×msys 
+
+are system matrices. - State safe constraints (1c) and Input safe constraints 
+
+(1d): Ensures all future states and control inputs remain within the safe polytopes. SX ∈ RmX ×nsys , dX ∈ RmX ,and SU ∈ RmU ×msys and dU ∈ RmU define the linear inequalities. - Terminal constraint (1e): Requires the final predicted state xN to lie within the terminal safe set Xf , which ensures persistent feasibility and stability guarantees. We assume the terminal set is a polyhedron Xf = {x ∈ Rnsys |
+
+F x ≥ g}, where F ∈ RmF ×nsys and g ∈ RmF . This polyhe-dral representation facilitates subsequent transformation and computation within the optimization framework. The first control input u∗ 
+
+> 0
+
+of the optimal solution will be applied to the system. This formulation ensures safety by enforcing state and input constraints over the prediction horizon while minimally modifying ˆ u, with the terminal set constraint providing long-term safety guarantees. 
+
+2.2 Standard QP Representation 
+
+We can transform the original PSF problem (1) into a standard QP formulation: min  
+
+> y
+> 12
+
+y⊤P y + q⊤y, (2a) s.t. Hy + b ≥ 0, (2b) where y = [ u⊤ 
+
+> 0
+
+, u⊤ 
+
+> 1
+
+, . . . , u⊤ 
+
+> N−1
+
+]⊤ ∈ Rnqp , P ∈ Snqp  
+
+> +
+
+,
+
+q ∈ Rnqp , H ∈ Rmqp ×nqp , b ∈ Rmqp , and the problem dimensions are given by: 
+
+nqp = N m sys , (3a) 
+
+mqp = N (mX + mU ) + mF , (3b) where mX is the number of rows in SX , mU is the number of rows in SU , and mF is the number of terminal constraints. A common construction produces: 
+
+P = diag  Imsys , εI (N −1) msys 
+
+, (4) 
+
+q = −E⊤ 
+
+> 1
+
+ˆu, (5) where E1 = [ Imsys 0] selects u0, and we add a small ridge 
+
+ε > 0 in (4) for numerical stability (this makes P ∈ S++ ). The inequality constraints encode state and input box constraints over the horizon and the terminal constraint. According to system models and given safety constraints, the QP parameters ( H, b ) can be constructed as: 
+
+H =
+
+"(IN ⊗ SX )B
+
+(IN ⊗ SU )
+
+F BN
+
+#
+
+, (6a) 
+
+b =
+
+"−1N ⊗ dX + ( IN ⊗ SX )Ax0
+
+−1N ⊗ dU
+
+g − F AN x0
+
+#
+
+, (6b) with the auxiliary matrices and vectors: 
+
+A =
+
+
+
+AA2
+
+...
+
+AN
+
+ , B =
+
+
+
+BAB B
+
+... . . . . . .
+
+AN −1B · · · AB B 
+
+ ,
+
+AN = last nsys rows of A, BN = last nsys rows of B.
+
+(7) Although the standard QP representation enables the use of off-the-shelf solvers, it inherently relies on accurate sys-tem models ( A, B ) and incurs substantial computational overhead due to iterative online optimization. These lim-itations motivate the learning-based approach developed in the next section, where we parameterize the QP solver as a neural network and learn its parameters through reinforcement learning. 3. LEARNING MODEL-FREE SAFETY FILTERS This section details the proposed learning-based approach for our model-free safety filters. First, we introduce the safety filter network architecture and its learnable pa-rameters. Then, the reinforcement learning framework for training the filter policy will be presented. 
+
+3.1 Network Architecture and Learnable Parameters 
+
+According to 2.2, for the QP parameters ( P, q, H, b ), P and 
+
+q are known under the given control input ˆ u, whereas H
+
+and b rely heavily on system models. Instead of explicitly constructing H and b from system dynamics, which may be inaccurate or unavailable, we treat them as learnable pa-rameters within our network architecture. Especially, (6a) reveals that matrix H remains invariant across different initial states and reference control inputs ( x0, ˆu), i.e., only a single matrix H need to be learned for a specific system. For vector b, (6b) motivates its parameterization as a state-dependent affine transformation :
+
+b(x0; Wb, b b) = Wbx0 + bb, (8) where Wb and bb are learnable matrix and vector of proper dimensions. Therefore, the original QP problem (2) is transformed into a parameterized form: min  
+
+> y
+> 12
+
+y⊤P y + q⊤y, (9a) s.t. Hy + Wbx0 + bb ≥ 0, (9b) where y ∈ Rnqp is the optimization variable, P ∈ Snqp 
+
+> +
+
+and q ∈ Rnqp are known constants from (4) and (5), while H ∈ Rmqp ×nqp , Wb ∈ Rmqp ×nsys and bb ∈ Rmqp 
+
+are learnable parameters. To compute solutions and backpropagate gradients for the learned QP problem (9), we adopt the unrolling technique (Monga et al., 2021) by executing a fixed number( niter ) of QP solving iterations and differentiates through the entire computational path, treating the solver as a recurrent computational graph. This avoids the need for implicit differentiation, which requires solving to optimality before differentiation. Specifically, we employ the Primal-Dual Hybrid Gradient (PDHG) algorithm (Chambolle and Pock, 2011) as the underlying QP solver, whose iterations can be expressed as: 
+
+zi+1 = Π Rmqp +
+
+ (I − 2αF )zi + α(I − 2F )λi − 2αμ  ,λi+1 = F  zi + λi + μ, (10) where z = Hy + b is the primal variable, λ is the dual variable, α > 0 is the step size, and F = ( I +HP −1H⊤)−1,
+
+μ = F (HP −1q − b) are parameters derived from the QP problem. The core operations of this PDHG iterations lies in decomposing each iteration into linear affine operations, whose parameters ( F, μ ) depend on the QP parameters (P, q, H, b ), and metric projections applied to optimization variables which is equivalent to the ReLU activation in neural networks (Lu et al., 2023). In our unrolled QP solver , gradients are computed di-rectly from the intermediate solution after exactly niter 
+
+iterations, maintaining validity even before convergence. Empirically, a small number of iterations (e.g., niter = 10) suffices to achieve satisfactory safety filter performance while significantly reducing the computational burden of unrolling. This efficiency stems from our model-free formu-lation, which enables learning a QP problem that is not only performant but also easy to solve. Fig. 2 illustrates our proposed safety filter network archi-tecture, which replaces the online QP solver with a param-eterized unrolled QP network that mimics QP solving it-erations. Within this structure, the filter policy——which maps initial states x0 and given control input ˆ u to safe control actions u0 is implemented through a fixed-count iterative solver, whose parameters can subsequently be optimized using DRL methodologies. QP solver iterations          
+
+> ˆu
+> x0Wb, b b
+> P
+> q
+> H
+> b
+> Affine
+> ReLU
+> Affine
+> ReLU
+> Affine
+> ReLU
+> Learnable Parameters: H, W b, b b
+> (z0, λ 0)= (0 ,0)
+> u0=yniter
+> [1: msys ]
+> (zniter , λ niter )
+> . . .
+> Repeat niter times
+
+Fig. 2. Proposed safety filter policy architecture, which solves a QP problem in form (9) via an unrolled QP solver network, whose structure mimics niter PDHG iterations to approximate QP solutions. The learnable parameters are H, W b, b b.
+
+3.2 Reinforcement Learning Setup 
+
+The reinforcement learning (RL) framework is defined by five key components: agent, environment, state, action, and reward (Sutton and Barto, 2018). In our context, the 
+
+agent represents the learned safety filter, the environment 
+
+encompasses the system dynamics (excluding the filter) and an arbitrary external controller, the state consists of the system state x and reference control input ˆu,and the action is the filter’s output u0. The reward 
+
+function is designed to guide the agent toward effective safety filtering, balancing safety enforcement and minimal intervention. We employ Proximal Policy Optimization (PPO) (Schul-man et al., 2017) for training, with a reward function structured as: 
+
+rt = rsafety + rdeviation + rmin interv + rsurvival + rtermination 
+
+(11) The components are designed as follows: 
+
+1. Safety Violation Penalty: A fixed penalty −k1 is applied when state or input constraints are violated, regardless of magnitude. The violation indicator ϕviol  
+
+> t
+
+is defined as: 
+
+ϕviol  
+
+> t
+
+=
+
+
+
+1 if ∃i such that ( SX xt)[i] < (dX )[i]
+
+or ∃j such that ( SU ut)[j] < (dU )[j]
+
+0 otherwise (12) Thus, rsafety = −k1ϕviol  
+
+> t
+
+with k1 > 0. 
+
+2. Control Deviation Penalty: To minimize unnecessary intervention, we penalize the squared deviation from the reference input: rdeviation = −k2∥ˆu − u0∥2, where k2 > 0tunes the trade-off between safety and fidelity. 
+
+3. Minimal-Intervention Reward: To encourage zero in-tervention when safe, a positive reward k3 is granted if the control modification is below a threshold δmin > 0: 
+
+rmin interv = k3 · I(∥ˆu − u0∥ < δ min ), where I(·) is the indicator function and k3 > 0. 
+
+4. Auxiliary Rewards: To mitigate reward sparsity is-sues and prevent the agent from prematurely terminating episodes to avoid future penalties “suicide” behaviors), we include two supplementary rewards: - Time-step survival bonus: rsurvival = k4 (awarded at every time step for sustained operation) - Early termination penalty: rtermination = −k5 (applied only when episode terminates due to unbearable constraint violation) This reward structure provides dense learning signals and promotes long-term safety and performance. 4. CERTIFICATE FOR PERSISTENT SAFETY While our proposed safety filter is data-driven and model-free, its underlying QP structure allows for formal verifica-tion of its safety properties post-training. In this section, we provide a formal certificate for the persistent safety of our learned safety filter. Persistent safety ensures that if the system starts in a safe state x0 ∈ X 0, the filter will keep the next state inside the safety bounds at every step. Consequently, it can always produce an action that keeps the system within the prescribed safety constraints at all subsequent steps. Let the safety filter policy be denoted by πθ (x0, ˆu), where 
+
+θ = {H, W b, b b} represents the learned parameters. The policy outputs a control action u0 = y∗
+
+> [1: msys ]
+
+. Throughout this section, we assume that the optimal solution of the learned QP problem is attained, which can be ensured by allowing the QP solver to run sufficient iterations until convergence when deploying. Thus, y∗ is exactly the optimal solution to the QP problem: 
+
+y∗ ∈ arg min 
+
+> y
+
+ 12 y⊤P y + q⊤y | Hy + b(x0) ≥ 0 , (13) with q = −E⊤ 
+
+> 1
+
+ˆu and b(x0) = Wbx0 + bb. Additionally, without loss of generality, we assume the safe set X0 can be expressed as a polyhedral form: X0 = {x | Gx ≤ c}.To verify the persistent safety of proposed safety filter, a sufficient certificate is provided as follows: 
+
+Theorem 1. (Certificate for Persistent Safety). The learned safety filter policy (13) is persistently safe for all initial states x0 within a safe set X0 = {x | Gx ≤ c} and for any given reference control ˆ u, if the optimal value z⋆ of the following nonconvex Quadratically Constrained Quadratic Program (QCQP) is nonnegative: min  
+
+> x0,ˆu,v,y,μ
+
+− v⊤(G(Ax 0 + By [1: msys ]) − c) (14a) s.t. Gx 0 ≤ c, (14b) 
+
+v ≥ 0, 1⊤v = 1 , (14c) 
+
+P y − E⊤ 
+
+> 1
+
+ˆu − H⊤μ = 0 , (14d) 
+
+Hy + Wbx0 + bb ≥ 0, (14e) 
+
+μ ≥ 0, (14f) 
+
+μ⊤(Hy + Wbx0 + bb) = 0 . (14g) 
+
+Proof. The safety filter is persistently safe if, for any initial state x0 ∈ X 0, the resulting next state x1 = Ax 0 +
+
+Bu 0 also remains in the safe set, i.e., x1 ∈ X 0. This requires the condition G(Ax 0 + Bπ θ (x0, ˆu)) ≤ c to hold for all x0
+
+satisfying Gx 0 ≤ c.This universal condition is equivalent to stating that the maximum possible violation is non-positive: max 
+
+> x0:Gx 0≤c
+
+h
+
+max  
+
+> i
+
+(Gi(Ax 0 + Bπ θ (x0, ˆu)) − ci)
+
+i
+
+≤ 0, (15) where Gi and ci are the i-th rows of G and c, respectively. By introducing an auxiliary vector v ≥ 0 with 1⊤v = 1, we can express the inner maximum as a linear program. Leveraging the strong duality of linear programming, the condition becomes: max 
+
+> x0:Gx 0≤c
+
+
+
+max 
+
+> v≥0,1⊤v=1
+
+v⊤(G(Ax 0 + Bπ θ (x0, ˆu)) − c)
+
+
+
+≤ 0.
+
+(16) Combining two maximization and flipping it to a mini-mization, we obtain the equivalent condition that the op-timal value of the following problem must be non-negative: min  
+
+> x0,ˆu,v
+
+−v⊤(G(Ax 0 + Bπ θ (x0, ˆu)) − c) ≥ 0, (17) subject to the constraints in (14b) and (14c). The expression πθ (x0, ˆu) represents the inner-level opti-mization problem from (13). This creates a bilevel opti-mization problem, which is notoriously difficult to solve. The key step is to replace the inner optimization problem with its Karush-Kuhn-Tucker (KKT) conditions, which are necessary and sufficient for optimality for a convex QP. The KKT conditions for the QP in (13) are precisely the constraints (14d)-(14g), where μ is the vector of Lagrange multipliers. By performing this substitution, we transform the bilevel problem into the single-level, albeit nonconvex, QCQP as stated in the theorem. 
+
+Numerical verification via SOS/SDP: The problem (14) is a polynomial (at most quadratic) optimization in the vari-ables ( x0, ˆu, v, y, μ ) with complementarity conditions (14g) producing bilinear terms. Globally solving this nonconvex QCQP is, in general, hard. A practical and certifiable approach is to apply Sum-of-Squares (SOS) programming (Parrilo, 2003) to relax this nonconvex QCQP problem to a Semi-definite Programming (SDP) problem, and solve the SDP problem to obtain a lower bound zSDP ≤ z⋆
+
+(Lasserre, 2001). If the computed lower bound satisfies 
+
+zSDP ≥ 0, then z⋆ ≥ 0 and Theorem 1 yields the certificate, i.e., the learned safety filter is persistently safe for all states within X0 and for any reference control ˆ u.5. NUMERICAL RESULTS This section presents experimental validation of the pro-posed model-free safety filter through simulations across three benchmark systems: double integrator, quadruple tank (Johansson, 2000), and cartpole (Geva and Sitte, 1993). Experiments evaluate performance on both stabi-lization tasks (fixed setpoints) and tracking tasks (time-varying references). Comparative analysis includes: 
+
+• Unfiltered Control : apply reference input ˆ u directly. 
+
+• Baseline PSF : original model-based predictive safety filter (Wabersich and Zeilinger, 2021). 
+
+• RL+MLP : an RL-trained MLP safety filter. 
+
+• RL+LQP (Proposed) : our RL-trained learnable QP safety filter. Experimental setup: the candidate control ˆ u is generated by Linear Quadratic Regulator (LQR) controller with ad-ditive Gaussian noise of different mean values n. Each con-figuration was evaluated over 100 independent episodes. Evaluation metrics include Violation Rate (Vio%) (The percentage of steps violating safety constraints out of the total number of control steps) and Cumulative Deviation 
+
+(Dev = P ∥ˆu − u0∥2). Additionally, all given LQP results is assessed in appropriate configurations: nqp = 4 , m qp =30. And the detailed models and configurations of each system are provided in Appendix A. Table 1 provides a comprehensive comparison of safety filter performance on the cartpole system under varying noise conditions. The evaluation covers both stabilization and tracking tasks. For intuitive demonstration, best is highlighted in bold, while second best is underlined. 
+
+5.1 Stabilization Tasks 
+
+For stabilization tasks, according to the left half of Table 1, when the LQR control noise is absent ( n = 0 .0), the system can operate without filtering and still comply with safety constraints. However, as noise n increases, unfiltered control inputs will result in increasingly severe violations of safety constraints. While after filtering with our proposed RL+LQP method, empirically 100% safety guarantee can be achieved for any given noise level. For example, when the noise level n increased to 8.0, the model-based PSF baseline failed due to the unsolvable error of the OSQP solver, thus losing its filtering ability. Meanwhile, though RL+MLP method has reduced Vio% to some extent, there are still 9.56% of time steps that are unsafe. At this point, only our proposed RL+LQP method did not exhibit any observed violations across all tested conditions. 
+
+5.2 Tracking Tasks 
+
+For tracking tasks, the reference control ˆu is set as a sinusoidal trajectory, whose amplitude is equal to the safety boundary. Consequently, the closer the trajectory is to its peak, the higher the safety risk. The right half of Table 1 compares tracking performance for the cartpole system. Our RL+LQP method consis-tently outperformed baselines in safety-critical scenarios with superior safety guarantees while maintaining lower deviation. Figure 3 illustrates the key capabilities of our proposed safety filter in double integrator system. The state tra-jectories (top) show that the filter successfully maintains all states within the safety boundaries (red dashed lines) across both high-noise ( n = 2, red background) and low-noise ( n = 0, green background) regimes. The control actions (bottom) reveal its intelligent inter-vention strategy: In high-noise regions , the filter intervenes substantially (green vs. red line), particularly as the state x
+
+approaches the constraint limits. Notably, it demonstrates a proactive safety-assurance behavior, initiating corrective actions before violations occur. In low-noise regions , where the reference input is inherently safe, the filter tracks with near-perfect fidelity and minimal intervention, prioritizing control accuracy when safety is not compromised. This behavior, characterized by proactive intervention only when safety is at risk and high-fidelity tracking otherwise, demonstrates that our learned filter effectively balances safety assurance with minimal modification. Table 1. Performance comparison on cartpole system. 1                                                                                                                           
+
+> Stabilization Tasks Tracking Tasks Method n= 0 .0n= 1 .0n= 5 .0n= 8 .0n= 0 .0n= 1 .0n= 5 .0n= 8 .0Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Unfiltered 0.00 -0.00 -78.67 -85.31 -0.00 -0.00 -23.31 -97.33 -Baseline PSF 0.00 6.89 ×10 −50.00 1.90 ×10 −30.00 174.76 fail -0.00 8.13 ×10 −50.00 8.53 ×10 −468.08 693.18 fail -RL+MLP 0.00 1.27 0.00 10.51 7.37 258.41 9.56 406.55 0.00 30.21 0.00 35.81 0.00 1220.42 0.67 2000.97 RL+LQP 0.00 7.46 ×10 −20.00 0.15 0.00 164.10 0.00 402.90 0.00 6.51 ×10 −30.00 3.00 ×10 −20.00 189.25 0.00 767.45 050 100 150 200 250 300
+> Time Step
+> 0.4
+> 0.2
+> 0.0
+> 0.2
+> 0.4
+> State Value
+> Safety Boundary
+> Safety Boundary
+> Noise: 2 0
+> State Trajectory with Safety Filter
+> x
+> ˙x
+> xref
+> High Noise Region
+> Low Noise Region
+> 050 100 150 200 250 300
+> Time Step
+> 0.4
+> 0.2
+> 0.0
+> 0.2
+> 0.4
+> Control Value
+> Control Action Comparison
+> Unfiltered Action
+> Filtered Action
+
+Fig. 3. Performance of the proposed RL+LQP safety filter on a double integrator tracking task under high-noise ( n = 2, red background) and low-noise ( n = 0, green background) regimes. Top: state trajectories remain within the safety bounds (red dashed lines) in both regimes. Bottom: corresponding control actions show increased intervention in high-noise regions and near-perfect tracking in low-noise regions. The experimental results on other systems are similar. Due to space constraints, we only present a subset of the results in the main paper. The complete results, including statistical tables of other systems (double integrator and quadruple tank), and detailed system configurations, are provided in Appendix A. 
+
+Summary of Properties: As shown in the experimental results, in both stabilization and tracking tasks, the pro-posed RL+LQP safety filter demonstrates three key ad-vantages over existing approaches: (1) Enhanced Safety Guarantees : Our approach outper-forms both baselines with great safety performance, achieving empirically 0% violation rate even in chal-lenging high-noise conditions where the conventional model-based PSF fails to find feasible solutions. This comparison arises because conventional solvers, op-erating with a limited prediction horizon, prioritize short-term constraint satisfaction and minimal inter-vention, resulting in myopic behavior that may pro-gressively drive the system into unsalvageable dan-gerous states. (2) Minimal Intervention : When the noise level is low, both our method and the conventional PSF exhibit negligible intervention, while under high noise, our method excels. This also stems from the far-sighted perspective of our learning-based method, which op-timizes the safety filter’s policy over entire episodes rather than a finite horizon, achieving a balance be-tween immediate safety and minimal long-term inter-vention. Moreover, across all tested noise conditions, our approach achieves much lower control deviation than the RL+MLP baseline, demonstrating the effi-cacy of the embedded QP structure. (3) Lower Computational Load : As quantified in Table 2, considering FLOPs (floating point operations per control step), our RL+LQP approach requires sub-stantially fewer online computational resources than alternatives. Table 2. Computational load comparison (FLOPs). 
+
+Method System Double Integrator Cartpole Tank Baseline PSF 1.04 × 10 6 2.17 × 10 6 2.57 × 10 6
+
+RL+MLP 8.45 × 10 4 8.66 × 10 4 8.67 × 10 4
+
+RL+LQP 2.12 × 10 4 5.99 × 10 4 2.15 × 10 4
+
+Such advantages originate from the unrolled QP network’s capability to encode temporal safety constraints in amodel-free manner, enabling a compromise between safety assurance and computational practicality.  
+
+> 1
+
+Entries labeled “fail” denote cases where the OSQP solver returned infeasible. 6. CONCLUSION This paper proposed a model-free predictive safety filter that parameterizes the safety-check QP as an unrolled solver and learns its parameters via reinforcement learning. This method preserves the interpretable QP structure, which enables formal safety verification, while removing reliance on explicit system models. We also provided a sufficient certificate for its persistent safety, bridging the gap between learning-based methods and formal guaran-tees. Experiments on benchmark tasks demonstrate strong empirical safety guarantee and reduced intervention com-pared to baselines, and substantially lower per-step com-putation than conventional model-based PSFs. Future work will focus on extending the safety cer-tificate to handle system uncertainties and practical deployment on real-world platforms. Code is available at https://github.com/bbihui/LQP-PSF. The open-source implementation will facilitate further research in learning-based safety-critical control. Subsequent investigations could incorporate robust control formulations to enhance performance under unmodeled dynamics and extreme op-erating conditions. REFERENCES Agrawal, A. and Sreenath, K. (2017). Discrete control barrier functions for safety-critical control of discrete systems with application to bipedal robot navigation. doi:10.15607/RSS.2017.XIII.073. Ames, A.D., Xu, X., Grizzle, J.W., and Tabuada, P. (2017). Control barrier function based quadratic pro-grams for safety critical systems. IEEE Transactions on Automatic Control , 62(8), 3861–3876. Bansal, S. and Tomlin, C.J. (2021). Deepreach: A deep learning approach to high-dimensional reachability. In 
+
+2021 IEEE International Conference on Robotics and Automation (ICRA) , 1817–1824. Bastani, O. (2021). Safe reinforcement learning with nonlinear dynamics via model predictive shielding. In 
+
+2021 American Control Conference (ACC) , 3488–3494. Borrelli, F., Bemporad, A., and Morari, M. (2017). Predic-tive Control for Linear and Hybrid Systems . Cambridge University Press. Chambolle, A. and Pock, T. (2011). A first-order primal-dual algorithm for convex problems with applications to imaging. Journal of Mathematical Imaging and Vision ,40(1), 120–145. doi:10.1007/s10851-010-0251-1. Choi, J.J., Casta˜ neda, F., Jung, W., Zhang, B., Tom-lin, C.J., and Sreenath, K. (2025). Constraint-guided online data selection for scalable data-driven safety filters in uncertain robotic systems. IEEE Transactions on Robotics , 41, 3779–3798. doi: 10.1109/TRO.2025.3577022. Cosner, R.K., Rodriguez, I.D.J., Molnar, T.G., Ubellacker, W., Yue, Y., Ames, A.D., and Bouman, K.L. (2022). Self-supervised online learning for safety-critical control using stereo vision. In 2022 International Conference on Robotics and Automation (ICRA) , 11487–11493. Dawson, C., Qin, Z., Gao, S., and Fan, C. (2022). Safe nonlinear control using robust neural lyapunov-barrier functions. In A. Faust, D. Hsu, and G. Neumann (eds.), 
+
+Proceedings of the 5th Conference on Robot Learning ,volume 164 of Proceedings of Machine Learning Re-search , 1724–1735. PMLR. Geva, S. and Sitte, J. (1993). A cartpole experiment benchmark for trainable controllers. IEEE Control Systems Magazine , 13(5), 40–51. doi:10.1109/37.236324. Herbert, S., Choi, J.J., Sanjeev, S., Gibson, M., Sreenath, K., and Tomlin, C.J. (2021). Scalable learning of safety guarantees for autonomous systems using hamilton-jacobi reachability. In 2021 IEEE International Confer-ence on Robotics and Automation (ICRA) , 5914–5920. IEEE Press. Hsu, K.C., Hu, H., and Fisac, J.F. (2023). The safety filter: A unified view of safety-critical control in autonomous systems. Johansson, K. (2000). The quadruple-tank process: a multivariable laboratory process with an adjustable zero. IEEE Transactions on Control Systems Technol-ogy , 8(3), 456–465. doi:10.1109/87.845876. Lasserre, J.B. (2001). Global optimization with poly-nomials and the problem of moments. SIAM Journal on Optimization , 11(3), 796–817. doi: 10.1137/S1052623400366802. Lavanakul, W., Choi, J.J., Sreenath, K., and Tomlin, C.J. (2024). Safety filters for black-box dynamical systems by learning discriminating hyperplanes. In Conference on Learning for Dynamics & Control .Li, Z., Yang, B., Li, J., Yan, J., and Mo, Y. (2023). Linear model predictive control under continuous path constraints via parallelized primal-dual hybrid gradient algorithm. 2023 62nd IEEE Conference on Decision and Control (CDC) , 159–164. Long, K., Yi, Y., Dai, Z., Herbert, S., Cort´ es, J., and Atanasov, N. (2024). Sensor-based distributionally ro-bust control for safe robot navigation in dynamic envi-ronments. CoRR , abs/2405.18251. Lu, Y., Li, Z., Zhou, Y., Li, N., and Mo, Y. (2023). Mpc-inspired reinforcement learning for verifiable model-free control. arXiv preprint arXiv:2312.05332 .Margellos, K. and Lygeros, J. (2011). Hamilton–jacobi formulation for reach–avoid differential games. IEEE Transactions on Automatic Control , 56(8), 1849–1861. Mestres, P., Chen, Y., Dall’anese, E., and Cort´ es, J. (2025). Control barrier function-based safety fil-ters: Characterization of undesired equilibria, un-bounded trajectories, and limit cycles. URL 
+
+https://arxiv.org/abs/2501.09289 .Monga, V., Li, Y., and Eldar, Y.C. (2021). Algorithm unrolling: Interpretable, efficient deep learning for signal and image processing. IEEE Signal Processing Maga-zine , 38(2), 18–44. doi:10.1109/MSP.2020.3018525. Parrilo, P.A. (2003). Semidefinite programming relax-ations for semialgebraic problems. Mathematical pro-gramming , 96(2), 293–320. Robey, A., Hu, H., Lindemann, L., Zhang, H., Dimarog-onas, D.V., Tu, S., and Matni, N. (2020). Learning control barrier functions from expert demonstrations. In 2020 59th IEEE Conference on Decision and Control (CDC) , 3717–3724. Schulman, J., Wolski, F., Dhariwal, P., Radford, A., and Klimov, O. (2017). Proximal policy optimization algo-rithms. CoRR , abs/1707.06347. So, O., Serlin, Z., Mann, M., Gonzales, J., Rutledge, K., Roy, N., and Fan, C. (2024). How to train your neural Table 3. Task definitions for benchmarking. 
+
+Double Integrator Quadruple Tank Cartpole Balance Source Borrelli et al. (2017), p.246, Example 12.1 Johansson (2000) (original source); Li et al. (2023) (linearization) Geva and Sitte (1993) Nominal dynamics 
+
+A =
+
+h1 1 0 1 
+
+i
+
+,B =
+
+h01
+
+i
+
+A =
+
+
+
+0.98 0 0.04 00 0.99 0 0.03 0 0 0.96 00 0 0 0.97 
+
+ ,B =
+
+
+
+0.83 00 0.62 0 0.47 0.3 0
+
+hmc + mp mpl cos θmpl cos θ mpl2
+
+i ¨px
+
+¨θ
+
+
+
+=
+
+u + mpl sin θ ˙θ2
+
+mpgl sin θ
+
+
+
+,
+
+where state variable is x = [ px, ˙px, θ, ˙θ]⊤,
+
+and nominal parameters are mc = 1 , m p = 0 .1, l = 0 .55 .
+
+Discretized with time step 0.1s. Simulation uses nonlinear dynamics, while baseline PSF uses linearized dynamics. Safety Constraints −0.5 ≤ x ≤ 0.5,
+
+−0.5 ≤ u ≤ 0.50 ≤ x ≤ 20 ,
+
+−1 ≤ u ≤ 1
+
+−2 ≤ px ≤ 2,
+
+−0.5 ≤ θ ≤ 0.5,
+
+−10 ≤ u ≤ 10 Episode length 100 100 300 
+
+Table 4. Performance comparison on double integrator system.                                                                                                         
+
+> Stabilization Tasks Tracking Tasks Method n= 0 .0n= 0 .5n= 1 .0n= 2 .0n= 0 .0n= 0 .5n= 1 .0n= 2 .0Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Unfiltered 0.00 -8.67 -36.12 -81.34 -0.00 -0.00 -12.67 -16.54 -Baseline PSF 0.00 1.16 ×10 −70.00 2.79 ×10 −70.00 4.67 fail -0.00 1.41 ×10 −20.00 5.87 ×10 −20.00 2.09 fail -RL+MLP 0.00 0.23 0.00 0.63 6.33 2.32 17.67 2.88 0.00 0.11 0.00 0.24 0.00 7.41 0.00 9.12 RL+LQP 0.00 0.49 0.00 0.68 0.00 2.73 0.00 4.50 0.00 0.13 0.00 0.89 0.00 5.05 0.00 5.03
+
+Table 5. Performance comparison on quadruple tank system in stabilization tasks. 
+
+LQR control with Gaussian noise Bang-bang control Method n = 0 .0 n = 0 .2 n = 1 .0 n = 5 .0 (0 .3, 30) (1 , 50) Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Vio% Dev Unfiltered 0.00 - 2.35 - 41.02 - 49.14 - 0.00 - 93.63 -Baseline PSF 0.00 64 .63 × 10 −19 0.00 2.26 × 10 −19 0.00 3.96 0.00 9.26 0.00 1.96 × 10 −29 0.00 62.01 RL+MLP 0.00 3.22 0.00 5.38 0.00 38.39 0.00 54.85 0.00 3.53 0.00 55.62 RL+LQP 0.00 1.83 × 10 −2 0.00 2.89 × 10 −2 0.00 15.47 0.00 25.27 0.00 0.38 0.00 60.73 
+
+control barrier function: Learning safety filters for com-plex input-constrained systems. In 2024 IEEE Interna-tional Conference on Robotics and Automation (ICRA) ,11532–11539. doi:10.1109/ICRA57147.2024.10610418. Sutton, R.S. and Barto, A.G. (2018). Reinforcement learning: An introduction . MIT press. Tang, Y., Chu, X., Huang, J., and Samuel Au, K.W. (2024). Learning-based mpc with safety filter for con-strained deformable linear object manipulation. IEEE Robotics and Automation Letters , 9(3), 2877–2884. doi: 10.1109/LRA.2024.3362643. Viljoen, J., Shaw-Cortez, W., Drgoˇ na, J., East, S., Tomizuka, M., and Vrabie, D.L. (2024). Differentiable predictive control for robotics: A data-driven predictive safety filter approach. ArXiv , abs/2409.13817. Wabersich, K.P. and Zeilinger, M.N. (2018). Linear model predictive safety certification for learning-based control. In 2018 IEEE Conference on Decision and Control (CDC) , 7130–7135. doi:10.1109/CDC.2018.8619829. Wabersich, K.P. and Zeilinger, M.N. (2021). A predictive safety filter for learning-based control of constrained nonlinear dynamical systems. Automatica , 129, 109597. Wieland, P. and Allg¨ ower, F. (2007). Constructive safety using control barrier functions. IFAC Proceedings Vol-umes , 40(12), 462–467. 7th IFAC Symposium on Non-linear Control Systems. Appendix A. BENCHMARKING SETUP AND ADDITIONAL EXPERIMENT RESULTS In this appendix, we provide the detailed system configu-rations and additional numerical results on double integra-tor and quadruple tank systems. The task definitions for the three benchmark systems are summarized in Table 3. Table 4 and 5 summarize key results in double integrator system and quadruple tank, respectively. Notably, for the quadruple tank system, we only con-ducted stabilization tasks. But in addition to the LQR controller with Gaussian noise, an open-loop bang-bang control reference ˆ u was also applied for evaluation. This controller switches between a non-zero control input and zero, defined as: ˆu(t) = 
+
+u if t < t switch 
+
+0 if t ≥ tswitch 
+
+(A.1) In Table 5, this control strategy is denoted by the tuple (u, t switch ), representing the control magnitude and the switching time step.
