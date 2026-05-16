@@ -1,6 +1,11 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-05-16 <!--dpr-date:20260516-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202605/16/2605.14421v1-memlineage-lineage-guided-enforcement-for-llm-agent-memory" data-sidebar-item="{&quot;title&quot;: &quot;MemLineage: Lineage-Guided Enforcement for LLM Agent Memory&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2605.14421v1-memlineage-lineage-guided-enforcement-for-llm-agent-memory&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;大模型智能体记忆防御与安全措施&quot;}">MemLineage: Lineage-Guided Enforcement for LLM Agent Memory</a>
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202605/16/2605.08460v1-when-child-inherits-modeling-and-exploiting-subagent-spawn-in-multi-agent-networks" data-sidebar-item="{&quot;title&quot;: &quot;When Child Inherits: Modeling and Exploiting Subagent Spawn in Multi-Agent Networks&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2605.08460v1-when-child-inherits-modeling-and-exploiting-subagent-spawn-in-multi-agent-networks&quot;, &quot;score&quot;: &quot;7.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;llm&quot;}], &quot;evidence&quot;: &quot;多智能体网络中的安全风险与越狱攻击&quot;}">When Child Inherits: Modeling and Exploiting Subagent Spawn in Multi-Agent Networks</a>
   * 2026-05-15 <!--dpr-date:20260515-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202605/15/2605.14750v1-eva-editing-for-versatile-alignment-against-jailbreaks" data-sidebar-item="{&quot;title&quot;: &quot;EVA: Editing for Versatile Alignment against Jailbreaks&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2605.14750v1-eva-editing-for-versatile-alignment-against-jailbreaks&quot;, &quot;score&quot;: &quot;10.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;通过直接模型编辑进行针对越狱的安全对齐&quot;}">EVA: Editing for Versatile Alignment against Jailbreaks</a>
