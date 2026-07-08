@@ -1,0 +1,1089 @@
+Title: Improving Certified Robustness via Adversarial Distillation
+
+URL Source: https://arxiv.org/pdf/2606.31653v1
+
+Published Time: Wed, 01 Jul 2026 01:40:38 GMT
+
+Number of Pages: 23
+
+Markdown Content:
+# Improving Certified Robustness via Adversarial Distillation 
+
+Matteo Melis ∗
+
+School of EEECS Queen’s University Belfast 
+
+mmelis01@qub.ac.uk 
+
+Jesus Martinez Del Rincon 
+
+School of EEECS Queen’s University Belfast 
+
+j.martinez-del-rincon@qub.ac.uk 
+
+Vishal Sharma 
+
+School of EEECS Queen’s University Belfast 
+
+V.Sharma@qub.ac.uk 
+
+## Abstract 
+
+Certified training aims to produce models whose predictions can be formally ver-ified against adversarial perturbations, typically by optimising upper bounds on the worst-case loss over an allowed perturbation set. For neural networks, certified training methods based purely on tight relaxation bounds produce networks that are amenable to certification, but sacrifice standard accuracy. Conversely, adver-sarial training often yields stronger empirical robustness and standard accuracy, but the resulting models are generally difficult to certify with neural network ver-ifiers. Recently, the literature has shown that better standard-certified accuracy trade-offs can be achieved by combining adversarial training objectives with loose over-approximations based on Interval Bound Propagation (IBP), effectively inter-polating between lower and upper bounds of the worst-case loss. Building on this, we introduce AD-CERT, a certified training objective that combines adversarial dis-tillation with an IBP upper bound. We show that distilling adversarial information over the logit space from an empirically robust teacher provides an effective lower bound surrogate for certified training, with AD-CERT achieving state-of-the-art certified performance on several robustness benchmarks. Furthermore, in a unified setup, distilling adversarial information at the logit-level is shown to improve certified accuracy over a robust feature-space distillation objective by up to 5.40 percentage points. 
+
+## 1 Introduction 
+
+While deep neural networks have seen great success across various disciplines, adversarial examples [ 2, 12 , 31 ] raise important questions about their adversarial robustness , i.e ., a network’s ability to preserve its prediction under small input perturbations. This is of particular concern in safety-critical domains such as autonomous driving and medical diagnostics. Motivated by this, neural network verification methods [9, 17] aim to provide formal certificates of robustness for a given network. Neural network verifiers broadly fall into two categories, complete verifiers [ 17 , 32 ], which compute exact bounds but have an exponential worst-case runtime, and incomplete verifiers [ 30 , 40 ], which rely on convex relaxations to obtain approximate bounds. Modern state-of-the-art verifiers [ 10 , 34 , 37 , 42 ] typically combine the two, using convex relaxations to accelerate complete                 
+
+> ∗Corresponding author. Preprint.
+> arXiv:2606.31653v1 [cs.LG] 30 Jun 2026 (1 −α)LKL (Pθt(x)∥Pθs(xadv )) +αLCE
+> 
+> −z∆
+> θs(x, y ), y
+> 
+> LAD -CERT
+> Pθs(xadv )Pθt(x)
+> Student
+> fθs
+> Frozen teacher
+> fθt
+> PGD attack
+
+x      
+
+> Adversarial distillation  z∆
+> θs(x, y )
+> IBP
+> Student
+> fθs
+> Bϵ(x) = [ x−ϵ, x+ϵ]
+> Bound propagation
+
+Figure 1: Overview of AD-CERT (§3.1) loss formulation, which combines adversarial distillation (blue) with IBP (orange). verification within a branch-and-bound framework [3]. Since verification only certifies robustness after training, robust training methods are needed to produce networks that are both accurate and certifiable. Training neural networks for adversarial robustness is typically approached either empirically, through adversarial examples, or through certified training, using over-approximations of the network’s reachable set over a perturbation region. Adversarial training [ 22 ] is an empirical approach that aims to improve a network’s adversarial robustness by augmenting the training objective with adversarial examples, thereby optimising a lower bound on the worst-case loss. However, adversarially trained networks are hard to formally verify and often fall short when faced with stronger or adaptive attack strategies [ 4 , 33 ]. In contrast, certified training directly optimises an upper bound on the worst-case loss, producing networks that are more amenable to verification, often at the cost of standard accuracy. While earlier certified training methods [ 13 , 26 , 29 , 41 ] trained networks against sound upper bounds of the robust loss, recent state-of-the-art methods [ 6 , 8 , 23 , 27 ] effectively optimise unsound approximations of the worst-case loss by combining adversarial training with loose IBP-based over-approximations [ 13 ]. Due to IBP’s favourable optimisation properties [ 16 , 24 ] and adversarial training’s empirical strengths, such certified training methods have been shown to provide state-of-the-art standard-certified accuracy trade-offs in recent benchmarks [25]. Motivated by the success of robust objectives that combine adversarial and certified train-ing, we hypothesise that transferring adversarial knowledge from an empirically robust teacher to a certified student using knowledge distillation could further improve certified performance when paired with IBP bounds. This leads to the following contributions: • We introduce Adversarial Distillation for Certification (AD-CERT) (§3.1), a novel certified training objective that combines adversarial logit-level distillation from an empirically robust teacher with IBP bounds (depicted in Figure 1). • We show that AD-CERT is a scalarisation between a teacher-guided lower bound surrogate and a certified IBP upper bound on the robust loss (§3.2). • We present extensive experimental evaluations of AD-CERT across standard certified train-ing benchmarks (§4.2), showing that it achieves state-of-the-art certified accuracy against current certified training methods. • We provide a systematic analysis of multiple knowledge distillation approaches for empirical endpoints (§4.3), showing that adversarial logit-level distillation preserves teacher robustness 2more effectively than clean or feature-space distillation over the same architecture, and translates best into certified training when combined with an IBP loss (§4.2). 
+
+## 2 Background 
+
+Here, we discuss some necessary background for this work. Let fθ denote a multi-class neural network classifier parametrised by θ such that fθ : Rd 7 → RC maps an input x ∈ X ⊆ Rd to a numerical prediction score [fθ (x)] i for each class i ∈ { 1, 2, . . . , C }. Let (x, y ) ∼ D denote a sample input and true label from a data distribution D and let Bεp (x) denote a perturbation set based on an 
+
+ℓp norm threat model. In this work, as standard with certified training [ 1, 6 , 7, 8, 13 , 23 , 27 ], we only consider the ℓ∞ case, and therefore put Bε(x) := {x′ : ∥x′ − x∥∞ ≤ ε}, where x′ denotes the perturbed input and ε is the perturbation radius. 
+
+2.1 Neural Network Verification 
+
+A network is said to be adversarially robust for an input x if for all x′ ∈ B ε(x), we have [fθ (x′)] i <
+
+[fθ (x′)] y ∀ i̸ = y. Let z∆ 
+
+> θ
+
+∈ RC−1 denote the logit-difference between the true class and all other classes, i.e ., z∆ 
+
+> θ
+
+(x, y ) := ([ fθ (x)] y − [fθ (x)] i)i̸=y . Then, a network’s adversarial robustness can be verified by solving: 
+
+min  
+
+> x′∈B ε(x)
+
+min  
+
+> i̸=y
+
+[z∆ 
+
+> θ
+
+(x′, y )] i, (1) and checking if the solution to Equation (1) is greater than zero. Finding an exact solution to Equation (1) was shown to be NP-hard [ 17 ], thus, neural network verifiers either approximate the bounds [30, 40], or perform complete verification at a larger computational cost [10, 17, 32, 34, 37, 42]. 
+
+2.2 Training for Robustness 
+
+Standard training of neural network classifiers optimises network parameters θ by minimising the expected cross-entropy loss, i.e ., 
+
+min  
+
+> θ
+
+E(x,y )∼D [LCE (fθ (x), y )] , (2) where LCE (fθ (x), y ) = log(1 + PCi̸=y exp([ fθ (x)] i − [fθ (x)] y )) . In contrast, training for robustness can be viewed as the following min-max objective: 
+
+min  
+
+> θ
+
+E(x,y )∼D 
+
+
+
+max  
+
+> x′∈B ε(x)
+
+LCE (fθ (x′), y )
+
+
+
+. (3) Concretely, for an input x, the inner maximisation finds the most malicious perturbation x′ ∈ B ε(x)
+
+that maximises the loss. The outer minimisation seeks the optimal network parameters θ such that these threats are less effective against the network predictions. Since the inner maximisation problem is non-convex, we generally solve this by under- or over-approximating the worst-case loss. In general, if we let L∗
+
+> rob
+
+(fθ (x), y ) := max  
+
+> x′∈B ε(x)
+
+L (fθ (x′), y ) denote a network objective solved for the optimisation problem in Equation (3), then we have: 
+
+Lrob (fθ (x), y ) ≤ L ∗
+
+> rob
+
+(fθ (x), y ) ≤ L rob (fθ (x), y ), (4) with Lrob (fθ (x), y ) and Lrob (fθ (x), y ) corresponding to adversarial and certified training, respec-tively, as described below. 
+
+Adversarial Training (AT) AT first approximates a solution to the inner maximisation problem of Equation (3) by performing an adversarial attack, such as projected gradient descent (PGD) [ 22 ], within Bε(x) for each input x. Following this, the outer minimisation problem of Equation (3) is solved by augmenting the network’s training objective with the adversarial example xadv ∈ B ε(x)
+
+obtained by the attack. In its standard form, AT aims to minimise: 
+
+LAT := LCE (fθ (xadv ), y ) . (5) This can be seen as optimising a lower bound of the worst-case loss, i.e ., Lrob (fθ (x), y ) from Equation (4) . While AT leads to strong empirical robustness, it produces complex networks that are difficult to formally verify and remain susceptible to stronger attacks [4, 33]. 3Certified Training and Bound Propagation Certified training optimises an upper bound of the inner-maximisation problem in Equation (3) by over-approximating the worst-case loss. A simple approach is Interval Bound Propagation (IBP) [ 13 ], leveraging interval arithmetic to approximate the output range of a given layer. Given an input x, IBP propagates the upper and lower bounds of the perturbed input space, Bε(x), (corresponding to x := x + ε and x := x − ε, respectively) through the entire network layer by layer, providing a hyper-rectangle that is monotonically increasing every layer. The final layer output of this propagation, which we denote with B OX , is an over-approximation of the possible output space, i.e ., B OX ⊇ fθ (Bε(x)) . Hence, using the B OX relaxation, we can compute the worst-case logit difference between the true class and all other classes by putting 
+
+z∆ 
+
+> θ
+
+(x, y ) := 
+
+
+
+[fθ (x′)] y − [fθ (x′)] i
+
+
+
+> i̸=y
+
+and obtain a robust loss given by: 
+
+LIBP := LCE (−z∆ 
+
+> θ
+
+(x, y ), y ), (6) where LIBP is a sound upper bound, Lrob (fθ (x), y ), from Equation (4) . Further details on IBP can be found in Appendix A. Interestingly, alternative certified training methods that utilise tighter relaxations, e.g ., lin-ear relaxations [ 35 , 41 ], consistently yield worse performance than imprecise IBP-based training. Jovanovi´ c et al. [16] attribute this phenomenon to tighter relaxations adding discontinuity and difficulty to the optimisation objective. Moreover, Mao et al. [24] explicitly show that IBP-based training leads to better propagation tightness , while non-IBP-based methods do not. Additionally, they note that over-regularisation provides worse standard-certified accuracy trade-offs. In line with these findings, all current state-of-the-art certified training methods [ 6 , 8, 23 , 27 ] move away from previous over-regularised approaches [ 1 , 7 , 13 ] and instead shift their focus to combining AT with IBP-based training, achieving state-of-the-art standard-certified accuracy trade-offs while preserving certification properties. De Palma et al. [8] further elucidate this in their definition of expressive losses whereby expressivity is attained through interpolation between lower and upper bounds of Equation (4) during training, providing an unsound but favourable solution to Equation (3). 
+
+2.3 Knowledge Distillation 
+
+Hinton et al. [15] introduced knowledge distillation as a method for transferring knowledge from a large teacher model, Tθt , to a smaller, more compact student model, Sθs . This allows the student to retain much of the teacher’s performance while reducing computational cost. Knowledge distillation utilises Kullback-Leibler (KL) divergence to compare the predictive distributions of the student and teacher, which is defined by: 
+
+KL  P τθt (x) ∥ P τθs (x) =
+
+> C
+
+X
+
+> i=1
+
+[P τθt (x)] i log [P τθt (x)] i
+
+[P τθs (x)] i
+
+!
+
+, (7) where τ is a temperature applied to the softmax operation and P τθt (x) := softmax 
+
+ Tθt (x)
+
+> τ
+
+
+
+,
+
+P τθs (x) := softmax 
+
+ Sθs (x)
+
+> τ
+
+
+
+are the respective predictive distributions of the teacher and student after softmax. Knowledge distillation then optimises the following objective: 
+
+min 
+
+> θs
+
+E(x,y )∼D 
+
+(1 − α)LCE (Sθs (x), y ) + ατ 2KL  P τθt (x) ∥ P τθs (x) , (8) where α ∈ [0 , 1] is a balancing factor between standard training and learning the teacher’s predictive distribution. Knowledge distillation has since been applied in the AT setting to boost empirical robustness of a student using an adversarially trained teacher [ 5, 11 , 44 , 45 ]. This was first explored by Goldblum et al. [11] , through adversarially robust distillation (ARD), which injects adversarial examples into the KL term from Equation (8). More specifically: 
+
+LARD := (1 − α)LCE (Sθs (x), y ) + ατ 2KL  P τθt (x) ∥ P τθs (xadv ) . (9) Additionally, De Palma [6] recently introduced knowledge distillation within the field of certified training, where knowledge is distilled from an empirically robust teacher over the feature space (further details in Appendix G). In the coming section, we build on previous certified training [ 1, 6, 7 , 8, 13 , 23 , 27 ] and adversarial knowledge distillation [ 11 , 45 ] works, presenting a novel certified training objective that distils the predictive distribution of an empirically robust teacher onto a student training for certifiable robustness. 43 Methodology 
+
+In this section, we introduce Adversarial Distillation for Certification (AD-CERT), a novel certified training scheme that interpolates between adversarial distillation (AD) and IBP [ 13 ]. We leverage the key insight that replacing a hard-label adversarial lower bound with a teacher-guided surrogate could further improve certified training. In this way, the empirical teacher shapes the student on concrete adversarial examples, while certification is enforced directly through IBP. Full proofs and additional theoretical results are deferred to Appendices B and C, respectively. Pseudocode for the complete training procedure is provided in Appendix E and further details on AD-CERT’s computational cost can be found in Appendix F.5, where AD-CERT corresponds to performing IBP and PGD training, with the slight added cost of a single forward pass on the detached teacher. 
+
+3.1 AD-CERT Formulation 
+
+Going forward, we denote by fθt a fixed teacher network trained via AT, and let fθs be the student model that we aim to certify. Note that both the student and teacher share the same architecture in this distillation setting. Moreover, for all experiments, we use a temperature setting of τ = 1 , and henceforth, omit the τ notation from all softmax operations, writing Pθ (x) := softmax( fθ (x)) for the predictive distribution of a network. Excluding additional regularisation, AD-CERT attains the following loss objective: 
+
+LAD -CERT := (1 − α) KL ( Pθt (x) ∥ Pθs (xadv )) 
+
+| {z }
+
+> Adversarial Distillation
+
++α LCE 
+
+ −z∆ 
+
+> θs
+
+(x, y ), y | {z }
+
+> IBP
+
+, α ∈ [0 , 1] . (10) The AD component of Equation (10) is exactly the KL portion of Equation (9) , where the student is evaluated on an adversarially perturbed input, and tasked to match the clean distribution of an adversarially trained teacher, aiming to preserve standard and empirically robust accuracy. On an intuitive level, AD-CERT is designed to keep the teacher signal completely outside of verified bounds, using it purely for its empirical strengths, while leveraging IBP to tighten the worst-case logit differences. This aims to make the student amenable to verification, while still retaining a large proportion of the teacher’s adversarial and standard accuracy. 
+
+3.2 Teacher-Guided Lower Bound Surrogates 
+
+In this subsection, we take an analytical view of the objective in Equation (10) and formalise the role of AD within certified training. Unlike AT and IBP, which, respectively, provide formal lower and upper bounds from Equation (4) , the AD term in AD-CERT is used as a teacher-guided surrogate for the adversarial lower bound. This is an intentional relaxation of the lower bound objective, using an empirical teacher only to improve the adversarial endpoint, while leaving the verifiable IBP upper bound objective unchanged. We begin by showing that, up to a teacher-dependent constant, the distillation component of AD-CERT is exactly AT with soft teacher labels. 
+
+Proposition 3.1 (Equivalence of AD and soft-label AT) . Let xadv be fixed, and let the teacher predictive distribution Pθt (x) be fixed. Then the AD objective: 
+
+LAD := KL( Pθt (x) ∥ Pθs (xadv )) , (11) is equal, up to an additive constant independent of the student parameters, to AT with soft teacher labels, namely: 
+
+Lsoft -AT := LCE (fθs (xadv ), P θt (x)) . (12) Moreover, both objectives induce identical backpropagation updates with respect to the student logits. In particular, for each class index i:
+
+∂LAD 
+
+∂z iθs
+
+= [ Pθs (xadv )] i − [Pθt (x)] i = ∂Lsoft -AT 
+
+∂z iθs
+
+. (13) 
+
+Proof. See Appendix B. Given Proposition 3.1, we have shown that the distillation component of AD-CERT preserves AT at the gradient level, while being conditioned by an empirical teacher. We further elucidate this connection through an analytical view of our loss function from Equation (10). 5Proposition 3.2 (Analytical form of AD-CERT) . Let H(P ) and H(Q, P ) denote the entropy and cross entropy respectively for probability distributions P and Q. That is: 
+
+H(P ) = −
+
+> C
+
+X
+
+> i=1
+
+pi log( pi), H(Q, P ) = −
+
+> C
+
+X
+
+> i=1
+
+qi log( pi). (14) Then, LAD -CERT from Equation (10) can be re-written as: 
+
+LAD -CERT = (1 − α)H(Pθt (x), P θs (xadv )) + αLIBP − (1 − α)H(Pθt (x)) . (15) Therefore, up to a constant independent of θs, AD-CERT is a scalarisation between (i) a soft-label adversarial lower bound surrogate and (ii) a certified IBP upper bound. 
+
+Proof. See Appendix B. Given Proposition 3.2, AD-CERT fits naturally within the broader class of modern certified training objectives [ 6 , 8 , 23 , 27 ] that combine empirical and certifiable endpoints. Its distinguishing feature is that the adversarial endpoint is no longer a formal lower bound of Equation (3) , but a relaxed surrogate induced by AD from an empirically robust teacher. Additionally, this positions AD-CERT as distinct and complementary to the recent work of CC-DIST [ 6 ], which computes both IBP bounds and adversarial examples within their robust feature-space distillation objective. Instead, AD-CERT integrates teacher distillation directly into the lower bound endpoint, while keeping IBP bounds purely for the certified endpoint. While Proposition 3.2 characterises AD-CERT at the level of its objective, the next result highlights a key geometric difference between soft-label and hard-label adversarial supervision. In particular, the AD branch of AD-CERT induces a finite target in the logit space, whereas standard AT only approaches its optimum as the correct class margin grows indefinitely. 
+
+Lemma 3.3. For AD, the optimal logit margin, ∆z∗ 
+
+> ij
+
+, between any two classes i, j is: 
+
+∆z∗ 
+
+> ij
+
+= log 
+
+ [Pθt (x)] i
+
+[Pθt (x)] j
+
+
+
+. (16) Moreover, standard AT has no finite minimiser, and its infimum 0 is approached only as 
+
+[fθs (xadv )] y − [fθs (xadv )] j → +∞, ∀j̸ = y.
+
+Proof. See Appendix B. Lemma 3.3 suggests that teacher-guided soft-label supervision may be a principled approach to enhance certified training, since it arguably induces a smoother lower bound objective, not pushing for arbitrarily large class margins. We evaluate our hypotheses experimentally in the next section. 
+
+## 4 Experimental Evaluation 
+
+In this section, we conduct experiments to assess the effectiveness of our proposed certified training method, AD-CERT (§3.1). Across our experiments, we report standard, certified and A UTO ATTACK 
+
+(AA) [ 4 ] accuracy. Certified accuracy is the primary metric used in certified training literature [1 , 6, 7 , 8, 13 , 23 , 25 , 27 ], defined as the proportion of the validation set for which a verifier proves robustness within Bε(x). Standard accuracy is the clean accuracy on the validation set without perturbation. AA accuracy refers to the proportion of the validation set that could not be attacked by the AA strategy. As such, AA accuracy is strictly greater than or equal to certified accuracy. 
+
+4.1 Settings 
+
+We implement AD-CERT on top of CTBench [ 25 ], a unified certified training library using PyTorch [ 28 ]. We adopt three datasets, MNIST [ 21 ], CIFAR-10 [ 19 ] and TinyImageNet [ 20 ]. We train on the corresponding training sets and certify on the validation sets. To align with recent literature [ 6, 8, 23 , 25 , 27 , 29 ], we use a 7-layer convolutional network ( CNN7 ) for both the teacher and student models, and the perturbation radii applied are ε = {0.1, 0.3} for MNIST, ε = { 2255 , 8255 }
+
+6for CIFAR-10 and ε = { 1255 } for TinyImageNet. For verification, we use the α,β-CROWN library [ 34 , 36 , 37 , 40 ], which combines linear bound propagation with branch-and-bound [ 3 ] for complete neural network verification. Full details on training of both student and teacher models, certification and the experimental setup can be found in Appendix F. 
+
+4.2 Comparison with State-of-the-Art 
+
+Table 1 compares the performance of AD-CERT (§3.1) to current state-of-the-art certified training methods [ 6, 8 , 13 , 23 , 27 , 38 ]. For each method, we report the standard and certified accuracy on the validation set. When available, we use the benchmark results from CTBench [ 25 ], as they generally report the strongest certified accuracies of each reported certified training method compared to the original paper [ 6, 8 , 13 , 23 , 27 , 38 ], while also providing a fair comparison to AD-CERT, which is built on top of the unified library. Overall, AD-CERT achieves state-of-the-art certified accuracy for ReLU-based architec-tures across all evaluated settings, while retaining competitive standard accuracy. On MNIST, AD-CERT obtains modest but consistent improvements over prior methods at both perturbation radii. While the gains are small, this is expected given the relative simplicity of MNIST and the already saturated performance of existing methods. For CIFAR-10 and TinyImageNet, AD-CERT improves the best prior ReLU-based certified accuracy by an average of 0.37 percentage points, with the largest gain observed at ε = 2255 on CIFAR-10. For CIFAR-10 at ε = 8255 , SORTNET [ 38 ] obtains higher certified accuracy, however, it relies on a specialised 1-Lipschitz architecture known to perform particularly well on this setting. We therefore distinguish it from the ReLU-based methods, with further discussion in related work (§5). On TinyImageNet, AD-CERT achieves the highest certified accuracy among all compared methods, while substantially improving standard accuracy compared to previous non-distillation-based certified training methods [ 8 , 13 , 23 , 27 ]. This suggests that AD-CERT scales favourably beyond the smaller MNIST and CIFAR-10 settings, where certified training is often closer in performance. An interesting comparison is that of AD-CERT and CC-DIST [ 6 ], the only distillation-based certified training methods. In general, CC-DIST retains higher standard accuracy, while AD-CERT obtains higher certified accuracy. We investigate this trade-off further through a controlled comparison in Table 2. 
+
+Comparison of Distillation-based Certified Training Methods Table 2 compares AD-CERT against alternative distillation-based certified training methods under the exact same experimental setup for a direct comparison. This controlled comparison allows us to isolate the effect of the distil-lation mechanism itself by training and evaluating all methods in the CTBench library [ 25 ] with the same teacher model, training pipeline and verifier. We compare AD-CERT with CC-DIST [ 6], which performs robust feature-space distillation. Additionally, we introduce RSLAD-CERT, an alternative logit-level objective obtained by replacing the adversarial distillation term in AD-CERT with RSLAD [45 ], but retaining the same IBP interpolation, i.e ., LRSLAD -CERT := (1 − α)LRSLAD + αL IBP . For all three methods, we use the exact same hyperparameter values as those used for AD-CERT in Table 1, which we report in detail in Appendix F.3, Table 6. The only exception is wrob for TinyImageNet, where we used an earlier untuned value of 0.7, as per MTL-IBP’s [ 8] reported value in CTBench [25]. Overall, the results support the design choice of AD-CERT, showing that directly distilling the teacher’s predictive distribution at the adversarial endpoint provides a simple and effective empirical branch for certified training. The addition of the clean distillation term in RSLAD-CERT reduces certifiability by 0.6 percentage points on average, while only improving standard accuracy by an average of 0.38 percentage points compared to AD-CERT. Consistent with the pattern observed in Table 1, CC-DIST is generally strongest at transferring standard accuracy, but shows weaker certified accuracy under the controlled setup. This results in worse standard-certified accuracy trade-offs, with CC-DIST improving standard accuracy over AD-CERT by an average of 1.69 percentage points, but reducing certifiability by 3.52 percentage points. Both logit-level objectives, i.e ., RSLAD-CERT and AD-CERT, improve certified accuracy over the feature-space distillation objective of CC-DIST, despite not matching the formal definition of expressivity [ 8]. One possible explanation is that CC-DIST induces a more regularised objective, since it computes adversarial examples and IBP bounds during distillation, before being coupled with another expressive loss CC-IBP [ 8]. This suggests that tightly coupling distillation-based certified training objectives with the formal definition 7Table 1: Comparison of AD-CERT with prior state-of-the-art certified training methods. Bold indicates the best standard or certified accuracy on each benchmark. When the best ReLU-based architecture result differs from the best overall result, the top ReLU-based accuracy is bold-underlined.                                                                                                            
+
+> Dataset εMethod Source Std. acc. [%] Cert. acc. [%] MNIST
+> 0.1
+> AD-CERT Ours 99.25 98.53
+> IBP Mao et al. [25] 98.87 98.26 SORTNET †Zhang et al. [38] 99.01 98.14 SABR Mao et al. [25] 99.08 98.40 TAPS/STAPS ‡Mao et al. [25] 99.16 98.52 MTL-IBP Mao et al. [25] 99.18 98.37
+> 0.3
+> AD-CERT Ours 98.85 93.98
+> IBP Mao et al. [25] 98.54 93.80 SORTNET †Zhang et al. [38] 98.46 93.40 SABR Mao et al. [25] 98.66 93.68 TAPS/STAPS ‡Mao et al. [25] 98.56 93.95 MTL-IBP Mao et al. [25] 98.74 93.90 CIFAR-10
+> 2255
+> AD-CERT Ours 79.21 65.08
+> IBP Mao et al. [25] 67.49 55.99 SORTNET †Zhang et al. [38] 67.72 56.94 SABR Mao et al. [25] 77.86 63.61 TAPS/STAPS ‡Mao et al. [25] 77.05 64.21 MTL-IBP Mao et al. [25] 78.82 64.41 CC-DIST De Palma [6] 81.55 64.60
+> 8255
+> AD-CERT Ours 53.69 35.84
+> IBP Mao et al. [25] 48.51 35.28 SORTNET †Zhang et al. [38] 54.84 40.39
+> SABR Mao et al. [25] 52.71 35.34 TAPS/STAPS ‡Mao et al. [25] 49.96 35.25 MTL-IBP Mao et al. [25] 54.28 35.41 CC-DIST De Palma [6] 55.13 35.52 TinyImageNet 1255
+> AD-CERT Ours 40.06 28.19
+> IBP Mao et al. [25] 26.77 19.82 SORTNET †Zhang et al. [38] 25.69 18.18 SABR Mao et al. [25] 30.58 20.96 TAPS/STAPS ‡Mao et al. [25] 30.63 22.31 MTL-IBP Mao et al. [25] 35.97 27.73 CC-DIST De Palma [6] 43.78 27.88
+> †Non-ReLU-based architecture.
+> ‡We report the stronger of TAPS and STAPS based on certified accuracy.
+
+of expressivity may not translate into stronger certification properties. In contrast, AD-CERT keeps the distillation branch as a pure adversarial endpoint, while leaving the certified component as the standard IBP loss. This relaxes the definition of expressivity by extending it to surrogate lower bounds (§3.2), prioritising simplicity and smoothness in the loss objective. Finally, we acknowledge that further exhaustive hyperparameter and teacher tuning on CC-DIST could potentially reduce the gap between the results reported in Table 2 and those in Table 1. However, the most important shared hyperparameters, namely the IBP coefficient α and L1 regularisation, coincide with the original CC-DIST setup [ 6] (Table 3). The main remaining difference is therefore the teacher model. For completeness, we include an additional ablation on the sensitivity of AD-CERT and CC-DIST to different teachers in Appendix D, which shows a similar trend to the above ablation. 
+
+4.3 Ablations & Further Discussions Teacher-Student Comparison Table 3 compares each AD-CERT student with its corresponding empirically robust teacher. Overall, AD-CERT converts models that are empirically robust but not certifiable into students with strong certified accuracy, while retaining a substantial fraction of the teacher’s standard and adversarial performance. This effect is particularly clear on MNIST, where AD-CERT stays within one percentage point of the teacher in both standard and AA accuracy across 8Table 2: Comparison of AD-CERT against distillation-based certified training methods under the same experimental setup.                                                       
+
+> Dataset εMethod Method source †Dist. space Std. [%] AA [%] Cert. [%] CIFAR-10
+> 2255
+> AD-CERT Ours Logits 79.21 68.38 65.20
+> RSLAD-CERT Ours Logits 79.87 68.27 64.36 CC-DIST De Palma [6] Features 81.04 69.97 59.80
+> 8255
+> AD-CERT Ours Logits 53.49 36.46 35.60
+> RSLAD-CERT Ours Logits 53.95 36.50 35.19 CC-DIST De Palma [6] Features 54.32 35.69 34.55 TinyImageNet 1255
+> AD-CERT Ours Logits 41.38 30.68 27.68
+> RSLAD-CERT Ours Logits 41.39 30.90 27.14 CC-DIST De Palma [6] Features 43.79 32.66 23.57
+> †The “Method source” column indicates the origin of the training objective, all results are from our implementation and evaluation in the CTBench library [25].
+
+both perturbation radii, while introducing strong certifiability. On TinyImageNet, the teacher-student gap remains moderate, with losses below seven percentage points in standard accuracy and close to two percentage points in AA accuracy, though notably achieving 28 .19% in certified accuracy. The largest gap occurs on CIFAR-10 at ε∞ = 8255 , where the student sees a decrease of almost twenty percentage points in standard accuracy relative to the teacher, although the drop in AA accuracy is much smaller. Nevertheless, AD-CERT still achieves the strongest certified accuracy among ReLU-based architectures in this setting. However, this highlights that closing the remaining gap between empirically robust teachers and certifiably robust students at larger perturbation radii remains an important direction for future work. Motivated by this observation, we next ablate different pure AD techniques on CIFAR-10, aiming to better understand the difficulty of transferring empirical robustness into certifiable robustness and to identify potential directions for stronger distillation-based certified training objectives in future. Table 3: Comparison between teacher and student models of AD-CERT for each dataset entry in Table 1. Deltas are reported relative to the teacher at the same perturbation radius.                                                                     
+
+> Dataset ε∞Model Std. acc. [%] ∆Std. AA acc. [%] ∆AA Cert. acc. [%] MNIST
+> 0.1Teacher 99.47 –98.97 –≈0†
+> Student 99.25 -0.22 98.55 -0.42 98.53
+> 0.3Teacher 99.43 –93.83 –≈0†
+> Student 98.85 -0.58 94.64 +0.81 93.98 CIFAR-10
+> 2255
+> Teacher 88.67 –72.41 –≈0†
+> Student 79.21 -9.46 68.39 -4.02 65.08
+> 8255
+> Teacher 73.55 –41.99 –≈0†
+> Student 53.69 -19.86 36.69 -5.30 35.84 TinyImageNet 1255
+> Teacher 46.78 –33.16 –≈0†
+> Student 40.06 -6.72 31.14 -2.02 28.19
+> †None of the first 10 samples were verified within a 1000 second time-limit.
+
+Exploring Adversarial Distillation Techniques Table 4 compares several distillation objectives on CIFAR-10 [ 19 ] after removing any certified training component and trained against a PGD-trained teacher on the same architecture. This ablation isolates the empirical distillation endpoint, allowing us to study which teacher-student objectives best preserve the robustness of the PGD teacher before introducing certifiability. Natural knowledge distillation [ 15 ], denoted Nat-KL, transfers the teacher’s clean predictive distribution to the student. AD corresponds to removing the IBP term from AD-CERT (§3.1), while RSLAD [ 45 ] extends adversarially robust distillation [ 11 ] using soft-labels. Finally, adversarial feature-space knowledge distillation (AF-KD) corresponds to setting α = 0 in CC-DIST [ 6], thereby removing the IBP components from the objective. For RSLAD and AF-KD, we use λ = 56 and β = 5 
+
+> k
+
+, respectively, following the suggestions of the original works [ 6 , 45 ], where 
+
+k denotes the dimensionality of the feature space. 9From the results, it can be observed that Nat-KL improves standard accuracy at both pertur-bation radii, but dramatically fails to transfer adversarial robustness, losing more than 41 percentage points in AA accuracy in both settings. This confirms that matching an adversarially trained teacher only on clean inputs is insufficient for transferring adversarial robustness. In contrast, objectives that expose the student to adversarial inputs preserve teacher-level AA accuracy much more effectively. Across both perturbation radii, AD and RSLAD remain close to the teacher’s AA accuracy, while AF-KD is competitive at the smaller radius but degrades more noticeably at ε∞ = 8255 . Among these methods, AD provides the most direct and consistently effective adversarial endpoint, improving teacher-level AA accuracy at the smaller radius and remaining within one percentage point at the larger radius. These results further motivate our use of AD as the empirical endpoint of AD-CERT, since it provides a simple but effective mechanism for retaining adversarial accuracy from an empirically robust teacher, while remaining straightforward to combine with an IBP-certified upper bound. This yields a loss objective that resembles previous state-of-the-art expressive losses [ 8 ], but in a distillation setting with lower bound surrogates, as discussed in §3.2. Table 4: Effect of different AD techniques without a certification component on CIFAR-10.                                                                                         
+
+> Method Objective Nat-KL KL( Pθt(x)∥Pθs(x))
+> AD †KL( Pθt(x)∥Pθs(xadv ))
+> RSLAD ‡(1 −λ)KL( Pθt(x)∥Pθs(x)) + λKL( Pθt(x)∥Pθs(xadv ))
+> AF-KD †LCE (−zθs(xadv , y ), y ) + β∥hθs(xadv )−hθt(x)∥22
+> Dataset ε∞Method Std. acc. [%] ∆Std. AA acc. [%] ∆AA CIFAR-10
+> 2255
+> PGD Teacher 88.67 –72.41 –Nat-KL 89.89 +1.22 30.72 -41.69 AD †88.64 -0.03 73.62 +1.21 RSLAD ‡87.88 -0.79 73.32 +0.91 AF-KD †89.52 +0.85 73.55 +1.14
+> 8255
+> PGD Teacher 78.95 –42.48 –Nat-KL 81.32 +2.37 0.52 -41.96 AD †77.08 -1.87 41.64 -0.84 RSLAD ‡76.47 -2.48 42.38 -0.10 AF-KD †78.95 0.00 37.49 -4.99
+> †IBP terms removed from AD-CERT/CC-DIST, i.e ., α= 0 .
+> ‡Adversarial examples are generated against soft-labels as in original work [45].
+
+IBP Coefficient Sensitivity Analysis In certified training, it is well known that higher certified accuracy often comes at the cost of standard accuracy. Recent methods fall into a family of expressive losses [ 8], e.g ., SABR [ 27 ], CC-IBP & MTL-IBP [ 8], and CC-DIST [ 6 ], including hyperparameters that regulate this trade-off by interpolating between empirical and certifiable training objectives. Our goal in this study is to empirically support our methodology claim (§3.2) that the AD term in AD-CERT provides a sensible teacher-guided surrogate for the lower bound endpoint used in prior expressive losses [6, 8, 27]. Figure 2 shows the trade-off between standard, AA, and certified accuracy for AD-CERT on TinyImageNet with ε = 1255 as we decrease the IBP coefficient, α, from Equation 10. Consistent with the sensitivity analyses of Müller et al. [27] (Figure 7), De Palma et al. [8] (Figure 1) and Mao et al. [25] (Figure 7), standard and AA accuracy increase as the strength of IBP regularisation is reduced. Up to a point, this also benefits certified accuracy, before the model starts to dramatically lose its certification properties when α is decreased beyond this. This behaviour suggests that the adversarial distillation endpoint in AD-CERT acts analogously to the hard-label adversarial endpoints used in prior expressive losses, while also achieving state-of-the-art certified accuracy (§4.2). 10 10 3 
+
+> 10 2
+> IBP coefficient
+> 25
+> 30
+> 35
+> 40
+> 45
+> Accuracy [%]
+> Standard acc.
+> AA acc.
+> Certified acc.
+
+Figure 2: Sensitivity analysis of AD-CERT with respect to the IBP coefficient, α, on TinyImageNet at ϵ = 1 /255 . We report standard, AA, and certified accuracy over eight values of α ∈ [5 × 10 −4, 5 ×
+
+10 −2].
+
+## 5 Related Work 
+
+Certified Training As previously mentioned (§2.2), IBP [ 13 , 26 ] performs interval arithmetic over the bounds of a simple bounding-box relaxation that over-approximates the possible output ranges of each layer, before computing an upper bound of the worst-case loss based on the output range of the final layer. Shi et al. [29] later improved IBP-based training by introducing a parameter initialisation technique that induces a constant growth rate of IBP bounds, along with specially designed regularisation to stabilise initial phases of training and improve overall performance. Müller et al. [27] propose SABR, which computes the IBP bounds over a small adversarially selected region rather than over the full perturbation set. It defines a smaller box of radius τ = λτ ε, with λτ ∈ [0 , 1] , centred around a projected adversarial point, ensuring the local region Bτ (xτ ) = {x′ : ∥x′ − xτ ∥∞ ≤ τ } is fully contained within Bε(x). Final IBP bounds are then computed over Bτ (xτ ) and used to calculate the final IBP loss, i.e ., LSABR = L(−z∆τ 
+
+> θ
+
+(x, y ), y ).The intuition is that propagating a smaller adversarially selected region reduces the approximation error induced by IBP bounds, which grows with respect to network depth [ 24 ], thereby providing an unsound but effective approximation of the robust loss over the full perturbation set. Mao et al. [23] introduced TAPS, which splits a network into two sub-parts before training the first part through IBP and the second through AT. The idea is that the PGD under-approximation can compensate for some of the over-approximation error induced by IBP bounds. STAPS [ 23 ] carries out an identical procedure, only changing the perturbation region to a smaller adversarially selected one as in SABR. De Palma et al. [8] formalise a family of expressive losses , which interpolate between empirical lower bounds and certified upper bounds of the worst-case robust loss. MTL-IBP is one such method that achieved relative state-of-the-art performance through leveraging a task balancing coefficient 
+
+α ∈ [0 , 1] for fine-grained control over a linear interpolation of PGD and IBP based training, i.e ., 
+
+LMTL −IBP = (1 − α)LPGD + αLIBP . De Palma [6] introduced CC-DIST, which splits the network into a feature extractor and classification head, using an empirically trained teacher for feature-space distillation before learning final classifications through their prior CC-IBP objective [ 8 ] on the full model. CC-DIST is closest to our work, since it distils knowledge from an empirically robust teacher. However, CC-DIST is tightly coupled with the notion of expressivity [ 8], combining a robust feature-space distillation loss with the expressive CC-IBP objective. Moreover, CC-DIST calculates both adversarial examples and IBP bounds for distillation. In contrast, AD-CERT uses a simple logit-level AD branch as the empirical endpoint, while keeping the certified branch as the baseline IBP loss. All of the previously mentioned works train standard feed-forward ReLU networks. A re-lated but distinct line of work instead studies robustness by construction. S ORTNET [39 ] is a notable such model that utilises ℓ∞-distance functions to provide a 1-Lipschitz architecture. While S ORTNET 
+
+performs particularly well on the CIFAR-10 dataset with ε = 8255 , it is less competitive with standard certified training methods on ReLU architectures, particularly against smaller ε values (see §4.2). The non-smoothness and gradient sparsity introduced by 1-Lipschitz architectures leave room for 11 exploration in their practical applicability to certified training but remains outside the scope of this work. 
+
+## 6 Conclusions 
+
+In this paper, we introduced AD-CERT, a novel certified training algorithm that combines the empirical strengths of an adversarially trained teacher with the verifiability of IBP bounds through a simple linear combination of adversarial distillation over the logit-level and an IBP loss objective. AD-CERT achieves overall state-of-the-art certified accuracy, outperforming all prior methods across five standard certified training benchmarks, while remaining competitive in standard accuracy. Our ablations further suggest that adversarial logit-level distillation provides an effective empirical endpoint for certified training, acting analogously to previous hard-label lower bound endpoints while improving certified performance. Nevertheless, a substantial gap remains between empirically robust teachers and certifiably robust students in terms of standard and adversarial accuracy, particularly on harder settings, highlighting the need for future work on stronger mechanisms for transferring empirical robustness into certifiable robustness. 
+
+## References 
+
+[1] Mislav Balunovic and Martin Vechev. Adversarial training and provable defenses: Bridging the gap. In International Conference on Learning Representations , 2020. [2] Battista Biggio, Igino Corona, Davide Maiorca, Blaine Nelson, Nedim Šrndi´ c, Pavel Laskov, Giorgio Giacinto, and Fabio Roli. Evasion attacks against machine learning at test time. In 
+
+Advanced Information Systems Engineering , 2013. [3] Rudy Bunel, Jingyue Lu, Ilker Turkaslan, Philip H. S. Torr, Pushmeet Kohli, and M. Pawan Kumar. Branch and bound for piecewise linear neural network verification. J. Mach. Learn. Res. , 2020. [4] Francesco Croce and Matthias Hein. Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks. In International Conference on Machine Learning ,2020. [5] Jiequan Cui, Zhuotao Tian, Zhisheng Zhong, Xiaojuan Qi, Bei Yu, and Hanwang Zhang. Decoupled kullback-leibler divergence loss. In Advances in Neural Information Processing Systems , 2024. [6] Alessandro De Palma. Learning better certified models from empirically-robust teachers, 2026. URL https://arxiv.org/abs/2602.02626 .[7] Alessandro De Palma, Rudy Bunel, Krishnamurthy Dvijotham, M. Pawan Kumar, and Robert Stanforth. Ibp regularization for verified adversarial robustness via branch-and-bound. In 
+
+International Conference on Machine Learning , 2022. [8] Alessandro De Palma, Rudy Bunel, Krishnamurthy Dvijotham, M. Pawan Kumar, Robert Stan-forth, and Alessio Lomuscio. Expressive losses for verified robustness via convex combinations. In International Conference on Machine Learning , 2024. [9] Ruediger Ehlers. Formal verification of piece-wise linear feed-forward neural networks. Auto-mated Technology for Verification and Analysis , 2017. [10] Claudio Ferrari, Mark Niklas Mueller, Nikola Jovanovi´ c, and Martin Vechev. Complete verification via multi-neuron relaxation guided branch-and-bound. In International Conference on Learning Representations , 2022. [11] Micah Goldblum, Liam Fowl, Soheil Feizi, and Tom Goldstein. Adversarially robust distillation. In Association for the Advancement of Artificial Intelligence (AAAI) Conference on Artificial Intelligence , 2020. [12] Ian J. Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adver-sarial examples. In International Conference on Learning Representations , 2015. [13] Sven Gowal, Krishnamurthy Dvijotham, Robert Stanforth, Rudy Bunel, Chongli Qin, Jonathan Uesato, Relja Arandjelovic, Timothy Mann, and Pushmeet Kohli. On the effectiveness of interval bound propagation for training verifiably robust models. In Advances in Neural Information Processing Systems , 2018. 12 [14] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Delving deep into rectifiers: Surpassing human-level performance on imagenet classification. In International Conference on Computer Vision , 2015. [15] Geoffrey Hinton, Oriol Vinyals, and Jeff Dean. Distilling the knowledge in a neural network. In 
+
+Advances in Neural Information Processing Systems , 2015. [16] Nikola Jovanovi´ c, Mislav Balunovi´ c, Maximilian Baader, and Martin Vechev. On the paradox of certified training. Transactions on Machine Learning Research , 2022. [17] Guy Katz, Clark Barrett, David Dill, Kyle Julian, and Mykel Kochenderfer. Reluplex: An efficient SMT solver for verifying deep neural networks. In Computer Aided Verification ,volume 10426 of Lecture Notes in Computer Science , pages 97–117. Springer, 2017. [18] Diederik P. Kingma and Jimmy Ba. Adam: A method for stochastic optimization. In Interna-tional Conference on Learning Representations , 2015. [19] Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. [20] Ya Le and Xuan Yang. Tiny imagenet visual recognition challenge. CS 231N , 7(7):3, 2015. [21] Yann LeCun, Corinna Cortes, and Christopher J. C. Burges. MNIST handwritten digit database, 2010. URL http://yann.lecun.com/exdb/mnist .[22] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. In International Conference on Learning Representations , 2018. [23] Yuhao Mao, Mark Niklas Müller, Marc Fischer, and Martin Vechev. Connecting certified and adversarial training. In Advances in Neural Information Processing Systems , 2023. [24] Yuhao Mao, Mark Niklas Müller, Marc Fischer, and Martin Vechev. Understanding certified training with interval bound propagation. In International Conference on Learning Representa-tions , 2024. [25] Yuhao Mao, Stefan Balauca, and Martin Vechev. Ctbench: A library and benchmark for certified training. In International Conference on Machine Learning , 2025. [26] Matthew Mirman, Timon Gehr, and Martin Vechev. Differentiable abstract interpretation for provably robust neural networks. In International Conference on Machine Learning , 2018. [27] Mark Niklas Müller, Franziska Eckert, Marc Fischer, and Martin Vechev. Certified training: Small boxes are all you need. In International Conference on Learning Representations , 2023. [28] Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Köpf, Edward Yang, Zach DeVito, Martin Raison, Alykhan Tejani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, Junjie Bai, and Soumith Chintala. Pytorch: An imperative style, high-performance deep learning library. In Advances in Neural Information Processing Systems ,2019. [29] Zhouxing Shi, Yihan Wang, Huan Zhang, Jinfeng Yi, and Cho-Jui Hsieh. Fast certified robust training with short warmup. In Advances in Neural Information Processing Systems , 2021. [30] Gagandeep Singh, Timon Gehr, Markus Püschel, and Martin Vechev. An abstract domain for certifying neural networks. Proc. ACM Program. Lang. , 3(POPL), 2019. [31] Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Good-fellow, and Rob Fergus. Intriguing properties of neural networks. In International Conference on Learning Representations , 2014. [32] Vincent Tjeng, Kai Xiao, and Russ Tedrake. Evaluating robustness of neural networks with mixed integer programming. In International Conference on Learning Representations , 2019. [33] Florian Tramer, Nicholas Carlini, Wieland Brendel, and Aleksander Madry. On adaptive attacks to adversarial example defenses. In Advances in Neural Information Processing Systems , 2020. [34] Shiqi Wang, Huan Zhang, Kaidi Xu, Xue Lin, Suman Jana, Cho-Jui Hsieh, and J Zico Kolter. Beta-CROWN: Efficient bound propagation with per-neuron split constraints for complete and incomplete neural network verification. In Advances in Neural Information Processing Systems ,2021. 13 [35] Eric Wong and J. Zico Kolter. Provable defenses against adversarial examples via the convex outer adversarial polytope. In International Conference of Machine Learning , 2018. [36] Kaidi Xu, Zhouxing Shi, Huan Zhang, Yihan Wang, Kai-Wei Chang, Minlie Huang, Bhavya Kailkhura, Xue Lin, and Cho-Jui Hsieh. Automatic perturbation analysis for scalable certified robustness and beyond. Advances in Neural Information Processing Systems , 2020. [37] Kaidi Xu, Huan Zhang, Shiqi Wang, Yihan Wang, Suman Jana, Xue Lin, and Cho-Jui Hsieh. Fast and Complete: Enabling complete neural network verification with rapid and massively parallel incomplete verifiers. In International Conference on Learning Representations , 2021. [38] Bohang Zhang, Du Jiang, Di He, and Liwei Wang. Rethinking lipschitz neural networks and certified robustness: A boolean function perspective. In Advances in Neural Information Processing Systems , 2022. [39] Bohang Zhang, Du Jiang, Di He, and Liwei Wang. Boosting the certified robustness of l-infinity distance nets. In International Conference on Learning Representations , 2022. [40] Huan Zhang, Tsui-Wei Weng, Pin-Yu Chen, Cho-Jui Hsieh, and Luca Daniel. Efficient neural network robustness certification with general activation functions. In Advances in Neural Information Processing Systems , 2018. [41] Huan Zhang, Hongge Chen, Chaowei Xiao, Sven Gowal, Robert Stanforth, Bo Li, Duane Boning, and Cho-Jui Hsieh. Towards stable and efficient training of verifiably robust neural networks. In International Conference on Learning Representations , 2020. [42] Huan Zhang, Shiqi Wang, Kaidi Xu, Linyi Li, Bo Li, Suman Jana, Cho-Jui Hsieh, and J Zico Kolter. General cutting planes for bound-propagation-based neural network verification. In 
+
+Advances in Neural Information Processing Systems , 2022. [43] Minxing Zhang, Michael Backes, and Xiao Zhang. Generating less certain adversarial examples improves robust generalization. Transactions on Machine Learning Research , 2025. [44] Jianing Zhu, Jiangchao Yao, Bo Han, Jingfeng Zhang, Tongliang Liu, Gang Niu, Jingren Zhou, Jianliang Xu, and Hongxia Yang. Reliable adversarial distillation with unreliable teachers. In 
+
+International Conference on Learning Representations , 2022. [45] Bojia Zi, Shihao Zhao, Xingjun Ma, and Yu-Gang Jiang. Revisiting adversarial robustness distillation: Robust soft labels make student better. In International Conference on Computer Vision , 2021. 14 A Interval Bound Propagation (IBP) 
+
+IBP has been at the core of all recent state-of-the-art certified training methods [ 6, 7, 8 , 23 , 27 , 29 ]. Here, we formalise the bound propagation for a single layer, as proposed by Gowal et al. [13] . For an affine layer ( e.g ., convolutional or linear layer) represented by hk(zk−1) = W z k−1 + b, we can define the bound calculation as follows: 
+
+μk−1 = ¯zk−1 + zk−1
+
+2 , μk = W μ k−1 + b, (17) 
+
+rk−1 = ¯zk−1 − zk−1
+
+2 , rk = |W |rk−1, (18) 
+
+zk = μk − rk, ¯zk = μk + rk, (19) where μ denotes the centre of the interval box, r its radius, and zk, ¯zk denote lower and upper bounds of the layer output, respectively. When hk is an element-wise increasing activation function, 
+
+e.g ., ReLU, sigmoid, or tanh, we instead trivially propagate the bounds as zk = hk(zk−1) and 
+
+¯zk = hk(¯ zk−1). For ReLU networks, an unstable ReLU activation implies the ReLU activation may be either active or inactive given the input interval, i.e ., zk−1 < 0 < ¯zk−1. Hence, incomplete verifiers must over-approximate the possible activation outputs. Figure 3 compares the loose IBP box relaxation with the tighter convex hull relaxation for an unstable ReLU.   
+
+> z
+> ReLU( z)
+> zk−1¯zk−1
+> ¯zk
+> z
+> ReLU( z)
+> zk−1¯zk−1
+> ¯zk
+
+(a) IBP Relaxation (b) Convex Hull Figure 3: Comparison of IBP relaxation and the tighter convex hull relaxation. The shaded regions represent convex over-approximations of an unstable ReLU function. The dashed line represents the actual possible activation outputs. 
+
+## B Deferred Proofs of Theoretical Results 
+
+In this section, we provide proofs for each of the theoretical results from our methodology section (§3) of the main text. In each case, we restate the claim for the ease of the reader. 
+
+Proposition B.1 (Equivalence of AD and soft-label AT) . Let xadv be fixed, and let the teacher predictive distribution Pθt (x) be fixed. Then the AD objective: 
+
+LAD := KL( Pθt (x) ∥ Pθs (xadv )) , (20) is equal, up to an additive constant independent of the student parameters, to AT with soft teacher labels, namely: 
+
+Lsoft -AT := LCE (fθs (xadv ), P θt (x)) . (21) Moreover, both objectives induce identical backpropagation updates with respect to the student logits. In particular, for each class index i:
+
+∂LAD 
+
+∂z iθs
+
+= [ Pθs (xadv )] i − [Pθt (x)] i = ∂Lsoft -AT 
+
+∂z iθs
+
+. (22) 
+
+Proof. For brevity, we let ziθs := [ fθs (xadv )] i and P iθs := [ Pθs ]i denote the i-th entry of the raw logit outputs and predictive distributions of the student classifier, respectively. First, recall the derivative of 15 the softmax function: 
+
+∂P j
+
+∂z i =
+
+P i(1 − P i), i = j, 
+
+−P iP j , i̸ = j. (23) For ease of notation, we can rewrite this in terms of the Kronecker delta function: 
+
+∂P j
+
+∂z i = P j (δij − P i), where δij =
+
+1, i = j, 
+
+0, i̸ = j. (24) Now, we compare the derivatives of LAD and Lsoft -AT with respect to ziθs . Given that LAD =
+
+PCj=1 P jθt (x) · log 
+
+ P jθt (x)   
+
+> Pjθs (xadv )
+
+
+
+= PCj=1 P jθt (x) · log( P jθt (x)) − PCj=1 P jθt (x) · log( P jθs (xadv )) ,we note that the PCj=1 P jθt (x) · log( P jθt (x)) term is independent of student parameters, so: 
+
+∂LAD 
+
+∂z iθs
+
+= ∂∂z iθs
+
+−
+
+> C
+
+X
+
+> j=1
+
+P jθt (x) log( P jθs (xadv )) 
+
+ , (25) 
+
+= −
+
+> C
+
+X
+
+> j=1
+
+P jθt (x) 1
+
+P jθs (xadv )
+
+∂P jθs (xadv )
+
+∂z is
+
+, (26) 
+
+= −
+
+> C
+
+X
+
+> j=1
+
+P jθt (x)
+
+P jθs (xadv ) P jθs (xadv )( δij − P iθs (xadv )) , (27) 
+
+= −
+
+> C
+
+X
+
+> j=1
+
+P jθt (x)( δij − P iθs (xadv )) , (28) 
+
+= −P iθt (x) + P iθs (xadv )
+
+> C
+
+X
+
+> j=1
+
+P jθt (x), (29) 
+
+= P iθs (xadv ) − P iθt (x). (30) Finally, recall that Lsoft -AT = LCE (fθs (xadv ), P θt (x)) , and, 
+
+LCE (fθs (xadv ), P θt (x)) = −
+
+> C
+
+X
+
+> j=1
+
+P jθt (x) log( P jθs (xadv )) . (31) Hence, the result falls immediately from Equations (25) - (30) , and by extension, the two objectives must only differ by an additive constant independent of θs.
+
+Proposition B.2 (Analytical form of AD-CERT) . Let H(P ) and H(Q, P ) denote the entropy and cross entropy respectively for probability distributions P and Q. That is: 
+
+H(P ) = −
+
+> C
+
+X
+
+> i=1
+
+pi log( pi), H(Q, P ) = −
+
+> C
+
+X
+
+> i=1
+
+qi log( pi). (32) Then, LAD -CERT from Equation (10) can be re-written as: 
+
+LAD -CERT = (1 − α)H(Pθt (x), P θs (xadv )) + αLIBP − (1 − α)H(Pθt (x)) . (33) Therefore, up to a constant independent of θs, AD-CERT is a scalarisation between (i) a soft-label adversarial lower bound surrogate and (ii) a certified IBP upper bound. 16 Proof. The proof is immediate since we can write: 
+
+LKL (Pθt (x) ∥ Pθs (xadv )) = 
+
+> C
+
+X
+
+> i=1
+
+P iθt (x) · log P iθt (x)
+
+P iθs (xadv )
+
+!
+
+, (34) 
+
+=
+
+> C
+
+X
+
+> i=1
+
+P iθt (x) ·   log( P iθt (x)) − log( P iθs (xadv )) , (35) 
+
+= −
+
+> C
+
+X
+
+> i=1
+
+P iθt (x) log( P iθs (xadv )) + 
+
+> C
+
+X
+
+> i=1
+
+P iθt (x) log( P iθt (x)) , (36) 
+
+= H(Pθt (x), P θs (xadv )) − H(Pθt (x)) . (37) Hence, substituting this identity into Equation (10) gives: 
+
+LAD -CERT = (1 − α)H(Pθt (x), P θs (xadv )) + αLIBP − (1 − α)H(Pθt (x)) , (38) as required. 
+
+Lemma B.3. For AD, the optimal logit margin, ∆z∗ 
+
+> ij
+
+, between any two classes i, j is: 
+
+∆z∗ 
+
+> ij
+
+= log 
+
+ [Pθt (x)] i
+
+[Pθt (x)] j
+
+
+
+. (39) Moreover, standard AT has no finite minimiser, and its infimum 0 is approached only as 
+
+[fθs (xadv )] y − [fθs (xadv )] j → +∞, ∀j̸ = y.
+
+Proof. First note that, from Equation (30) , LAD is minimised iff Pθs = Pθt , or equivalently, 
+
+P iθs (xadv ) = P iθt (x) ∀ i ∈ { 1, . . . , C }. Rewriting this using the definition of softmax, we have: 
+
+ezis
+
+PCj=1 ezjs
+
+= P iθt (x) ∀ i ∈ { 1, . . . , C }, (40) where ziθs = [ fθs (xadv )] i, which implies: 
+
+zis = log 
+
+P iθt (x) ·
+
+> C
+
+X
+
+> j=1
+
+ezjs
+
+ = log  P iθt (x) + log 
+
+
+
+> C
+
+X
+
+> j=1
+
+ezjs
+
+ (41) Then, we can write the optimal logit for a given class i as zi∗ 
+
+> s
+
+:= log( P iθt (x)) + c for some shared constant, c ∈ R. Since softmax is invariant to adding a constant to each logit, the optimal logit margin between any two classes i and j is: 
+
+∆z∗ 
+
+> ij
+
+:= zi∗ 
+
+> s
+
+− zj∗ 
+
+> s
+
+= log( P iθt (x)) − log( P jθt (x)) = log P iθt (x)
+
+P jθt (x)
+
+!
+
+, (42) which is finite since P iθt (x) > 0 ∀ i.In contrast, standard AT loss is defined by LAT = − log( P yθs (xadv )) , with y denoting the index of the true class label here. Hence, we have: 
+
+LAT = − log ezys
+
+PCj=1 ezjs
+
+!
+
+= log 
+
+
+
+> C
+
+X
+
+> j=1
+
+ezjs −zys
+
+ = log 
+
+1 + X 
+
+> j̸=y
+
+ezjs −zys
+
+ . (43) For any finite logits, we have ezjs −zys > 0, and hence 
+
+1 + X 
+
+> j̸=y
+
+ezjs −zys > 1 = ⇒ L AT > 0. (44) Therefore, LAT has no finite minimiser. Since we have established that LAT > 0 for all finite logits, its global minimum is never attained. However, we can show that its infimum is exactly 0. Let 17 m = min   
+
+> j̸=y
+
+(zys − zjs ) denote the minimum logit margin of the correct class over all incorrect classes. We can bound the loss as follows: 
+
+0 < LAT = log 
+
+1 + X 
+
+> j̸=y
+
+e−(zys −zjs )
+
+ ≤ log  1 + ( C − 1) e−m , (45) where C is the total number of classes. Taking the limit as the minimum margin grows to infinity (m → +∞), we have: 
+
+lim  
+
+> m→+∞
+
+log  1 + ( C − 1) e−m = log(1 + 0) = 0 . (46) Thus, inf LAT = 0 . This infimum is not reachable for any finite network weights, but is approached asymptotically as the correct-class logit margins tend to positive infinity. 
+
+## C Additional Results 
+
+In this section, we present additional theoretical results complementary to those in the main text. 
+
+Proposition C.1 (Teacher-margin transfer in logit space) . Assume the teacher fθt predicts the true class y on the natural input x. Then, if: 
+
+∥fθs (xadv ) − fθt (x)∥∞ < 12 min   
+
+> j̸=y
+
+[zθt (x, y )] j , (47) it follows that argmax 
+
+> i
+
+[fθs (xadv )] i = y.
+
+Proof. First, define δ := ∥fθs (xadv ) − fθt (x)∥∞. Then, −δ ≤ [fθs (xadv )] i − [fθt (x)] i ≤ δ, for any class index i. Which means, [fθs (xadv )] y ≥ [fθt (x)] y − δ and [fθs (xadv )] i ≤ [fθt (x)] i + δ for any i̸ = y. Moreover: 
+
+=⇒ [fθs (xadv )] y − [fθs (xadv )] i ≥ [fθt (x)] y − [fθt (x)] i − 2δ, (48) 
+
+=⇒ [zθs (xadv , y )] i ≥ [zθt (x, y )] i − 2δ. (49) Hence, if δ < 12 min i̸=y [zθt (x, y )] i, then clearly [zθt (x, y )] i − 2δ > 0, which implies 
+
+[zθs (xadv , y )] i > 0 and argmax 
+
+> i
+
+[fθs (xadv )] i = y.
+
+Lemma C.2. Let LAT be bounded by some U ∈ R and U > 0, i.e ., 
+
+LAT = LCE (fθs (xadv ), y ) = − log( P yθs ) ≤ U, (50) where y ∈ { 1, . . . , C } is the true label index and P yθs = [softmax( fθs (xadv ))] y . Then, for every 
+
+j̸ = y, the corresponding true-vs-false logit margin satisfies 
+
+zys − zjs ≥ − log( eU − 1) . (51) 
+
+Proof. Notice that AT loss can be written as: 
+
+LAT = − log ezys
+
+PCk=1 ezks
+
+!
+
+= log 
+
+1 + X 
+
+> j̸=y
+
+ezjs −zys
+
+ . (52) Now assume that LAT ≤ U . Then, 
+
+log 
+
+1 + X 
+
+> j̸=y
+
+ezjs −zys
+
+ ≤ U, (53) 
+
+=⇒ 1 + X 
+
+> j̸=y
+
+ezjs −zys ≤ eU , (54) 
+
+=⇒ X 
+
+> j̸=y
+
+ezjs −zys ≤ eU − 1. (55) 18 Since each term in the sum is non-negative, it follows that for every j̸ = y, we have: 
+
+ezjs −zys ≤ eU − 1, (56) 
+
+=⇒ zjs − zys ≤ log( eU − 1) , (57) 
+
+=⇒ zys − zjs ≥ − log( eU − 1) , ∀j̸ = y, (58) as required. 
+
+## D Additional Experiments 
+
+In this section, we evaluate the sensitivity of AD-CERT and CC-DIST [ 6] to teachers trained under different adversarial training methods and schedules. The sensitivity results from Table 5 suggest that the choice of teacher can affect the stan-dard and adversarial accuracy of the resulting students, but the certified accuracy is comparatively stable across teacher variants, particularly for AD-CERT. Here, short-cycle refers to the training procedure described in De Palma [6] , where we use the SGD optimiser with momentum set to 0.9, a 30-epoch training cycle with a cyclic learning rate, which linearly increases from 0 to 0.2 during the first half of the training, and then decreases back to 0. Long-cycle corresponds to the standard AT settings used in the CTBench library [ 25 ], where PGD [ 22 ] and EDAC [ 43 ] models are trained for 240 epochs using the Adam optimiser. Short-cycle teachers tend to slightly improve the certified results of AD-CERT and CC-DIST, which coincides with the observations of De Palma [6] in their work. In general, CC-DIST appears to benefit more noticeably from short-cycle teachers, with AD-CERT being slightly less sensitive. Nevertheless, AD-CERT remains consistently stronger in certified and AA accuracy across all teacher protocols, while CC-DIST tends to achieve slightly higher standard accuracy in most settings, consistent with previous observations in §4.2. Table 5: Sensitivity analysis of AD-CERT and CC-DIST on CIFAR-10 at ε = 8255 with different teacher training protocols.                                           
+
+> Teacher Teach. Std. [%] Teach. AA [%] Method Std. [%] AA [%] Cert. [%] PGD-Long 78.71 35.93 AD-CERT 53.17 35.95 35.21
+> CC-DIST 52.35 34.80 33.75 PGD-Short 76.14 42.55 AD-CERT 53.90 36.52 35.61
+> CC-DIST 54.44 36.05 34.81 EDAC-Long 78.95 42.48 AD-CERT 53.49 36.46 35.60
+> CC-DIST 54.32 35.69 34.55 EDAC-Short 73.55 41.99 AD-CERT 53.69 36.69 35.84
+> CC-DIST 54.33 35.76 34.68
+
+## E PSEUDO -CODE 
+
+In this section, we outline the pseudocode for the training procedure of AD-CERT (§3.1) in Algorithm 1. 
+
+## F EXPERIMENTAL SETUP 
+
+F.1 Dataset 
+
+We conduct experiments on MNIST [ 21 ], CIFAR-10 [ 19 ], and TinyImageNet [ 20 ]. These datasets are open-source and freely available, with unspecified licenses. We follow the data preprocessing directly available in the CTBench library [ 25 ]. No preprocessing is applied to MNIST. CIFAR-10 and TinyImageNet are normalised using the dataset mean and standard deviation, and random horizontal flips are applied. For CIFAR-10, additional random cropping to 32 × 32 is applied after zero-padding each image by 2 pixels on all sides. For TinyImageNet, random cropping to 64 × 64 is applied 19 Algorithm 1 AD-CERT Training Procedure 
+
+Require: PGD teacher fθt , data D, perturbation radius ϵtrain , epochs Nwarm , N , IBP coefficient α 
+
+> 1:
+
+Initialisation  
+
+> 2:
+
+Initialise student fθs with parameters θs ▷ Shi et al. [29] initialisation  
+
+> 3:
+
+Detach teacher fθt gradients from training  
+
+> 4:
+
+Training  
+
+> 5:
+
+for epoch = 1 to N do  
+
+> 6:
+
+if epoch ≤ Nwarm then  
+
+> 7:
+
+Update ϵcurr and αcurr ▷ ramp-up to ϵtrain , α  
+
+> 8:
+
+end if  
+
+> 9:
+
+for (x, y ) in D do  
+
+> 10:
+
+Compute xadv via PGD attack  
+
+> 11:
+
+Compute IBP bounds z∆ 
+
+> θs
+
+(x, y ) using ϵcurr  
+
+> 12:
+
+Ldist ← KL (softmax( fθt (x)) ∥ softmax( fθs (xadv )))  
+
+> 13:
+
+Lrobust ← L CE (−z∆ 
+
+> θs
+
+(x, y ), y ) 
+
+> 14:
+
+Ltotal ← (1 − αcurr )Ldist + αcurr Lrobust  
+
+> 15:
+
+Update θs ← θs − η∇θs Ltotal  
+
+> 16:
+
+end for  
+
+> 17:
+
+end for  
+
+> 18:
+
+return fθs
+
+after zero-padding each image by 4 pixels on all sides. We train on the corresponding training sets and certify on the validation sets, following common practice in the certified training literature [6, 8, 23, 25, 27, 29]. 
+
+F.2 Model Architectures 
+
+We use the standard CNN7 architecture, a convolutional network consisting of seven convolutional and linear layers. Each layer, except for the final linear layer, is followed by Batch Normalisation and a ReLU activation. This architecture has been shown to perform consistently well across settings [25 , 29 ], and is therefore widely adopted in the certified training literature [ 6, 8, 23 , 25 , 27 , 29 ]. For TinyImageNet, we double the stride of the final convolutional layer to reduce computational cost. 
+
+F.3 Training Details Implementation We implement AD-CERT in CTBench using PyTorch. The training loss follows the CTBench decomposition into a natural loss, a robust loss, and regularisation terms. For AD-CERT, the robust loss is given by Equation 10, where the AD term uses a fixed adversarially trained teacher, and the certified term is computed with IBP bounds. Unless stated otherwise, the teacher and student use the same CNN7 architecture. 
+
+Initialisation Adversarial teacher models are initialised by Kaiming uniform [ 14 ], while certified student models are initialised using the IBP initialisation from Shi et al. [29]. 
+
+Training Schedule We follow the standard CTBench training schedule. Certified models are first trained for one epoch with ε = 0 , and then use a warm-up phase where ε is smoothly increased from 0 to the target value. The warmup phase is 20 epochs for MNIST with ε = 0 .1 and ε = 0 .3,80 epochs for CIFAR-10 with ε = 2255 , 120 epochs for CIFAR-10 with ε = 8255 , and 80 epochs for TinyImageNet with ε = 1255 . We use the IBP regularisation proposed by Shi et al. [29] , with weight 
+
+0.5 on MNIST and CIFAR-10, and 0.2 on TinyImageNet, during warmup. In total, we train for 70 epochs on MNIST, 160 epochs on CIFAR-10 with ε = 2255 , 240 epochs on CIFAR-10 with ε = 8255 ,and 160 epochs on TinyImageNet. 
+
+Optimisation In general, we follow the exact optimisation setup from CTBench. We use Adam [18 ] with a learning rate of 5 × 10 −4. The learning rate is decayed by a factor of 0.2 at epochs 50 and 20 60 for MNIST, epochs 120 and 140 for CIFAR-10 with ε = 2255 , epochs 200 and 220 for CIFAR-10 with ε = 8255 , and epochs 120 and 140 for TinyImageNet. We use a batch size of 256 for MNIST and 128 for CIFAR-10 and TinyImageNet. Gradients are clipped to 10 in ℓ2 norm before every optimiser step. No weight decay is applied, and L1 regularisation is applied only to the weights of linear and convolutional layers. Batch normalisation follows the CTBench population-statistics setting. We apply Stochastic Weight Averaging (SWA) using the settings in accordance with MTL-IBP’s training setup in CTBench since both methods use an unsound robust objective, making direct model selection on the robust loss impractical. 
+
+Teacher Models We use the pre-trained PGD checkpoints provided by CTBench as teacher models, except for CIFAR-10 with ε = 8255 , where our ablation teacher sensitivity analysis from Table 5 showed that a 30-epoch short-cycle PGD model trained with a cyclic learning-rate schedule exactly as described by De Palma [6] alongside an EDAC [ 43 ] step size of 0.3, gives marginally better performance. All teachers are kept fixed during AD-CERT training. 
+
+Tuning of Hyperparameters In general, we perform minimal hyperparameter tuning due to the computational overhead of running complete verification. We ran initial experiments following the exact hyperparameters and settings used in CTBench [ 25 ] for the MTL-IBP [ 8 ] method. For the tuning of α, we use a manually selected search range guided by some reported quantities in the CTBench library, namely, unstable ReLU ratio, IBP certification rate, and standard, adversarial, and certified accuracy. These metrics help indicate whether the objective places too much or too little weight on the IBP branch, allowing us to adjust α accordingly. We find that slightly reducing 
+
+α is beneficial on MNIST at ε = 0 .1 and on TinyImageNet at ε = 1255 . For TinyImageNet, we also observe improvements from increasing wrob and enlarging the PGD attack region used in the empirical branch. The final hyperparameters used for AD-CERT across all settings are reported in Table 6. Table 6: Best hyperparameters for AD-CERT across dataset settings.                                                
+
+> MNIST CIFAR-10 TinyImageNet Hyperparameter 0.10.32255 8255 1255
+> L1regularisation 1×10 −61×10 −63×10 −60.0 5×10 −5
+> wrob 0.7 1.0 1.0 1.0 0.9 IBP coefficient ( α)7.5×10 −30.5 0.01 0.5 5×10 −3
+> Train ε0.2 0.3 1255 8255 1255
+> PGD steps 10 1811Attack range scale 1.0 1.0 2.0 1.0 2.0
+
+F.4 Certification Details 
+
+Certification is performed within CTBench [ 25 ] using its wrapper for the α, β -CROWN verifica-tion library. For each example, we first check whether the model predicts the correct clean label. Incorrectly classified examples are marked as uncertified. For correctly classified examples, we run AUTO ATTACK [ 4 ] and if an adversarial counterexample is not found, we attempt certification using a sequence of progressively stronger verifiers. Namely, IBP [ 13 ], CROWN [ 40 ], α-CROWN [ 37 ], and finally, the complete α, β -CROWN branch-and-bound verifier [ 34 ]. Each stage is only invoked when the previous stage fails to certify the example. We use a timeout of 400 seconds for the α, β -CROWN branch-and-bound stage and an overall timeout of 1000 seconds per example. 
+
+F.5 Computational Setup & Cost 
+
+Table 7 reports the training and certification runtime of AD-CERT under the training and certification setups described in Sections F.3 and F.4, respectively. All experiments were run on an internal cluster with access to NVIDIA V100, A100, A100 MIG slices, and H100 GPUs. Training jobs were run on either 2g.20GB or 3g.40GB A100 MIG slices, using 8 CPU cores. For certification, we used MIG slices in most cases, but occasionally used full A100 or H100 GPUs for harder settings, such as CIFAR-10 with ε = 2255 and TinyImageNet. For clarity, Table 7 reports runtimes for experiments 21 run on a 3g.40GB A100 MIG slice. Training experiments used 64GB of RAM, while certification experiments used 128GB. The training times range from ∼ 1 hour on the simplest MNIST setting, to 
+
+∼ 1 day on TinyImageNet. Certification times range from ∼ 12 minutes to over 3 days. Additionally, we report the training cost complexity associated with an AD-CERT student, assuming a pre-trained teacher, compared to previous adversarial and certified training methods [6, 8 , 13 , 22 , 23 , 27 , 43 ] in Table 8. On a high level, AD-CERT corresponds to performing IBP and PGD, with the small added cost of a single forward pass of a teacher model that is detached from training. Note that Table 8 is a direct extrapolation of the table provided in the original CTBench paper [25] with added entries for AD-CERT and CC-DIST. Table 7: Training and certification time for AD-CERT on different datasets and ε.                                   
+
+> Dataset εTrain Time (seconds) Certification Time (seconds) MNIST 0.11.20 ×10 47.67 ×10 2
+> 0.34.08 ×10 35.32 ×10 4
+> CIFAR-10
+> 2255 2.66 ×10 42.61 ×10 58255 1.59 ×10 43.58 ×10 4
+> TinyImageNet 1255 8.97 ×10 41.54 ×10 5
+
+Table 8: Detailed breakdown of training costs for each certified training method.                                                 
+
+> Method Training cost per batch Details Standard TForward + backward PGD / EDAC (M+ 1) TMattack steps + standard loss computation IBP 2TLower and upper bounds propagation SABR (M+ 2) TIBP + PGD MTL-IBP (M+ 2) TIBP + PGD AD-CERT †(M+ 2) T+FIBP + PGD + detached teacher forward CC-DIST †(M+ 2) T+FhCC-IBP + PGD + detached teacher forward on feature split TAPS 2t+K(M+ 1)( T−t)IBP for first split and PGD for second split for each class STAPS 2t+K(M+ 1)( T−t) + ( M+ 1) TTAPS + PGD Legend
+> TTime cost for standard training, including forward + backward pass
+> FTime cost for a forward pass through the teacher network
+> FhTime cost for a forward pass through the teacher feature extractor network
+> MNumber of adversarial attack steps, including repeats
+> KNumber of classes
+> tTime cost for standard training in the first network split in TAPS
+> †Added entries from original table in CTBench [25].
+
+## G CC-IBP Distillation (CC-DIST) 
+
+De Palma [6] formulate the CC-DIST loss function as a linear combination of an expressive robust distillation loss in the feature space, Rfθ (α; x, y ), and their prior expressive loss formulation, CC-IBP [ 8]. Let fθ : Rd 7 → RC be a classification model as expressed earlier in §2. Then, we can rewrite 
+
+fθ as a composition of a feature extractor hθ : Rd 7 → Rk and a classification head gθ : Rk 7 → RC ,yielding fθ = gθ ◦ hθ (note that we abuse notation of θ for brevity). Then, the expressive robust distillation loss over the feature space is defined by: 
+
+Rfθ (α; x, y ) := 
+
+> k
+
+X
+
+> i=1
+
+max 
+
+n [hθ (α; x)] i − [hθt (x)] i
+
+2 , ([ hθ (α; x)] i − [hθt (x)] i)2o
+
+, (59) where hθ (α; x) := (1 − α)hθ (xadv ) + αh θ (x) and hθ (α; x) := (1 − α)hθ (xadv ) + αh θ (x), with 
+
+hθ (x) and hθ (x) denoting the IBP upper and lower bounds of hθ (x), respectively. Note that hθt
+
+denotes the feature extractor of a pre-trained PGD teacher model. 22 Now, let β be the distillation coefficient, determining the relative weight of Rfθ (α; x, y )
+
+from Equation (59) . Omitting any regularisation, the training loss for CC-DIST takes the following form: 
+
+LCC-DIST  
+
+> fθ
+
+(α, β ; x, y ) := LCC-IBP  
+
+> fθ
+
+(α; x, y ) + β Rfθ (α; x, y ), (60) where LCC-IBP  
+
+> fθ
+
+(α; x, y ) is the CC-IBP loss from De Palma et al. [8] . Denoting k as the dimensionality of the feature space, β = 5 /k was used for the majority of experiments. 23
