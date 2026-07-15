@@ -6,57 +6,36 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-14
-- 运行时间：2026-07-14 21:27:27 UTC
+- 最新运行日期：2026-07-15
+- 运行时间：2026-07-15 19:57:51 UTC
 - 运行状态：成功
-- 本次总论文数：12
-- 精读区：6
-- 速读区：6
+- 本次总论文数：5
+- 精读区：3
+- 速读区：2
 
 ### 今日简报（AI）
-今日深挖 12 篇安全前沿论文，重点攻克大模型微调后的安全恢复与多语言防御难题。
-满分力作 HyperSafe 实现了推理侧的安全补救，Minionese 则揭示了多语言安全性的底层机理。
-- 详情：[/202607/14/README](/202607/14/README)
+今日深挖大模型安全漏洞，重点发布了针对 Agent 注入攻击的检测方案及模型危险认知的量化评估。
+推荐关注
+- 详情：[/202607/15/README](/202607/15/README)
 
 ### 精读区论文标签
-1. [HyperSafe: Inference-Time Safety Recovery for Fine-Tuned Language Models](/202607/14/2607.11475v1-hypersafe-inference-time-safety-recovery-for-fine-tuned-language-models)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：推理阶段安全恢复与安全修复
-2. [Minionese: Comprehensive Benchmark and Mechanistic Study of Multilingual LLM Safety](/202607/14/2607.10112v1-minionese-comprehensive-benchmark-and-mechanistic-study-of-multilingual-llm-safety)  
+1. [PVDetector: Detecting Prompt Injection Attacks on Purpose-Specific LLM Agents through Policy-Violation Concept Analysis](/202607/15/2607.12624v1-pvdetector-detecting-prompt-injection-attacks-on-purpose-specific-llm-agents-through-policy-violation-concept-analysis)  
    标签：评分：9.0/10、query:jb-def
-   evidence：多语言越狱基准测试及安全对齐的机理研究
-3. [When Are Sparse Feature Interventions Actually Localized? Matched Evaluation for SAE-Based Safety Control](/202607/14/2607.10226v1-when-are-sparse-feature-interventions-actually-localized-matched-evaluation-for-sae-based-safety-control)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：基于SAE的安全控制和运行时安全干预
-4. [NetInjectBench: Benchmarking Indirect Prompt Injection in Tool-Using Large Language Model Agents for Network Operations](/202607/14/2607.10490v1-netinjectbench-benchmarking-indirect-prompt-injection-in-tool-using-large-language-model-agents-for-network-operations)  
+   evidence：通过隐藏激活空间分析检测大模型智能体的提示注入攻击
+2. [Silent Alarm: A J-Space Protocol for Comparing Danger Recognition Across Models and Quantization Levels](/202607/15/2607.12792v1-silent-alarm-a-j-space-protocol-for-comparing-danger-recognition-across-models-and-quantization-levels)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：比较危险识别与越狱鲁棒性的协议
+3. [Isolation as a First-Class Principle for LLM-Agent System Safety: Concepts, Taxonomy, Challenges and Future Directions](/202607/15/2607.12406v1-isolation-as-a-first-class-principle-for-llm-agent-system-safety-concepts-taxonomy-challenges-and-future-directions)  
    标签：评分：8.0/10、query:llm
-   evidence：大模型智能体间接提示注入基准测试与缓解
-5. [MJ: Multi-turn LLM Jailbreaking via Decomposed Credit Assignment](/202607/14/2607.11070v1-mj-multi-turn-llm-jailbreaking-via-decomposed-credit-assignment)  
-   标签：评分：8.0/10、query:llm
-   evidence：多轮LLM越狱和自动化红队测试
-6. [AMT-X: Phase-Structured Multi-Turn Red-Teaming with Checklist-Gated Evaluation](/202607/14/2607.11151v1-amt-x-phase-structured-multi-turn-red-teaming-with-checklist-gated-evaluation)  
-   标签：评分：8.0/10、query:llm
-   evidence：用于大语言模型安全评估的多轮红队测试
+   evidence：针对提示注入和工具滥用的安全原则
 
 ### 速读区论文标签
-1. [Operational Reframing and Approval-Framed Delegation in Multi-Agent LLM Safety](/202607/14/2607.07097v1-operational-reframing-and-approval-framed-delegation-in-multi-agent-llm-safety)  
+1. [The Effect of Multi-Lingual and Keyword Adversarial Injection on LLM Relevance Judgment](/202607/15/2607.10080v1-the-effect-of-multi-lingual-and-keyword-adversarial-injection-on-llm-relevance-judgment)  
    标签：评分：7.0/10、query:llm
-   evidence：多智能体大语言模型系统的安全评估与有害意图重构
-2. [Which Neurons Detect Malicious Code? A Probing Study of LLM Security Knowledge](/202607/14/2607.10221v1-which-neurons-detect-malicious-code-a-probing-study-of-llm-security-knowledge)  
-   标签：评分：7.0/10、query:llm
-   evidence：大语言模型安全知识与恶意代码检测的机理可解释性研究
-3. [ANCHOR: Automated Alignment Auditing for CLI Agents on Real-World Harm](/202607/14/2607.10455v1-anchor-automated-alignment-auditing-for-cli-agents-on-real-world-harm)  
-   标签：评分：7.0/10、query:llm
-   evidence：自动化对齐审计和CLI智能体压力测试
-4. [Large Language Models in Misinformation Ecosystems: Misuse, Defense, and Vulnerability](/202607/14/2607.10402v1-large-language-models-in-misinformation-ecosystems-misuse-defense-and-vulnerability)  
+   evidence：研究了大语言模型中的跨语言提示注入攻击
+2. [When Binaries Talk Back: Representation-Confusion Attacks on LLM-Assisted Reverse Engineering](/202607/15/2607.12507v1-when-binaries-talk-back-representation-confusion-attacks-on-llm-assisted-reverse-engineering)  
    标签：评分：6.0/10、query:llm
-   evidence：LLM在虚假信息中的滥用、防御和漏洞
-5. [World Models as Adversaries: Multi-Agent Self-Play Fine-Tuning for Robust Motion Planning](/202607/14/2607.10630v1-world-models-as-adversaries-multi-agent-self-play-fine-tuning-for-robust-motion-planning)  
-   标签：评分：6.0/10、query:jb-def
-   evidence：鲁棒规划的对抗性训练
-6. [When Local Monitors Miss Compositional Harm: Diagnosing Distributed Backdoors in Multi-Agent Systems](/202607/14/2607.11751v1-when-local-monitors-miss-compositional-harm-diagnosing-distributed-backdoors-in-multi-agent-systems)  
-   标签：评分：6.0/10、query:llm
-   evidence：诊断多智能体大模型系统中的分布式后门
+   evidence：针对LLM辅助逆向工程的对抗性攻击
 
 
 <div class="dpr-home-promo-card">
