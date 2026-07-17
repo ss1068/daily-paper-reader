@@ -6,47 +6,52 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-16
-- 运行时间：2026-07-16 20:31:57 UTC
+- 最新运行日期：2026-07-17
+- 运行时间：2026-07-17 19:46:27 UTC
 - 运行状态：成功
-- 本次总论文数：9
-- 精读区：3
+- 本次总论文数：10
+- 精读区：4
 - 速读区：6
 
 ### 今日简报（AI）
-今日深度复盘 9 篇前沿论文，核心聚焦 AI 安全评估框架与智能体实时防御护栏。
-- 详情：[/202607/16/README](/202607/16/README)
+今日聚焦大模型安全防御，深度解析了从微调数据风险识别到实时人工干预的 10 项前沿研究。
+重点推荐 DataShield 通过子空间对齐精准识别风险微调数据，以及 SAFETY SENTRY 提出的“执行-询问-拒绝”路由机制以实现情境感知的人工干预。
+建议关注模型在工具调用与图像生成中的对齐冲突，通过引入多维防御机制提升复杂应用场景下的系统安全性。
+- 详情：[/202607/17/README](/202607/17/README)
 
 ### 精读区论文标签
-1. [Adversarial Prompting Framework for AI Safety Assessment](/202607/16/2607.13453v1-adversarial-prompting-framework-for-ai-safety-assessment)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：用于AI安全评估与韧性测试的对抗性提示词框架
-2. [SingGuard-NSFA: Extensible Guardrails for Agentic AI via Generative Reasoning and Real-Time Classification](/202607/16/2607.13081v1-singguard-nsfa-extensible-guardrails-for-agentic-ai-via-generative-reasoning-and-real-time-classification)  
+1. [DataShield: Uncovering Risky Fine-Tuning Data Across LLMs Through Consensus Subspace Alignment](/202607/17/2607.15081v1-datashield-uncovering-risky-fine-tuning-data-across-llms-through-consensus-subspace-alignment)  
    标签：评分：9.0/10、query:jb-def
-   evidence：针对提示注入和操作威胁的智能体AI安全护栏框架
-3. [Agent Skill Security: Threat Models, Attacks, Defenses, and Evaluation](/202607/16/2607.13987v1-agent-skill-security-threat-models-attacks-defenses-and-evaluation)  
+   evidence：识别削弱安全能力的风险微调样本
+2. [SAFETY SENTRY: Context-Aware Human Intervention via EXECUTE-ASK-REFUSE Routing](/202607/17/2607.13594v1-safety-sentry-context-aware-human-intervention-via-execute-ask-refuse-routing)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：LLM智能体的安全防护模型
+3. [Context Contamination in LLM Analysis of Network Security Logs: Poison with Passive Prompt Injection and Mitigation Evaluation](/202607/17/2607.14493v1-context-contamination-in-llm-analysis-of-network-security-logs-poison-with-passive-prompt-injection-and-mitigation-evaluation)  
    标签：评分：8.0/10、query:llm
-   evidence：大模型智能体技能的威胁模型、攻击与防御
+   evidence：被动提示注入漏洞及其缓解评估
+4. [MemPoison: Uncovering Persistent Memory Threats and Structural Blind Spots in LLM Agents](/202607/17/2607.14651v1-mempoison-uncovering-persistent-memory-threats-and-structural-blind-spots-in-llm-agents)  
+   标签：评分：8.0/10、query:llm
+   evidence：大语言模型智能体中的内存投毒与对抗性注入
 
 ### 速读区论文标签
-1. [Can Watermarking Techniques Help Prevent LLM Model Stealing?](/202607/16/2607.10794v1-can-watermarking-techniques-help-prevent-llm-model-stealing)  
-   标签：评分：7.0/10、query:llm
-   evidence：针对大模型窃取攻击的防御方法
-2. [Falsifiable Release Gates for Self-Improving Systems](/202607/16/2607.13070v1-falsifiable-release-gates-for-self-improving-systems)  
+1. [ToolAlignBench: Investigating Alignment Conflicts in Tool-Calling Enabled LLMs](/202607/17/2607.14285v1-toolalignbench-investigating-alignment-conflicts-in-tool-calling-enabled-llms)  
    标签：评分：7.0/10、query:jb-def
-   evidence：针对AI运行时的可证伪发布门控和安全关键属性检查
-3. [Securing LLMs in the Wild: Privacy and Security Challenges at the Edge](/202607/16/2607.13088v1-securing-llms-in-the-wild-privacy-and-security-challenges-at-the-edge)  
+   evidence：工具调用大语言模型中的安全对齐冲突
+2. [FlowGuard: From Signals to Evidence for MCP Security Detection](/202607/17/2607.14754v1-flowguard-from-signals-to-evidence-for-mcp-security-detection)  
    标签：评分：7.0/10、query:llm
-   evidence：边缘端大模型的安全与隐私挑战
-4. [Traffic-Aware Randomized Smoothing for LLM-Based Network Intrusion Detection](/202607/16/2607.13801v1-traffic-aware-randomized-smoothing-for-llm-based-network-intrusion-detection)  
+   evidence：大语言模型智能体工具交互的安全检测
+3. [Introspective Attention Modulation for Safe Text-to-Image Generation](/202607/17/2607.14945v1-introspective-attention-modulation-for-safe-text-to-image-generation)  
    标签：评分：7.0/10、query:jb-def
-   evidence：针对大模型安全系统的认证防御与随机平滑
-5. [Rethinking Penetration Testing for AI-Enabled Systems: From Resource Compromise to Behavioral Objective Violation](/202607/16/2607.14006v1-rethinking-penetration-testing-for-ai-enabled-systems-from-resource-compromise-to-behavioral-objective-violation)  
-   标签：评分：7.0/10、query:llm
-   evidence：针对AI系统的渗透测试与行为违规评估
-6. [Cross-Cutting Security Analysis of LLM-Generated Code via Metamorphic Testing and Association Rule Mining](/202607/16/2607.12089v1-cross-cutting-security-analysis-of-llm-generated-code-via-metamorphic-testing-and-association-rule-mining)  
+   evidence：通过注意力调制实现安全护栏
+4. [UTS at ELOQUENT 2026 Voight-Kampff: structural shifts in AI writing bypass state-of-the-art detectors](/202607/17/2607.13565v1-uts-at-eloquent-2026-voight-kampff-structural-shifts-in-ai-writing-bypass-state-of-the-art-detectors)  
+   标签：评分：6.0/10、query:jb-def
+   evidence：研究在对抗性微调中幸存的规避攻击
+5. [GeoDetect: Geometric Adversarial Detection for VLPs](/202607/17/2607.14737v1-geodetect-geometric-adversarial-detection-for-vlps)  
    标签：评分：6.0/10、query:llm
-   evidence：大模型生成代码的漏洞安全分析
+   evidence：视觉语言模型的对抗性检测
+6. [Random Logit Scaling: Defending Deep Neural Networks Against Black-Box Score-Based Adversarial Example Attacks](/202607/17/2607.14921v1-random-logit-scaling-defending-deep-neural-networks-against-black-box-score-based-adversarial-example-attacks)  
+   标签：评分：6.0/10、query:jb-def
+   evidence：防御对抗样本攻击
 
 
 <div class="dpr-home-promo-card">
