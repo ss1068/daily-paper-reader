@@ -6,51 +6,37 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-23
-- 运行时间：2026-07-23 21:23:11 UTC
+- 最新运行日期：2026-07-24
+- 运行时间：2026-07-24 21:05:05 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：5
-- 速读区：5
+- 本次总论文数：5
+- 精读区：1
+- 速读区：4
 
 ### 今日简报（AI）
-今日聚焦大模型安全攻防前沿，深度解析 DARWIN 进化框架与智能体数据防泄露技术。
-重点关注 DARWIN
-- 详情：[/202607/23/README](/202607/23/README)
+今日聚焦大模型安全攻防，深度解析了越狱提示词的几何构型及智能体对 Web 防御体系的冲击。
+重点关注扰动越狱提示词背后的几何特征分析，以及 LLM Agent 在突破传统自动化机器人防御方面的最新实测表现。
+建议关注大模型安全知识的自动化测试工具，警惕 AI 智能体演进带来的自动化攻击新风险。
+- 详情：[/202607/24/README](/202607/24/README)
 
 ### 精读区论文标签
-1. [DARWIN: Evolving Jailbreak Adversary and Guardrail for LLM Safety Evaluation and Protection](/202607/23/2607.19829v1-darwin-evolving-jailbreak-adversary-and-guardrail-for-llm-safety-evaluation-and-protection)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：针对越狱攻击持续更新大模型护栏的演化框架
-2. [Data Leakage Prevention in Agentic Applications via Preemptive Hardening](/202607/23/2607.18847v1-data-leakage-prevention-in-agentic-applications-via-preemptive-hardening)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：针对提示注入的预部署加固与验证流水线
-3. [JailMeter: An Evidence-Based Evaluation Framework for Jailbreak Attacks on Large Language Models](/202607/23/2607.19424v1-jailmeter-an-evidence-based-evaluation-framework-for-jailbreak-attacks-on-large-language-models)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：大语言模型越狱攻击评估框架
-4. [ChannelGuard: Safe Models Do Not Compose into Safe Multi-Agent Systems](/202607/23/2607.19430v1-channelguard-safe-models-do-not-compose-into-safe-multi-agent-systems)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：多智能体系统的防御策略与安全护栏
-5. [Defense Against LLM Backdoors using Critical Neuron Isolation Pruning](/202607/23/2607.19894v1-defense-against-llm-backdoors-using-critical-neuron-isolation-pruning)  
+1. [Geometric Configurations of Perturbed Jailbreak Prompts](/202607/24/2607.20581v1-geometric-configurations-of-perturbed-jailbreak-prompts)  
    标签：评分：8.0/10、query:llm
-   evidence：利用神经元剪枝防御大模型后门攻击
+   evidence：大语言模型中扰动越狱提示词的内部表示研究
 
 ### 速读区论文标签
-1. [Operational Hallucination and Safety Drift in AI Agents](/202607/23/2607.18366v1-operational-hallucination-and-safety-drift-in-ai-agents)  
-   标签：评分：7.0/10、query:llm
-   evidence：大模型智能体中的安全漂移与对齐失效
-2. [CPInj: Uncovering Prompt Injection Risks in Textual Collaborative Prompt Optimization](/202607/23/2607.18622v1-cpinj-uncovering-prompt-injection-risks-in-textual-collaborative-prompt-optimization)  
-   标签：评分：7.0/10、query:llm
-   evidence：协作优化中的提示注入漏洞
-3. [OpenSkillRisk: Benchmarking Agent Safety When Using Real-World Risky Third-Party Skills](/202607/23/2607.20121v1-openskillrisk-benchmarking-agent-safety-when-using-real-world-risky-third-party-skills)  
-   标签：评分：7.0/10、query:llm
-   evidence：评估智能体安全性和安全漏洞
-4. [Shared Vulnerabilities in Robustness-Optimized Defenses: One Breach Exposes the Family](/202607/23/2607.18339v1-shared-vulnerabilities-in-robustness-optimized-defenses-one-breach-exposes-the-family)  
-   标签：评分：6.0/10、query:jb-def
-   evidence：对抗鲁棒性优化防御中的共享漏洞
-5. [Adversarial Frontiers: Minimum-Norm Attack Ensembles for Robustness Evaluation](/202607/23/2607.19855v1-adversarial-frontiers-minimum-norm-attack-ensembles-for-robustness-evaluation)  
+1. [Towards an Automated Test of LLM Security Knowledge](/202607/24/2607.18496v1-towards-an-automated-test-of-llm-security-knowledge)  
    标签：评分：6.0/10、query:llm
-   evidence：对抗鲁棒性评估
+   evidence：大语言模型安全知识与漏洞的自动化测试
+2. [Towards an Automated Test of LLM Security Knowledge](/202607/24/2607.18496v2-towards-an-automated-test-of-llm-security-knowledge)  
+   标签：评分：6.0/10、query:llm
+   evidence：大语言模型安全知识与漏洞的自动化测试
+3. [Broken Gates: Re-evaluating Web Bot Defenses in the Age of LLM Agents](/202607/24/2607.18659v1-broken-gates-re-evaluating-web-bot-defenses-in-the-age-of-llm-agents)  
+   标签：评分：6.0/10、query:llm
+   evidence：用于网络机器人攻击的大语言模型智能体及防御评估
+4. [From Evaluation to Optimisation: Hierarchy-Aware Training Signals for CWE Prediction in Python](/202607/24/2607.21069v1-from-evaluation-to-optimisation-hierarchy-aware-training-signals-for-cwe-prediction-in-python)  
+   标签：评分：6.0/10、query:llm
+   evidence：针对代码大语言模型的安全加固与对抗测试
 
 
 <div class="dpr-home-promo-card">
