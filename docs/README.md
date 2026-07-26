@@ -6,43 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-25
-- 运行时间：2026-07-25 20:56:12 UTC
+- 最新运行日期：2026-07-26
+- 运行时间：2026-07-26 20:44:26 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：4
-- 速读区：3
+- 本次总论文数：1
+- 精读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日深度复盘 7 篇前沿论文，聚焦 LLM Agent 的权限隔离架构与跨代理攻击溯源技术。
-重点推荐 Twin Agent 的上下文残差压缩方案，以及针对异步多代理攻击的链路追踪新方法。
-建议开发者在追求多代理协作效率的同时，警惕 KV 缓存复用及联邦学习中的潜在安全隐患。
-- 详情：[/202607/25/README](/202607/25/README)
+今日聚焦长程智能体安全，深度解析 JANUS 框架如何预见并规避潜在风险。
+该研究通过前瞻性建模，显著提升了智能体在复杂长任务中的安全性与风险感知能力。
+推荐关注 AI 安全与具身智能的读者重点研读其风险预测机制，以提升系统的鲁棒性。
+- 详情：[/202607/26/README](/202607/26/README)
 
 ### 精读区论文标签
-1. [Twin Agent: Context Residual Compression for Privilege Separated Agents](/202607/25/2607.19595v1-twin-agent-context-residual-compression-for-privilege-separated-agents)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：通过权限隔离缓解提示注入
-2. [Cross-Agent Campaign Attribution: Linking Asynchronous Attacks Across LLM Agents](/202607/25/2607.18826v1-cross-agent-campaign-attribution-linking-asynchronous-attacks-across-llm-agents)  
-   标签：评分：8.0/10、query:llm
-   evidence：关联跨LLM智能体的异步攻击
-3. [Dual Adversarial Fine-tuning for Enhancing Robustness of Large Vision Language Model](/202607/25/2607.18958v1-dual-adversarial-fine-tuning-for-enhancing-robustness-of-large-vision-language-model)  
+1. [JANUS: Foreseeing Latent Risk for Long-Horizon Agent Safety](/202607/26/2607.19913v1-janus-foreseeing-latent-risk-for-long-horizon-agent-safety)  
    标签：评分：8.0/10、query:jb-def
-   evidence：通过对抗微调增强视觉语言模型的鲁棒性
-4. [GuardianAgentBench: Where Agents Fail and How to Guard Them](/202607/25/2607.20982v1-guardianagentbench-where-agents-fail-and-how-to-guard-them)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：防御LLM智能体对抗攻击的基准测试
+   evidence：大模型代理的安全措施与护栏
 
 ### 速读区论文标签
-1. [HijackKV: New Threat in Position-Independent KV Cache Reuse](/202607/25/2607.19957v1-hijackkv-new-threat-in-position-independent-kv-cache-reuse)  
-   标签：评分：7.0/10、query:llm
-   evidence：大语言模型中的KV缓存劫持威胁
-2. [The safety failures we are not instrumenting: a perspective on hidden safety-critical challenges in modern AI systems](/202607/25/2607.19292v1-the-safety-failures-we-are-not-instrumenting-a-perspective-on-hidden-safety-critical-challenges-in-modern-ai-systems)  
-   标签：评分：6.0/10、query:llm
-   evidence：关于AI系统中隐藏的安全关键挑战的观点
-3. [FedLSG: LLM-Enhanced Semantic Calibration for Federated Graph Backdoor Defense](/202607/25/2607.19674v1-fedlsg-llm-enhanced-semantic-calibration-for-federated-graph-backdoor-defense)  
-   标签：评分：6.0/10、query:llm
-   evidence：LLM增强的联邦图后门防御
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">

@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-07-26 <!--dpr-date:20260726-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/26/2607.19913v1-janus-foreseeing-latent-risk-for-long-horizon-agent-safety" data-sidebar-item="{&quot;title&quot;: &quot;JANUS: Foreseeing Latent Risk for Long-Horizon Agent Safety&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.19913v1-janus-foreseeing-latent-risk-for-long-horizon-agent-safety&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;大模型代理的安全措施与护栏&quot;}">JANUS: Foreseeing Latent Risk for Long-Horizon Agent Safety</a>
   * 2026-07-25 <!--dpr-date:20260725-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/25/2607.19595v1-twin-agent-context-residual-compression-for-privilege-separated-agents" data-sidebar-item="{&quot;title&quot;: &quot;Twin Agent: Context Residual Compression for Privilege Separated Agents&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.19595v1-twin-agent-context-residual-compression-for-privilege-separated-agents&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;通过权限隔离缓解提示注入&quot;}">Twin Agent: Context Residual Compression for Privilege Separated Agents</a>
