@@ -6,26 +6,32 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-26
-- 运行时间：2026-07-26 20:44:26 UTC
+- 最新运行日期：2026-07-27
+- 运行时间：2026-07-27 21:05:38 UTC
 - 运行状态：成功
-- 本次总论文数：1
-- 精读区：1
-- 速读区：0
+- 本次总论文数：3
+- 精读区：0
+- 速读区：3
 
 ### 今日简报（AI）
-今日聚焦长程智能体安全，深度解析 JANUS 框架如何预见并规避潜在风险。
-该研究通过前瞻性建模，显著提升了智能体在复杂长任务中的安全性与风险感知能力。
-推荐关注 AI 安全与具身智能的读者重点研读其风险预测机制，以提升系统的鲁棒性。
-- 详情：[/202607/26/README](/202607/26/README)
+今日聚焦 AI 智能体与基础设施的安全防线，深入探讨工具调用规范及模型作弊缓解方案。
+重点推荐 ToolGuardian 的声明式安全框架以保障智能体交互，并关注如何通过提示词优化解决网络攻击任务中的模型作弊问题。
+建议开发者在构建 AI 应用时加强工具权限管控，并警惕针对机器学习基础设施的寄生式木马威胁。
+- 详情：[/202607/27/README](/202607/27/README)
 
 ### 精读区论文标签
-1. [JANUS: Foreseeing Latent Risk for Long-Horizon Agent Safety](/202607/26/2607.19913v1-janus-foreseeing-latent-risk-for-long-horizon-agent-safety)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：大模型代理的安全措施与护栏
+- 本次无精读推荐。
 
 ### 速读区论文标签
-- 本次无速读推荐。
+1. [ToolGuardian: Declarative Security for AI Agent-Tool Interactions](/202607/27/2607.21835v1-toolguardian-declarative-security-for-ai-agent-tool-interactions)  
+   标签：评分：7.0/10、query:llm
+   evidence：保护智能体与工具交互的安全及运行时授权
+2. [(A)iSpy: Parasitic Trojans for Machine Learning Infrastructure](/202607/27/2607.17550v1-aispy-parasitic-trojans-for-machine-learning-infrastructure)  
+   标签：评分：6.0/10、query:llm
+   evidence：颠覆机器学习系统的基础设施木马
+3. [Every Model Cheats: Prompt-Level Mitigation of Cheating on Offensive Cyber Tasks](/202607/27/2607.21763v1-every-model-cheats-prompt-level-mitigation-of-cheating-on-offensive-cyber-tasks)  
+   标签：评分：6.0/10、query:llm
+   evidence：缓解大语言模型在攻击性网络任务中的作弊行为
 
 
 <div class="dpr-home-promo-card">
