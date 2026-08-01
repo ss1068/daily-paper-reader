@@ -6,46 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-07-31
-- 运行时间：2026-07-31 20:20:32 UTC
+- 最新运行日期：2026-08-01
+- 运行时间：2026-08-01 21:03:38 UTC
 - 运行状态：成功
-- 本次总论文数：8
-- 精读区：6
-- 速读区：2
+- 本次总论文数：1
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日聚焦大模型安全对齐与防御，深度解析了超网络生成 LoRA 及多模态统一安全锚点等 8 篇前沿成果。
-重点推荐 Compliance2LoRA 实现的按需安全对齐，以及针对多语言多模态 LVLM 的统一防御框架 One Anchor。
-建议警惕音频注入等隐蔽攻击对多模态 Agent 的威胁，并关注联邦学习中零效用损失的隐私保护方案
-- 详情：[/202607/31/README](/202607/31/README)
+今日聚焦联邦学习安全，深入剖析通过模型对比对齐检查抵御后门攻击的新策略。
+核心结论指出，利用模型对比学习中的对齐特征可有效识别恶意更新，显著提升分布式训练的鲁棒性。
+建议关注隐私计算与模型安全的读者，重点研究对比学习在异常检测中的创新应用。
+- 详情：[/202608/01/README](/202608/01/README)
 
 ### 精读区论文标签
-1. [Compliance2LoRA: On-Demand Safety Alignment on Arbitrary Policy Subsets via Hypernetwork-Generated LoRA Adapters](/202607/31/2607.27594v1-compliance2lora-on-demand-safety-alignment-on-arbitrary-policy-subsets-via-hypernetwork-generated-lora-adapters)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：通过LoRA适配器进行按需安全对齐
-2. [One Anchor for All: Unified Multilingual and Multimodal Safety Alignment for LVLMs](/202607/31/2607.27917v1-one-anchor-for-all-unified-multilingual-and-multimodal-safety-alignment-for-lvlms)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：多模态大语言模型的安全对齐
-3. [Safeguards Based on Copyable Context Cannot Provide Reliable Safety for LLMs](/202607/31/2607.27951v1-safeguards-based-on-copyable-context-cannot-provide-reliable-safety-for-llms)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：当前大模型安全防护的局限性及新方案
-4. [MIND: Lightweight and Effective Memory Injection Defense for LLM Agents via Intent-Aware Information Bottleneck](/202607/31/2607.28103v1-mind-lightweight-and-effective-memory-injection-defense-for-llm-agents-via-intent-aware-information-bottleneck)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：大语言模型智能体内存注入攻击防御
-5. [Asymmetric Collapse in Model Merging: When Refusal Over- writes Recognition](/202607/31/2607.27240v1-asymmetric-collapse-in-model-merging-when-refusal-over--writes-recognition)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：评估合并后LLM的越狱拒绝率
-6. [RoguePrompt: Dual-Layer Encoding for Self-Reconstruction to Circumvent LLM Moderation](/202607/31/2607.27373v1-rogueprompt-dual-layer-encoding-for-self-reconstruction-to-circumvent-llm-moderation)  
-   标签：评分：8.0/10、query:llm
-   evidence：绕过安全机制的越狱攻击
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Piggybacking on Perception: Stealthy Concurrent Audio Prompt Injections against Multimodal LLM Agents](/202607/31/2607.28165v1-piggybacking-on-perception-stealthy-concurrent-audio-prompt-injections-against-multimodal-llm-agents)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对多模态大语言模型的音频提示注入攻击
-2. [TriShield: Zero-Utility-Loss Defense Against Privacy Backdoors in Federated Language Model Fine-Tuning via Orthogonal Gradient Projection and Optimizer State Entanglement](/202607/31/2607.27940v1-trishield-zero-utility-loss-defense-against-privacy-backdoors-in-federated-language-model-fine-tuning-via-orthogonal-gradient-projection-and-optimizer-state-entanglement)  
+1. [Defending Against Backdoor Attacks via Alignment Checking in Model-Contrastive Federated Learning](/202608/01/2607.26933v1-defending-against-backdoor-attacks-via-alignment-checking-in-model-contrastive-federated-learning)  
    标签：评分：7.0/10、query:llm
-   evidence：联邦LLM微调中针对隐私后门的防御
+   evidence：防御联邦学习中的后门攻击
 
 
 <div class="dpr-home-promo-card">

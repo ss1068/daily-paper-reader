@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-08-01 <!--dpr-date:20260801-->
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/01/2607.26933v1-defending-against-backdoor-attacks-via-alignment-checking-in-model-contrastive-federated-learning" data-sidebar-item="{&quot;title&quot;: &quot;Defending Against Backdoor Attacks via Alignment Checking in Model-Contrastive Federated Learning&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.26933v1-defending-against-backdoor-attacks-via-alignment-checking-in-model-contrastive-federated-learning&quot;, &quot;score&quot;: &quot;7.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;llm&quot;}], &quot;evidence&quot;: &quot;防御联邦学习中的后门攻击&quot;}">Defending Against Backdoor Attacks via Alignment Checking in Model-Contrastive Federated Learning</a>
   * 2026-07-31 <!--dpr-date:20260731-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202607/31/2607.27594v1-compliance2lora-on-demand-safety-alignment-on-arbitrary-policy-subsets-via-hypernetwork-generated-lora-adapters" data-sidebar-item="{&quot;title&quot;: &quot;Compliance2LoRA: On-Demand Safety Alignment on Arbitrary Policy Subsets via Hypernetwork-Generated LoRA Adapters&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2607.27594v1-compliance2lora-on-demand-safety-alignment-on-arbitrary-policy-subsets-via-hypernetwork-generated-lora-adapters&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;通过LoRA适配器进行按需安全对齐&quot;}">Compliance2LoRA: On-Demand Safety Alignment on Arbitrary Policy Subsets via Hypernetwork-Generated LoRA Adapters</a>
