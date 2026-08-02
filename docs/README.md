@@ -6,26 +6,22 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-01
-- 运行时间：2026-08-01 21:03:38 UTC
+- 最新运行日期：2026-08-02
+- 运行时间：2026-08-02 20:44:39 UTC
 - 运行状态：成功
-- 本次总论文数：1
+- 本次总论文数：0
 - 精读区：0
-- 速读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-今日聚焦联邦学习安全，深入剖析通过模型对比对齐检查抵御后门攻击的新策略。
-核心结论指出，利用模型对比学习中的对齐特征可有效识别恶意更新，显著提升分布式训练的鲁棒性。
-建议关注隐私计算与模型安全的读者，重点研究对比学习在异常检测中的创新应用。
-- 详情：[/202608/01/README](/202608/01/README)
+> 今日无新推荐，系统未产出可展示论文。
+- 详情：[/202608/02/README](/202608/02/README)
 
 ### 精读区论文标签
 - 本次无精读推荐。
 
 ### 速读区论文标签
-1. [Defending Against Backdoor Attacks via Alignment Checking in Model-Contrastive Federated Learning](/202608/01/2607.26933v1-defending-against-backdoor-attacks-via-alignment-checking-in-model-contrastive-federated-learning)  
-   标签：评分：7.0/10、query:llm
-   evidence：防御联邦学习中的后门攻击
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">
