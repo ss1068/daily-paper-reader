@@ -1,0 +1,837 @@
+Title: Mitigating Backdoors via Decoy Shortcuts and Knowledge Decoupling
+
+URL Source: https://arxiv.org/pdf/2608.00732v1
+
+Published Time: Tue, 04 Aug 2026 00:55:40 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+# Mitigating Backdoors via Decoy Shortcuts and Knowledge Decoupling 
+
+## Zixuan Zhu 1,2 , Rui Wang 1,2∗ , Lihua Jing 1,2 and Jinwen Zhong 1,21Institute of Information Engineering, Chinese Academy of Sciences 
+
+> 2
+
+## School of Cyber Security, University of Chinese Academy of Sciences 
+
+## {zhuzixuan, wangrui, jinglihua, zhongjinwen }@iie.ac.cn 
+
+## Abstract 
+
+Backdoor attacks pose a serious threat to deep neu-ral networks, especially when training relies on third-party data, allowing adversaries to inject ma-licious behaviors through data poisoning. In this work, we reveal that backdoor behaviors tend to be absorbed by a simpler parallel branch when jointly trained with the main network. Motivated by this insight, we propose Trapping and Removing (TR) ,a simple yet effective training-time defense that in-troduces a lightweight shortcut branch as a “hon-eypot” to trap backdoor knowledge. After train-ing, backdoors can be removed by discarding the shortcut, without requiring any additional data. To further enhance backdoor isolation while maintain-ing benign performance, we design a knowledge decoupling strategy with entropy-based weight as-signment, encouraging poisoned samples to flow through the honeypot while guiding the main net-work to focus on benign learning. In addition, we introduce an automatic shortcut generation strategy to improve generalization across model architec-tures. Extensive experiments on four benchmark datasets and five model architectures demonstrate that our approach effectively mitigates a wide range of backdoor attacks while preserving performance on benign data. Code: github.com/Zixuan-Zhu/TR. 
+
+## 1 Introduction 
+
+With large-scale training data and powerful computational resources, deep neural networks (DNNs) have achieved re-markable performance and are widely deployed in real-world applications [He et al. , 2016a; Wang et al. , 2020; Zhang et al. , 2020]. However, the high cost of collecting training data often drives developers to rely on third-party datasets, inad-vertently exposing models to backdoor threats. Backdoor attackers can manipulate models by poisoning a small subset of training data, embedding a specific trigger 
+
+and assigning a corresponding target label . During training, the model implicitly learns this malicious association, caus-ing any input containing the trigger to be misclassified as the 
+
+> ∗
+
+Corresponding author Pre -trained 
+
+> model
+> Randomly initialized
+> model
+
+Figure 1: t-SNE visualizations of poisoned samples in the feature space produced by ResNet-18 models: pre-trained on ImageNet (left) vs. randomly initialized (right). 
+
+target label at inference time. Deploying backdoored mod-els can have severe consequences, especially in safety-critical applications such as autonomous driving. Prior work indi-cates that backdoors, once implanted, are difficult to erase or unlearn [Yu et al. , 2025], making training-time countermea-sures particularly important. PBE [Mu et al. , 2023] and Neural Cleanse [Wang et al. ,2019] show that backdoors tend to form shortcut connec-tions in the model, directly associating trigger patterns with target labels. These methods exploit this property to de-tect and erase backdoors after training. Inspired by this, we are motivated to explore whether a decoy shortcut can be explicitly introduced during training to trap backdoor knowledge as it forms . Several studies [Tang et al. , 2023; Liu et al. , 2023] explore backdoor defense in NLP by confin-ing backdoor knowledge within shallow layers or lightweight models, thereby preventing the main network from internal-izing it. These approaches are primarily designed for scenar-ios where attackers fine-tune pre-trained clean models with poisoned data. In contrast, backdoor injection in image clas-sification is typically performed during training from scratch. To illustrate this difference, Figure 1 compares feature dis-tributions of poisoned samples crafted by BadNets [Gu et al. , 2017] on CIFAR-10 [Alex, 2009], under both pre-trained and randomly initialized models. In the left subfigure (pre-trained), poisoned samples cluster in a sparse and relatively isolated region, suggesting a degree of separation from be-nign ones. In contrast, in the right subfigure (from-scratch), poisoned and benign samples appear highly entangled, mak-ing separation more challenging and limiting the effective-ness of NLP-oriented defenses in this setting. arXiv:2608.00732v1 [cs.LG] 1 Aug 2026 In our experiments, we find that backdoor knowledge can be readily captured by a simple parallel branch when train-ing from scratch, as demonstrated in Section 4.1. Building on this observation, we propose a novel defense mechanism, 
+
+Trapping and Removing (TR) , that protects networks from backdoor attacks by trapping all backdoor knowledge within a dedicated “honeypot” branch. This honeypot is introduced prior to training and implemented as a lightweight shortcut running parallel to the original backbone. In early epochs, the shortcut can effectively capture backdoor knowledge, al-beit along with a few benign knowledge. To better focus its learning on backdoor knowledge and direct the original net-work to solely learn benign knowledge in subsequent train-ing, we design a knowledge decoupling strategy equipped with an entropy-based weight assignment module, which dy-namically guides poisoned samples toward learning through the shortcut branch while benign samples are processed by the original network. In this manner, the backdoor can be effectively removed by discarding the shortcut after training without resorting to any additional data, while maintaining high performance on benign data. To facilitate practical de-ployment, we further introduce an adaptive shortcut gener-ation strategy that automatically tailors the shortcut to the backbone network. The main contributions of this paper are as follows: • We reveal an inherent characteristic of backdoor attacks: backdoor knowledge tends to be learned through a sim-pler path during the early stages of training. • Building on this insight, we propose TR , a training-time defense based on decoy shortcuts and knowledge decou-pling, which enables clean model training under back-door attacks without any additional data and generalizes to both training-from-scratch and fine-tuning attacks. • We design an adaptive strategy to automatically generate shortcuts for backbone networks, enhancing generaliza-tion and facilitating practical deployment. • We evaluate our method on multiple datasets and mod-els against ten backdoor attacks, showing robust perfor-mance and outperforming ten state-of-the-art defenses. 
+
+## 2 Related Work 
+
+2.1 Backdoor Attack and Defense 
+
+Backdoor Attack. Based on the attack strategy, poisoning-based backdoor attacks can be broadly classified into non-optimized and optimized attacks. Non-optimized attacks [Lv 
+
+et al. , 2023; Gao et al. , 2024] craft poisoned samples be-fore training and distribute them to victims, often via third-party datasets. Early methods [Gu et al. , 2017; Chen et al. ,2017] used simple, visible triggers, while later works such as WaNet [Nguyen and Tran, 2021] and Dynamic [Nguyen and Tran, 2020] introduced imperceptible or sample-specific trig-gers. To evade manual inspection, clean-label variants [Barni 
+
+et al. , 2019; Wu et al. , 2025] embed triggers into benign samples under the target class. Optimized attacks [Li et al. , 2021c; Cheng et al. , 2024] instead generate and refine poisoned samples during the victim model’s training pro-cess. These methods often rely on additional losses or co-trained trigger generators to enhance stealth. IBA [Li et al. ,2021c] explicitly encourages backdoor invisibility in feature space, while LOTUS [Cheng et al. , 2024] leverages partition-specific training to control the backdoor behavior more pre-cisely. Optimized attacks require control over the model training process, which is beyond the scope of this paper. 
+
+Backdoor Defense. Backdoor inhibiting [Zhu et al. , 2023; Yu et al. , 2025] and erasing [Li et al. , 2021b; Liu et al. , 2018] are two widely used defense strategies. Inhibiting-based de-fenses aim to suppress backdoor formation during training by modifying the training process. For example, CBD [Zhang et al. , 2023] applies causal theory to prevent learning the back-door path, DBD [Huang et al. , 2022] decouples the training process, and ASD [Gao et al. , 2023] continuously divides the training data. Erasing-based defenses focus on purify-ing poisoned models after backdoor training and typically require benign samples. FP [Liu et al. , 2018] prunes low-activation neurons and fine-tunes the model, while NAD [Li 
+
+et al. , 2021b] performs fine-tuning followed by knowledge distillation. The defense proposed in this paper falls into the inhibiting-based category. 
+
+2.2 Honeypot and Shortcut in Backdoor Defense 
+
+Several works adopt similar concepts of honeypots or short-cuts for backdoor defense, which differ from our approach. SSFT [Yang et al. , 2023] erases backdoors by removing skip connections in ResNets and finetuning with 10% benign sam-ples. T&R [Wang et al. , 2022] baits the backdoor into a clas-sification head and replaces it with another head finetuned on benign samples. DPoE [Liu et al. , 2023] and [Tang et al. , 2023] target NLP tasks, using shallow layers to absorb backdoor knowledge while preventing deeper layers from learning it. DPoE further combines this with a Product-of-Experts framework to isolate clean behavior. However, in NLP, backdoor injection is typically implemented by fine-tuning pre-trained clean models with poisoned data, where benign and backdoor knowledge are naturally decoupled, making defense more manageable. In contrast, we address the more challenging training-from-scratch injection, where benign and backdoor knowledge are entangled. Besides, we introduce a parallel shortcut branch as the honeypot, which is effective not only against training-from-scratch attacks but also against fine-tuning attacks. 
+
+2.3 Knowledge Decoupling 
+
+Feature decoupling [Wang et al. , 2021; Yang and Yang, 2022] is a representative of knowledge decoupling, aiming to sep-arate feature representations into independent components, minimize redundancy, and improve the model’s ability to learn more discriminative information. For example, DeAOT [Yang and Yang, 2022] decouples object-agnostic and object-specific features for better propagating annotations in semi-supervised video object segmentation. FDTrack [Jin et al. ,2023] applies feature decoupling to balance the conflicting feature requirements for detection and re-identification in multi-object tracking. The specific implementation and ob-jectives of knowledge decoupling can vary depending on the task. In this paper, we propose to decouple the benign and poisoned knowledge during backdoor training for defending. (a) BA and ASR of two branches under five attacks Shortcut Branch  Original Branch 
+
+> (b) t-SNE visualization of poisoned samples in the feature spaces of two branches (epoch 1) Figure 2: Visualization of learning behaviors of original and shortcut branches under attacks.
+
+## 3 Preliminaries 
+
+3.1 Poisoning-based Backdoor Attacks 
+
+We consider poisoning-based backdoor attacks in image clas-sification. Let D = {(xi, y i)}Ni=1 be the training set with 
+
+N samples, where each image xi ∈ { 0, 1, . . . , 255 }C×H×W
+
+and label yi ∈ { 0, . . . , K −1}. Here, K is the number of classes, and H, W , C denote image height, width, and chan-nels. In a backdoor attack, the attacker selects a subset of D
+
+and applies a modification function G(·) to generate poisoned samples: Dm = {(x′, y t)|x′ = G(x), (x, y ) ∈ D \ D b},where Db contains the remaining benign samples and yt is the target label. The resulting poisoned dataset is Dp = Dm ∪D b,which victim users use unknowingly to train their models. At test time, the attacker triggers misclassification by applying 
+
+G(·). The poisoning rate is defined as r = |D m||D| .
+
+3.2 Threat Model 
+
+Attacker’s Capability. We consider a common threat sce-nario involving third-party datasets, where an attacker can ar-bitrarily modify the training data before releasing it to victim users, but has no access to information beyond the dataset it-self, such as the model architecture or loss functions. The attacker’s objective is to cause the trained model to predict a predefined target label for triggered inputs while maintain-ing correct predictions on benign inputs. We further consider adaptive attack scenarios in Appendix C, where the attacker is aware of the existence of our defense .
+
+Defender’s Capability. The defender is assumed to have full control over the training process, but no prior knowl-edge of the backdoor and no access to any additional samples. Whether the training dataset is poisoned is also unknown to the defender. The defense objective is to prevent the trained model from predicting triggered samples as the target label while preserving accuracy on benign data. 
+
+## 4 Method 
+
+4.1 Distinct Learning Behaviors of Dual Branches under Backdoor Attacks 
+
+In this subsection, we analyze the distinct learning behaviors of the original and shortcut branches under backdoor attacks and discuss their inherent mechanisms. 
+
+Settings. We conduct experiments on CIFAR-10 using a modified WRN-16-1 [Zagoruyko, 2016] architecture, aug-mented with a two-layer shortcut that directly connects the input to the classifier. During training, the final prediction is computed as the average of the outputs from both the short-cut and original branches (i.e., equal weights of 0.5). Fig-ure 2a reports the benign accuracy (BA) and attack success rate (ASR) of both branches under five different attacks dur-ing the early training epochs. In addition, Figure 2b visu-alizes the feature distributions of BadNets-poisoned samples produced by the two branches after a single epoch. More de-tailed experimental settings can be found in Appendix A.3. 
+
+Results. As shown in Figure 2a, the shortcut branch ex-hibits higher ASR but lower BA than the original branch during early training. This disparity arises from intrinsic differences between benign and poisoned samples: benign samples contain complex, diverse feature patterns better cap-tured by the deeper original branch, whereas poisoned sam-ples share similar trigger patterns and require only a few neurons to associate with the target label [Liu et al. , 2018]. Our theoretical analysis ( Appendix B) further confirms that this structural asymmetry induces a gradient focusing effect (||∇ θh || ≫ ||∇ θo || ) for poisoned samples. This mechanism results in a pronounced simplicity bias, where the shortcut establishes a dominant gradient flow to preferentially capture backdoor knowledge. Figure 2b further corroborates this: in the shortcut branch’s feature space, most poisoned samples form a tight cluster while clean samples are relatively scat-tered; conversely, in the original branch’s space, clean sam-ples of the same class form coherent clusters, and poisoned samples are more dispersed—often near their ground-truth classes. These results suggest that backdoor knowledge tends to be learned by the simpler shortcut, while benign knowledge is primarily captured by the more complex original branch. 
+
+4.2 Adaptive Shortcut Generation 
+
+As Figure 3 illustrates, our defense method consists of three steps. First, we add a simple honeypot shortcut that runs parallel to the original backbone before training. The mod-ified network is denoted as {So, S h, S c}, where So is the original backbone, Sh is the honeypot shortcut, and Sc is the classifier. Next, we train the modified network on the poisoned dataset, carefully decoupling the knowledge be-tween the original branch {So, S c} and the shortcut branch Step1  
+
+> Add Honeypot Shortcut
+> Benign samples Original features
+> Train set
+> Classifier
+
+𝑳 𝑪   
+
+> …
+> (Epoch t)
+> …
+> (Epoch t)
+> Shortcut features
+> …
+> (Epoch t -1)
+> Prototypes
+> 01K-1
+> …
+> (Epoch t -1)
+> Prototypes
+
+𝑳 𝒉 
+
+𝑳 𝒈 
+
+𝑳 𝒅𝒑𝒇  
+
+> …
+> …
+> …
+> …
+> Class 0 K-1
+> Original prediction
+> Shortcut prediction
+
+𝑳 𝒅𝒑𝒑  Entropy -based  
+
+> Weight
+> Assignment
+
++
+
+𝜔 𝑜 
+
+𝜔 ℎ       
+
+> …
+> …
+> …
+> …
+> Class 0 K-1
+> Final prediction
+> Step2
+> Train with Knowledge Decoupling
+> Step3
+> Remove Honeypot Shortcut
+> Original backbone
+> Honeypot shortcut
+> Classifier
+> Benign knowledge flow
+> Backdoor knowledge
+> flow
+> …Class
+> 0
+> …Class
+> 1
+> …Class
+> K-1
+> …
+> Poisoned samples
+> (target label 0)
+> ……
+> …
+> …
+> …
+> Class 0 K-1
+> Original backbone
+> Honeypot shortcut
+> Classifier
+> Channel &Size
+> 01K-1
+
+Figure 3: Our defense pipeline comprises three steps. First, we add a simple honeypot shortcut that runs parallel to the original backbone. Next, we train the model on the poisoned dataset while decoupling the knowledge between the original backbone and the honeypot shortcut. This enables the honeypot to capture backdoor knowledge while the original backbone retains only benign knowledge. Finally, after training, we erase the backdoor by removing the honeypot shortcut from the model. 
+
+{Sh, S c}, enabling the shortcut to stabilize with backdoor-related information while allowing the original network to re-tain only benign knowledge. Finally, the backdoor can be eas-ily erased by simply removing the shortcut from the model, without affecting the original network’s benign performance. We construct the honeypot shortcut as a direct path from the input to the final classifier. Specifically, each 2× down-sampling operation in the backbone is replaced with a 3 × 3
+
+convolution of stride 2, while matching the corresponding channel dimensions. For instance, two convolution blocks suffice for WRN-16-1, which has two downsampling opera-tions, while ResNet-18 requires three. More details on short-cut designs for CNNs and ViTs are provided in Appendix A.4. To help the shortcut capture backdoor knowledge more quickly and effectively, we incorporate a spatial attention mechanism to highlight key regions. Let f ∈ Rh×w×c be the feature map, where h, w, and c denote height, width, and channels. Following [Woo et al. , 2018], the attention map 
+
+M ∈ Rh× w is computed by applying a convolution to f with a single output channel. We then employ the attention map to highlight informative regions of the feature maps: 
+
+f ′ = ReLU (M ) ⊗ f, (1) where ⊗ indicates element-wise multiplication and f ′ repre-sents the output of the attention module. For poisoned samples, spatial attention can quickly focus on trigger patterns due to their similarity and strong corre-lation with the target label. Consequently, each convolu-tion block in the shortcut is structured as Conv-Attention-BN-ReLU to enhance its ability to capture backdoor knowledge. 
+
+4.3 Entropy-based Weight Assignment 
+
+In the modified network, we define the final prediction P (x)
+
+as a weighted combination of the outputs from both two branches: 
+
+P (x) = wo · Po(x) + wh · Ph(x), (2) where 
+
+wo + wh = 1 ,Po(x) = sof tmax (Sc(So(x))) , (3) 
+
+Ph(x) = sof tmax (Sc(Sh(x))) .
+
+Here, wo and wh represent the respective weights assigned to each branch’s prediction. The classification loss is defined as follows: 
+
+Lc = E(x,y )∈D p [LCE (P (x), y )] . (4) where LCE denotes the cross-entropy loss. Setting wo and wh is challenging: if wo is too large, the original branch may inadvertently learn backdoor knowledge, while a smaller wo may impede its learning of benign knowl-edge. Additionally, as indicated in Figure 2a, the shortcut initially captures some benign knowledge. Improper weight settings may cause this portion of benign knowledge to re-main permanently embedded in the shortcut, resulting in the original network losing the opportunity to learn it. To address this issue, we propose a dynamic weight assign-ment strategy based on prediction entropy. This entropy can be calculated by: 
+
+E(p) = −
+
+> K−1
+
+X
+
+> k=0
+
+pk log pk, (5) where p is the softmax prediction. For each sample x, we first pass it through both branches to obtain predictions Po(x) and 
+
+Ph(x), then assign their contributions to the final prediction as follows: 
+
+wo = E(Po(x)) 
+
+E(Po(x)) + E(Ph(x)) ,wh = E(Ph(x)) 
+
+E(Po(x)) + E(Ph(x)) .
+
+(6) During training, poisoned samples are initially learned by the shortcut branch, inevitably along with a few benign sam-ples. For these poisoned and benign samples, the entropy 
+
+E(Ph(x)) is low, and the weight wo is high, which gives the original branch an opportunity to learn the benign sam-ple among them. Simultaneously, this weight assignment also enables the original branch to learn from the poisoned ones. To enhance the backdoor knowledge captured by the shortcut branch and prevent it from leaking to the original branch, we design a knowledge decoupling strategy in Section 4.4. 4.4 Knowledge Decoupling 
+
+Motivated by the distinct learning behaviors in Figure 2, we decouple the shortcut and original branches by enforcing con-straints in both feature space and final predictions. Through this decoupling, we aim for the original branch to correctly predict only benign samples, while the malicious predictions for poisoned samples are provided by the shortcut branch. For each sample x, we obtain feature vectors So(x) and 
+
+Sh(x) from the original backbone and honeypot shortcut. We then encourage feature-level decoupling by maximizing their cosine distance: 
+
+Ldpf = E(x,y )∈D p ⟨So(x), S h(x)⟩ (7) where ⟨· , ·⟩ denotes cosine similarity. However, feature de-coupling alone is insufficient, as the classifier Sc may still adjust itself to accommodate backdoor requirements. There-fore, we introduce an additional prediction-level decoupling loss that jointly constrains the classifier and feature extrac-tors: 
+
+Ldpp = −E(x,y )∈D p ∥Po(x), P h(x)∥2 (8) The cooperation between Ldpf and Ldpp effectively enables the original and shortcut branches to produce different pre-dictions for each sample. However, both losses only consider the decoupling state at the current epoch, and their constraints are satisfied as long as the two branches learn the same sample as different classes. This implies that if the shortcut branch fails to make the ma-licious prediction for a poisoned sample, the original branch may classify it as the target class due to the classification con-straint, resulting in the learning of backdoor knowledge. This issue is more likely when trigger patterns are complex, mak-ing it difficult for the shortcut branch to capture stable back-door knowledge in early epochs. In such cases, the original branch may continuously compete with the shortcut for back-door knowledge, even snatching it from the shortcut by lever-aging its greater learning capacity. To address this issue, we leverage previously learned knowledge to guide the current learning direction. Specifically, we construct a feature proto-type set for each branch to summarize their knowledge from the previous epoch, as storing full features for all samples is memory-intensive. The prototypes are defined as follows: 
+
+cko = 1
+
+NkNkX
+
+> i=1
+
+St−1 
+
+> o
+
+(xki ), ckh = 1
+
+NkNkX
+
+> i=1
+
+St−1 
+
+> h
+
+(xki ), (9) where {xki }Nk 
+
+> i=1
+
+denotes samples with label k, and St−1 
+
+> o
+
+and 
+
+St−1 
+
+> h
+
+are the original and shortcut branches from the previous epoch. The prototype sets for the two branches are denoted as 
+
+{cko }K−1 
+
+> k=0
+
+and {ckh}K−1 
+
+> k=0
+
+. We push the two branches to learn in different directions by adding a loss that maximizes the distance between their features and the corresponding proto-types of the other branch: 
+
+Lg = E(x,y )∈D p [⟨So(x), cyh⟩ + ⟨Sh(x), cyo ⟩]. (10) Additionally, we enhance the backdoor knowledge in the shortcut branch by encouraging it to learn along its previous direction, which can be interpreted as the backdoor direction: 
+
+Lh = −E(x,y )∈D p ⟨Sh(x), cyh⟩. (11) Intuitively, Lh functions as an inertial constraint that encour-ages the shortcut branch to remain on its discovered backdoor learning trajectory, while its combination with Lg imposes an exclusivity constraint that prevents the original branch from “stealing” backdoor knowledge, without hindering its capac-ity to learn benign representations. In summary, the training loss can be expressed as follows: 
+
+L = Lc + Lg + Lh + Ldpf + α · Ldpp , (12) where α controls the strength of decoupling at the prediction level. Specifically, Lc is applied alone during the first epoch to warm up the network, allowing each branch to initially learn its respective knowledge. In the subsequent decoupling, the backdoor knowledge will be channeled into the shortcut branch, while the benign knowledge will flow to the origi-nal branch. This behavior is analyzed in Section 5.3, and the dynamic of wo and wh are further examined in Section 5.4. 
+
+## 5 Experiments 
+
+5.1 Experimental Settings 
+
+Datasets and Models. In the main paper, we evaluate our defense on CIFAR-10 with WRN-16-1 and on GTSRB [Stal-lkamp et al. , 2011] with ResNet-18 to demonstrate effec-tiveness across architectures. To further evaluate general-ization across datasets and architectures, we include addi-tional experiments on CIFAR-100 [Alex, 2009], ImageNet-1k [Deng et al. , 2009], as well as on PreActResNet-18 [He et al. , 2016b], VGG-16 [Simonyan and Zisserman, 2014], and ViTs [Dosovitskiy et al. , 2020] in Appendix D. Dataset details are provided in Appendix A.1. 
+
+Attack Configures. We consider ten state-of-the-art back-door attacks, including six dirty-label methods: BadNets, Blend [Chen et al. , 2017], WaNet [Nguyen and Tran, 2021], Dynamic [Nguyen and Tran, 2020], DataFree [Lv et al. ,2023], and DUBA [Gao et al. , 2024], and four clean-label attacks: SIG [Barni et al. , 2019], CL [Turner et al. , 2019], Narcissus [Zeng et al. , 2023], and PCBA [Wu et al. , 2025]. All attacks are implemented according to their released code to ensure strong performance. Target labels are set to 0 for CIFAR-10 and 1 for GTSRB, with a default poisoning rate of 10%. Implementation details are provided in Appendix A.2. 
+
+Defense Configures and Training Details. We compare our method with ten state-of-the-art defenses: FP [Liu et al. , 2018], NAD [Li et al. , 2021b], ABL [Li et al. , 2021a], DBD [Huang et al. , 2022], CBD [Zhang et al. , 2023], ASD [Gao et al. , 2023], V&B [Zhu et al. , 2023], PIPD [Chen 
+
+et al. , 2024], PDB [Wei et al. , 2024], and ESTI [Yu et al. ,2025]. FP and NAD require 5% local benign samples, while ASD, PDB, and ESTI use 0.2%, 10%, and 1% of the train-ing data as seed samples, respectively. Our model is trained for 200 epochs using SGD with an initial learning rate of 0.1, decayed by a factor of 10 every 50 epochs. The weighting factor α is set to 1 for CIFAR-10 and linearly decreased from 2 to 1 over the first 50 epochs for GTSRB. 
+
+Evaluation Metrics. We evaluate the defense performance using two metrics: Benign Accuracy (BA) on clean data and Attack Success Rate (ASR) on poisoned data. The lower the ASR and the higher BA, the more effective the defense. Dataset Attack No Defense FP NAD ABL DBD CBD ASD V&B PIPD PDB ESTI TR (Ours) BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR CIFAR-10 None 91.19 - 86.44 - 87.34 - 70.35 - 70.10 - 84.51 - 85.96 - 84.37 - 85.92 - 82.60 - 82.22 - 90.37 -BadNet 90.46 99.93 87.21 5.63 86.57 1.93 86.11 3.04 86.94 1.76 87.46 1.06 84.58 1.51 88.28 1.84 89.13 0.64 81.60 0.21 88.92 0.00 89.85 0.00                                                                                                                                                                                                                                                                                                                                                                                                  
+
+> Blended 90.30 98.63 86.92 6.99 75.97 5.48 85.34 16.23 86.83 5.12 87.48 1.96 86.51 2.02 88.15 2.08 87.35 2.69 80.90 0.95 87.54 64.54 89.06 0.01
+> WaNet 89.71 92.27 85.87 2.62 86.97 4.21 75.74 22.24 84.60 5.86 86.55 4.24 84.85 2.03 84.21 3.34 86.39 4.73 81.16 1.80 83.55 12.02 88.90 1.33
+> Dynamic 89.78 85.03 86.59 10.49 87.07 2.70 85.34 18.46 85.42 10.21 85.67 0.86 83.64 4.49 81.92 47.63 89.52 0.63 80.40 1.92 89.60 0.23 90.01 1.06 DataFree 90.82 99.96 86.53 2.07 78.38 3.16 80.13 0.96 71.16 13.41 85.75 2.00 85.95 2.89 88.17 1.41 85.27 0.25 81.37 0.53 90.50 0.00 90.27 0.00
+> DUBA 89.66 95.31 80.77 26.89 86.46 43.85 65.55 99.56 69.78 12.73 87.13 2.27 86.04 2.88 84.55 4.18 87.38 5.19 80.71 2.18 20.01 0.01 88.18 1.58 SIG 90.85 70.50 86.72 13.62 80.44 0.63 73.19 0.33 69.52 13.38 86.60 26.03 86.29 3.07 85.53 3.46 87.83 0.70 82.12 0.07 90.97 0.13 89.42 0.00
+> CL 85.34 95.44 83.33 19.17 84.89 8.89 86.18 1.86 69.97 3.61 87.46 1.17 84.65 3.93 85.37 2.84 85.12 2.39 82.51 1.76 88.74 0.26 89.33 0.74 Narcissus 90.73 95.53 85.47 69.03 87.34 44.20 71.95 45.66 70.02 99.74 84.98 26.43 82.49 98.58 84.69 32.41 89.55 6.81 82.37 1.25 89.15 0.85 89.90 0.53
+> PCBA 90.11 99.51 86.25 51.59 84.88 26.46 65.74 97.74 68.12 98.61 85.54 81.84 81.76 99.97 66.93 0.00 80.92 10.38 82.01 0.94 89.73 1.44 89.05 0.41
+> Average 89.78 93.21 85.57 20.81 83.90 14.15 77.53 30.61 76.24 26.44 86.46 14.79 84.68 22.14 83.78 9.92 86.85 3.44 81.52 1.16 81.87 7.95 89.40 0.57
+> GTSRB None 99.33 -94.94 -97.01 -83.90 -91.16 -75.45 -96.12 -98.05 -93.88 -92.91 -97.87 -98.90 -BadNet 98.64 100.00 96.87 0.03 96.94 0.06 92.58 0.03 86.13 0.00 84.65 2.32 96.52 0.10 88.72 0.35 96.50 0.01 92.77 0.02 96.72 0.00 98.57 0.00
+> Blended 98.62 99.84 95.03 12.88 93.46 1.30 89.07 5.52 86.25 99.98 76.05 88.18 96.21 0.12 75.84 48.38 94.59 0.83 92.61 0.29 95.02 0.06 97.88 0.62 WaNet 96.18 93.53 96.52 18.08 96.17 67.20 94.50 38.29 84.71 0.05 90.50 86.11 95.91 42.26 83.16 7.50 95.04 3.48 89.42 0.77 93.84 0.84 96.59 0.05
+> DataFree 97.04 100.00 96.90 0.03 97.37 0.03 95.21 0.03 92.71 0.38 76.18 2.56 95.05 0.09 98.31 0.14 96.42 0.22 92.20 0.18 97.22 0.00 98.80 0.00
+> DUBA 98.83 93.91 95.48 20.81 93.26 8.61 94.04 3.84 88.09 0.05 90.86 92.85 95.95 0.03 90.77 9.65 96.35 4.37 90.62 3.57 80.21 3.70 98.58 0.03
+> SIG 98.94 100.00 94.58 14.19 88.78 0.02 86.90 99.88 86.84 69.82 89.84 24.17 96.26 45.93 91.28 2.80 92.39 5.27 93.16 59.75 97.49 9.04 97.17 0.00
+> Narcissus 98.50 67.40 94.61 18.56 97.67 5.83 87.46 32.83 92.58 0.45 90.87 58.37 94.60 93.75 97.64 36.71 93.74 3.61 92.82 13.80 97.56 0.00 98.99 0.00 Average 98.11 93.53 95.71 12.08 94.81 11.86 91.39 25.77 88.19 24.39 85.56 50.65 95.79 26.04 89.39 15.08 95.00 2.54 91.94 11.20 94.01 1.95 98.08 0.10
+
+Table 1: The performance of 11 defense methods against multiple backdoor attacks on two datasets. The best results are highlighted in bold ,and the second-best results are underlined. None denotes the totoally clean datasets. 
+
+5.2 Effectiveness and Efficiency 
+
+We compare TR with ten SOTA defenses in Table 1. No De-fense serves as the attack baseline. Overall, TR achieves the best average BA and ASR on both datasets, even compared with defenses requiring benign samples. It consistently re-duces ASR to below or near 1% (often 0%) while maintaining high BA, especially on clean datasets. TR also remains robust under different poisoning rates, as shown in Appendix E.1. Defenses based on data partitioning, such as ABL, DBD, ASD, V&B, and ESTI, inevitably treat a portion of the train-ing samples as poisoned, even when the dataset is clean, which leads to degraded BA. Moreover, all other defenses can be ineffective under certain attack settings, resulting in higher ASR or reduced BA. As for TR, when the data is clean, the shortcut branch captures only a few of easily learned benign information and does not interfere with the main branch in learning generalizable features from harder samples. When the data is poisoned, the shortcut rapidly absorbs backdoor knowledge, thereby preventing the main network from learn-ing it. We further analyze class-wise BA in Appendix E.2, showing that TR has minimal impact on benign performance. We report the training cost of TR in Appendix Table 5, showing that TR is more efficient than others. This efficiency stems from introducing only a shallow shortcut, without re-peated data partitioning or iterative multi-network training. Results on a broader range of dataset–architecture combi-nations, reported in Appendix Tables 6, 7, 8, 9, and 10, further demonstrates the generalization capability of TR, including our adaptive shortcut generation strategy. Notably, the Ta-ble 7 and 10 results also verify that our method remains ef-fective against fine-tuning attacks. 
+
+5.3 Performance of the Two Branches 
+
+To better illustrate the decoupling process, Figure 4 presents BA and ASR of the original and shortcut branches. The orig-inal branch’s BA steadily increases, while that of the short-cut decreases, with both eventually stabilizing. Although the 
+
+Figure 4: The BA and ASR of both branches during the decoupling training process on CIFAR-10 under the same settings in Table 1. 
+
+shortcut retains a small amount of benign knowledge (BA ≈
+
+10%), it does not impede the original branch due to entropy-based weight assignment. In early epochs, the shortcut’s ASR is markedly higher than the original’s, indicating it captures most backdoor knowledge. As training progresses, the orig-inal branch’s ASR rapidly drops to 0%, while the shortcut remains at 100%, demonstrating that the shortcut effectively traps backdoor behavior and shields the original branch. 
+
+5.4 Ablation Studies 
+
+Weight Assignment. To evaluate our entropy-based weight assignment, we replace it with several fixed schemes in Ta-ble 3. Assigning equal weights (0.5) to both branches re-duces ASR to 0%, but results in lower benign accuracy, as benign knowledge captured by the shortcut is not learned by the original branch. To address this, we gradually increase 
+
+wo and decrease wh, which improves BA ( e.g . with 0.8/0.2 and 0.9/0.1) but also raises ASR. This highlights the difficulty of balancing BA and ASR using fixed weights. Without the entropy-based weight assignment, certain benign knowledge may be sacrificed and permanently retained in the shortcut branch to obtain a clean original network. In the last column, we reverse the roles of wo and wh in Equation 6, which also lowers BA. As indicated in Figure 2a, the shortcut inevitably Choices BadNets Blend WaNet Dynamic SIG Mean                                                                                                                   
+
+> Ldpf Ldpp LhLgBA ASR BA ASR BA ASR BA ASR BA ASR ASR 90.77% 99.91% 90.20% 98.46% 88.59% 92.92% 89.78% 85.86% 90.88% 76.80% 90.79%
+> ✓✓90.93% 99.70% 90.36% 97.96% 88.65% 93.10% 89.55% 82.01% 90.41% 70.72% 88.70%
+> ✓✓✓90.56% 96.84% 90.37% 97.72% 88.97% 92.04% 89.55% 83.24% 90.14% 75.82% 89.13%
+> ✓✓✓89.74% 0.00% 89.10% 0.00% 88.49% 82.81% 89.15% 65.13% 89.65% 73.37% 44.26%
+> ✓✓90.16% 96.98% 89.26% 0.00% 88.64% 83.59% 89.05% 88.34% 89.65% 0.00% 36.30%
+> ✓✓✓89.53% 99.69% 88.38% 0.00% 88.15% 83.64% 88.97% 66.72% 89.60% 0.00% 30.07%
+> ✓✓✓89.93% 0.00% 88.77% 0.00% 88.48% 83.84% 89.06% 83.67% 89.93% 80.94% 49.69%
+> ✓✓✓✓89.83% 0.00% 89.06% 0.01% 88.90% 1.33% 90.01% 1.06% 89.42% 0.00% 0.48%
+
+Table 2: Ablation study of the four losses on CIFAR-10. The deleted cases indicate defense failures. It is evident that combining all four losses is essential for achieving robust defense performance. 
+
+Figure 5: Visualization of wo for benign samples and wh for poi-soned samples during decoupling training on CIFAR-10. 
+
+captures some easy benign samples early on. In the reversed setting, a consistently higher wh limits the original branch from learning these samples, resulting in BA degradation. Figure 5 illustrates the weight dynamics in our defense. For benign samples, wo starts high and quickly reaches 1, as the shortcut initially learns little benign knowledge constrained by its limited capacity. The decoupling loss then drives the shortcut toward confidently incorrect predictions, reflected in its low BA in Figure 4. For poisoned samples, wh is initially low because the short-cut strongly learns the backdoor, confidently predicting poi-soned samples as the target label, as reflected in its high ini-tial ASR in Figure 4. Given the low wh, poisoned samples are learned primarily through the original branch. However, the decoupling loss Ldpp prevents the original branch from mim-icking the shortcut’s malicious predictions, increasing the un-certainty and entropy of the original branch for poisoned sam-ples, which further reduces wh. Since the shortcut possesses strong backdoor knowledge and is reinforced by Lh, it is eas-ier to shift the predictions of the original branch for poisoned samples than those of the shortcut. Consequently, the original branch increasingly predicts non-target labels for poisoned samples with high confidence (evidenced by its reduced ASR in Figure 4), as detailed in the case study in Appendix E.6. To better clarify these weight dynamics, we provide a de-tailed analysis in Appendix E.5, and visualize the decoupling process in Appendix E.7. 
+
+Loss Effect. In Table 2, we examine the impact of each ad-ditional loss on the defense performance. First, we train the network without any additional losses as the baseline in row 3, which fails to defend against all attacks. Rows 4 ∼6 re-veal that the defense is ineffective in most cases when either 
+
+Ldpf or Ldpp is omitted, highlighting the necessity of decou-pling both in feature space and prediction results. Relaying                   
+
+> wo/w h0.5/0.5 0.6/0.4 0.7/0.3 0.8/0.2 0.9/0.1 wh/w o
+> BA 82.22% 81.90% 82.04% 85.09% 88.71% 88.78% ASR 0.00% 0.00% 0.00% 47.70% 92.28% 0.00%
+
+Table 3: Performance under different weight assignments on the BadNets attack. The case ‘0.9/0.1’ indicates wo = 0 .9 and wh =0.1. The last case indicates switching the assignment for wo and wh.
+
+solely on feature decoupling fails in all cases, as the classifier can adapt to satisfy the backdoor requirements. Similarly, de-coupling only predictions proves ineffective against complex attacks, such as WaNet and Dynamic (noisy mode). Without constraints in the feature space, the original branch eventually learns these complex patterns, even if the shortcut captures them initially, thereby undermining defense performance. Rows 7 ∼9 explore the role of learning direction guidance losses Lh and Lg , where all cases against WaNet and Dy-namic fail. For these two complex attacks, Lh allows the shortcut sufficient epochs to capture stable backdoor knowl-edge, while Lg helps prevent the original branch from learn-ing leaked backdoor knowledge during this period by prevent-ing it from learning along the poisoned direction. Without 
+
+Lg , although the shortcut initially learns backdoor knowledge well against BadNets, the original branch may still become contaminated by several leaked poisoned samples. For the clean-label attack SIG, backdoor knowledge is more delicate due to competition between the trigger and the target-class ground-truth pattern. Here, strengthening the shortcut’s cap-tured knowledge is critical, as applying Lg alone will disrupt the backdoor knowledge in the shortcut, causing too many poisoned samples to leak to the original branch. Ultimately, all four losses are required for a robust defense. The selection of loss weight α is provided in Appendix E.3. 
+
+## 6 Conclusions 
+
+We reveal that backdoor knowledge can be naturally captured by a parallel shortcut branch and propose TR, a simple and ef-fective defense. By introducing a honeypot shortcut and a de-coupling mechanism, TR isolates backdoor knowledge from benign ones, enabling backdoor removal via post-training shortcut pruning without requiring additional data. We fur-ther incorporate an adaptive shortcut generation strategy to enhance generalization. Extensive experiments demonstrate the effectiveness and robustness of our TR. Future work will extend TR to counter optimized attacks with higher semantic complexity that may challenge the shortcut-based capture. References 
+
+[Alex, 2009] Krizhevsky Alex. Learning multiple layers of features from tiny images. 2009. [Barni et al. , 2019] Mauro Barni, Kassem Kallas, and Benedetta Tondi. A New Backdoor Attack in CNNS by Training Set Corruption Without Label Poisoning. In 
+
+2019 IEEE International Conference on Image Process-ing , pages 101–105. IEEE, 2019. [Chen et al. , 2017] Xinyun Chen, Chang Liu, Bo Li, Kim-berly Lu, and Dawn Song. Targeted Backdoor Attacks on Deep Learning Systems Using Data Poisoning. arXiv preprint arXiv:1712.05526 , 2017. [Chen et al. , 2024] Yiming Chen, Haiwei Wu, and Jiantao Zhou. Progressive poisoned data isolation for training-time backdoor defense. In Michael J. Wooldridge, Jen-nifer G. Dy, and Sriraam Natarajan, editors, Thirty-Eighth AAAI Conference on Artificial Intelligence (AAAI 2024), Vancouver, Canada , pages 11425–11433. AAAI Press, 2024. [Cheng et al. , 2024] Siyuan Cheng, Guanhong Tao, Yingqi Liu, Guangyu Shen, Shengwei An, Shiwei Feng, Xiangzhe Xu, Kaiyuan Zhang, Shiqing Ma, and Xiangyu Zhang. Lo-tus: Evasive and resilient backdoor attacks through sub-partitioning. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , pages 24798–24809, 2024. [Deng et al. , 2009] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. ImageNet: A Large-Scale Hierarchical Image Database. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 248–255. Ieee, 2009. [Dosovitskiy et al. , 2020] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Min-derer, Georg Heigold, Sylvain Gelly, et al. An image is worth 16x16 words: Transformers for image recognition at scale. arXiv preprint arXiv:2010.11929 , 2020. [Gao et al. , 2023] Kuofeng Gao, Yang Bai, Jindong Gu, Yong Yang, and Shu-Tao Xia. Backdoor defense via adap-tively splitting poisoned dataset. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 4005–4014, 2023. [Gao et al. , 2024] Yudong Gao, Honglong Chen, Peng Sun, Junjian Li, Anqing Zhang, Zhibo Wang, and Weifeng Liu. A dual stealthy backdoor: From both spatial and frequency perspectives. In Thirty-Eighth AAAI Conference on Arti-ficial Intelligence, AAAI 2024, Vancouver, Canada , pages 1851–1859. AAAI Press, 2024. [Gu et al. , 2017] Tianyu Gu, Brendan Dolan-Gavitt, and Sid-dharth Garg. Badnets: Identifying Vulnerabilities in the Machine Learning Model Supply Chain. arXiv preprint arXiv:1708.06733 , 2017. [He et al. , 2016a] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep Residual Learning for Image Recognition. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 770– 778, 2016. [He et al. , 2016b] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Identity mappings in deep residual networks. In Computer Vision–ECCV 2016: 14th Euro-pean Conference, Amsterdam, The Netherlands, October 11–14, 2016, Proceedings, Part IV 14 , pages 630–645. Springer, 2016. [Huang et al. , 2022] Kunzhe Huang, Yiming Li, Baoyuan Wu, Zhan Qin, and Kui Ren. Backdoor Defense via De-coupling the Training Process. In The Tenth International Conference on Learning Representations , 2022. [Jin et al. , 2023] Yan Jin, Fang Gao, Jun Yu, Jiabao Wang, and Feng Shuang. Multi-object tracking: Decoupling fea-tures to solve the contradictory dilemma of feature require-ments. IEEE Transactions on Circuits and Systems for Video Technology , 33(9):5117–5132, 2023. [Li et al. , 2021a] Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Anti-Backdoor Learning: Training Clean Models on Poisoned Data. 
+
+Advances in Neural Information Processing Systems ,34:14900–14912, 2021. [Li et al. , 2021b] Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Neural Attention Distillation: Erasing Backdoor Triggers from Deep Neural Networks. In International Conference on Learning Rep-resentations , 2021. [Li et al. , 2021c] Yuezun Li, Yiming Li, Baoyuan Wu, Longkang Li, Ran He, and Siwei Lyu. Invisible Backdoor Attack With Sample-Specific Triggers. In Proceedings of the IEEE/CVF International Conference on Computer Vi-sion , pages 16463–16472, 2021. [Liu et al. , 2018] Kang Liu, Brendan Dolan-Gavitt, and Sid-dharth Garg. Fine-Pruning: Defending Against Backdoor-ing Attacks on Deep Neural Networks. In International Symposium on Research in Attacks, Intrusions, and De-fenses , pages 273–294. Springer, 2018. [Liu et al. , 2023] Qin Liu, Fei Wang, Chaowei Xiao, and Muhao Chen. From shortcuts to triggers: Back-door defense with denoised poe. arXiv preprint arXiv:2305.14910 , 2023. [Lv et al. , 2023] Peizhuo Lv, Chang Yue, Ruigang Liang, Yunfei Yang, Shengzhi Zhang, Hualong Ma, and Kai Chen. A data-free backdoor injection approach in neural networks. In 32nd USENIX Security Symposium (USENIX Security 23) , pages 2671–2688, 2023. [Mkadry et al. , 2017] Aleksander Mkadry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. stat , 1050(9), 2017. [Mu et al. , 2023] Bingxu Mu, Zhenxing Niu, Le Wang, Xue Wang, Qiguang Miao, Rong Jin, and Gang Hua. Progres-sive backdoor erasing via connecting backdoor and adver-sarial attacks. In Proceedings of the IEEE/CVF Confer-ence on Computer Vision and Pattern Recognition , pages 20495–20503, 2023. [Nguyen and Tran, 2020] Tuan Anh Nguyen and Anh Tran. Input-Aware Dynamic Backdoor Attack. Advances in Neu-ral Information Processing Systems , 33:3454–3464, 2020. [Nguyen and Tran, 2021] Anh Nguyen and Anh Tran. WaNet–Imperceptible Warping-based Backdoor Attack. 
+
+arXiv preprint arXiv:2102.10369 , 2021. [Shah et al. , 2020] Harshay Shah, Kaustav Tamuly, Aditi Raghunathan, Prateek Jain, and Praneeth Netrapalli. The pitfalls of simplicity bias in neural networks. Advances in Neural Information Processing Systems , 33:9573–9585, 2020. [Simonyan and Zisserman, 2014] Karen Simonyan and An-drew Zisserman. Very deep convolutional networks for large-scale image recognition. arXiv preprint arXiv:1409.1556 , 2014. [Stallkamp et al. , 2011] Johannes Stallkamp, Marc Schlips-ing, Jan Salmen, and Christian Igel. The german traffic sign recognition benchmark: a multi-class classification competition. In The 2011 international joint conference on neural networks , pages 1453–1460. IEEE, 2011. [Subramanya et al. , 2024] Akshayvarun Subramanya, Soroush Abbasi Koohpayegani, Aniruddha Saha, Ajinkya Tejankar, and Hamed Pirsiavash. A closer look at robustness of vision transformers to backdoor attacks. In Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision , pages 3874–3883, 2024. [Tang et al. , 2023] Ruixiang Ryan Tang, Jiayi Yuan, Yiming Li, Zirui Liu, Rui Chen, and Xia Hu. Setting the trap: Capturing and defeating backdoors in pretrained language models through honeypots. Advances in Neural Informa-tion Processing Systems , 36:73191–73210, 2023. [Turner et al. , 2019] Alexander Turner, Dimitris Tsipras, and Aleksander Madry. Label-Consistent Backdoor Attacks. 
+
+arXiv preprint arXiv:1912.02771 , 2019. [Wang et al. , 2019] Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural Cleanse: Identifying and Mitigating Backdoor Attacks in Neural Networks. In 2019 IEEE Sym-posium on Security and Privacy , pages 707–723. IEEE, 2019. [Wang et al. , 2020] Yue Wang, Alireza Fathi, Abhijit Kundu, David A Ross, Caroline Pantofaru, Tom Funkhouser, and Justin Solomon. Pillar-Based Object Detection for Au-tonomous Driving. In European Conference on Computer Vision , pages 18–34. Springer, 2020. [Wang et al. , 2021] Yanling Wang, Jing Zhang, Shasha Guo, Hongzhi Yin, Cuiping Li, and Hong Chen. Decoupling representation learning and classification for gnn-based anomaly detection. In Proceedings of the 44th interna-tional ACM SIGIR conference on research and develop-ment in information retrieval , pages 1239–1248, 2021. [Wang et al. , 2022] Haotao Wang, Junyuan Hong, Aston Zhang, Jiayu Zhou, and Zhangyang Wang. Trap and re-place: Defending backdoor attacks by trapping them into an easy-to-replace subnetwork. Advances in neural infor-mation processing systems , 35:36026–36039, 2022. [Wei et al. , 2024] Shaokui Wei, Hongyuan Zha, and Baoyuan Wu. Mitigating backdoor attack by injecting proactive defensive backdoor. Advances in Neural Information Processing Systems , 37:80674–80705, 2024. [Woo et al. , 2018] Sanghyun Woo, Jongchan Park, Joon-Young Lee, and In So Kweon. Cbam: Convolutional block attention module. In Proceedings of the European confer-ence on computer vision (ECCV) , pages 3–19, 2018. [Wu et al. , 2025] Zhixiao Wu, Yao Lu, Jie Wen, Hao Sun, Qi Zhou, and Guangming Lu. A set of generalized com-ponents to achieve effective poison-only clean-label back-door attacks with collaborative sample selection and trig-gers. In Advances in Neural Information Processing Sys-tems , 2025. [Yang and Yang, 2022] Zongxin Yang and Yi Yang. Decou-pling features in hierarchical propagation for video object segmentation. Advances in Neural Information Processing Systems , 35:36324–36336, 2022. [Yang et al. , 2023] Sheng Yang, Yiming Li, Yong Jiang, and Shu-Tao Xia. Backdoor defense via suppressing model shortcuts. In ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP) , pages 1–5. IEEE, 2023. [Yu et al. , 2025] Hongrui Yu, Lu Qi, Wanyu Lin, Jian Chen, Hailong Sun, and Chengbin Sun. Backdoor defense via enhanced splitting and trap isolation. In Proceedings of the IEEE/CVF International Conference on Computer Vision ,pages 1708–1717, 2025. [Zagoruyko, 2016] Sergey Zagoruyko. Wide residual net-works. arXiv preprint arXiv:1605.07146 , 2016. [Zeng et al. , 2023] Yi Zeng, Minzhou Pan, Hoang Anh Just, Lingjuan Lyu, Meikang Qiu, and Ruoxi Jia. Narcissus: A practical clean-label backdoor attack with limited infor-mation. In Proceedings of the 2023 ACM SIGSAC Confer-ence on Computer and Communications Security , pages 771–785, 2023. [Zhang et al. , 2020] Yuyang Zhang, Shibiao Xu, Baoyuan Wu, Jian Shi, Weiliang Meng, and Xiaopeng Zhang. Unsu-pervised Multi-View Constrained Convolutional Network for Accurate Depth Estimation. IEEE Transactions on Im-age Processing , 29:7019–7031, 2020. [Zhang et al. , 2023] Zaixi Zhang, Qi Liu, Zhicai Wang, Zepu Lu, and Qingyong Hu. Backdoor defense via decon-founded representation learning. In Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition , pages 12228–12238, 2023. [Zhu et al. , 2023] Zixuan Zhu, Rui Wang, Cong Zou, and Li-hua Jing. The victim and the beneficiary: Exploiting a poisoned model to train a clean model on poisoned data. In Proceedings of the IEEE/CVF International Conference on Computer Vision , pages 155–164, 2023. A Detailed Settings 
+
+All experiments were conducted on a workstation equipped with an RTX 3090 GPU (24GB) and 64GB of RAM. 
+
+A.1 Details about Datasets 
+
+The detailed dataset information is summarized in Table 4.                    
+
+> Dataset Classes Input Size Training Images Test Images CIFAR-10 10 32 x 32 x 3 50000 10000 GTSRB 43 32 x 32 x 3 39209 12630 CIFAR-100 100 32 x 32 x 3 50000 10000 ImageNet-1k 1000 224 x 224 x 3 1281167 50000
+> Table 4: Detailed information of the datasets used in our experi-ments.
+
+A.2 Details about Attacks 
+
+We trained all attack baselines for 200 epochs using the SGD optimizer with an initial learning rate of 0.1, a weight decay of 1 × 10 −4, and a momentum of 0.9. The learning rate is reduced by a factor of 10 every 50 epochs. We use a batch size of 128 for CIFAR-10, GTSRB, and CIFAR-100, and a batch size of 64 for ImageNet-1k. The poisoned samples are randomly selected. 
+
+A.3 Settings for Learning Behaviors Analysis 
+
+The introduced shortcut consists of two Conv-Attention-BN-ReLU blocks, as described in Section 4.2. The final output of the modified WRN-16-1 network is computed as: 
+
+P (x) = 0 .5 · Po(x) + 0 .5 · Ph(x), (13) We train the modified network for 5 epochs using stochastic gradient descent (SGD) with a momentum of 0.9, weight de-cay of 0.0005, and an initial learning rate of 0.1. The batch size is set to 128. In Figure 2b, we visualize 2,500 randomly selected training samples using t-SNE. 
+
+A.4 Adaptive Shortcut Designing 
+
+For CNNs, the shortcut branch is composed of repeated Conv-Attention-BN-ReLU blocks. Each block begins with a 3 × 3
+
+convolution with stride 2 to perform 2× downsampling. The attention layer is implemented as a 1-channel convolution that maintains the spatial dimensions of the input and produces an attention map M . This map is applied element-wise to the convolution output f , as described in Equation 1. The number of such blocks is determined by the number of down-sampling stages in the original network. For example, the WRN-16-1 backbone performs two 2× downsamplings, so we construct the shortcut branch using two Conv-Attention-BN-ReLU blocks to align its spatial resolution with that of the backbone. To facilitate effective decoupling, we also match the output channel dimensions between the shortcut and backbone branches. For ViTs, we construct the shortcut branch as a lightweight transformer network consisting of half the number of blocks as in the original architecture. The performance is not highly sensitive to this choice—other ratios such as 1/4 or 3/4 also achieve competitive results, as shown in Table 13. Normal DBD CDB ASD V&B PDB ESTI TR(Ours) 1052 13691 2159 8858 7750 3360 5309 1332 
+
+> Table 5: Time (seconds) of four defenses versus normal training, evaluated on CIFAR-10 with WRN-16-1.
+
+## B Gradient-Based Analysis and Verification of Learning Behaviors 
+
+B.1 Theoretical Analysis 
+
+To understand why poisoned samples are preferentially cap-tured by the honeypot shortcut, we analyze the learning dy-namics through the lens of gradient flow. Let x be an input sample with label y. We denote the original (deep) backbone and the shortcut (shallow) branch as So(·; θo) and Sh(·; θh),producing feature vectors f o ∈ Rd and f h ∈ Rd, respec-tively. A shared classifier Sc(·; ϕ), parameterized by weights 
+
+W and bias b, computes the logits: 
+
+zo = W f o + b, zh = W f h + b. (14) The final prediction is the weighted average of the softmax outputs from both branches: 
+
+P (x) = wo · softmax( zo) + wh · softmax( zh), (15) where wo + wh = 1 (initialized as 0.5). We minimize the standard cross-entropy loss L = − log Py (x). Applying the chain rule, the parameter updates for each branch are gov-erned by: 
+
+∇θo L = wo ·∇ zo L·W · ∂f o
+
+∂θ o
+
+, ∇θh L = wh ·∇ zh L·W · ∂f h
+
+∂θ h
+
+.
+
+(16) The shortcut’s learning preference is driven by a cascade of three factors: the consistency of optimization signals provides the basis, structural simplicity (Simplicity Bias) enables rapid capture, and attention-induced gradient focusing significantly amplifies this dominance. 
+
+Consistent Optimization Signal via Trigger Patterns 
+
+Prior work [Li et al. , 2021a; Zhu et al. , 2023] suggests that poisoned samples converge faster due to the high consistency of trigger patterns. In our dual-branch architecture, this con-sistency creates a stable optimization signal that propagates to both branches. Since the classifier head is randomly ini-tialized and shared with balanced weights (0.5), the error gra-dients with respect to the logits, ∇zo L and ∇zh L, are highly synchronized and comparable in magnitude (as empirically verified in Sec. B.2). However, for poisoned samples, the in-variant trigger pattern causes these gradients to accumulate constructively across the training batch, which can be ap-proximated as: 
+
+X
+
+> x∈B poison
+
+∇z L(x) ≈ N · gtrigger , (17) whereas gradients for diverse benign features exhibit higher variance and partial cancellation. This means that both branches effectively receive a low-variance, high-strength op-timization signal from the trigger. The critical divergence in Init 0 1 2 3 4 5 6
+
+> 0
+> 5
+> 10
+> 15
+> 20
+> Ratio
+
+BadNet        
+
+> Poisoned
+> Clean
+> Init 0123456
+> 0
+> 10
+> 20
+> 30
+> Ratio
+
+Blended        
+
+> Init 0123456
+> 2
+> 4
+> 6
+> 8
+> Ratio
+
+WaNet        
+
+> Init 0123456
+> 1
+> 2
+> 3
+> 4
+> 5
+> Ratio
+
+Dynamic        
+
+> Init 0123456
+> 0
+> 20
+> 40
+> 60
+> Ratio
+
+Data-Free        
+
+> Init 0123456
+> 10 0
+> 10 1
+> 10 2
+> 10 3
+> Ratio (Log)
+
+SIG        
+
+> Init 0123456
+> 10 0
+> 10 1
+> 10 2
+> Ratio (Log)
+
+PCBA        
+
+> Init 0123456
+> 10 1
+> 10 3
+> Ratio (Log)
+
+CL Figure 6: Consistent gradient dominance dynamics during early training stages. We track the evolution of the logit gradient norm ratio (∥∇ zh L∥/∥∇ zo L∥) from Initialization (Init) to Epoch 6 across 8 attacks. Divergence: Despite starting from a balanced state (Init 
+
+≈ 1.0), the shortcut branch rapidly establishes a dominant gradient flow for poisoned samples (Red line), while the ratio for clean samples (Blue line) remains constant at ≈ 1.0. This confirms the specific structural sensitivity of the shortcut to trigger patterns. Magnitude: Note that for clean-label attacks like SIG, PCBA, and CL (bottom row), the y-axis is presented in log scale to visualize the exponential surge in gradient magnitude (reaching > 10 3). This massive disparity indicates a “winner-take-all” mechanism where the optimization signal is almost exclusively channeled through the shortcut branch. 
+
+learning outcomes, therefore, does not stem from a disparity in these error signals initially, but from how each branch’s structure responds to this consistent push (as detailed below). 
+
+Attention-Induced Gradient Focusing 
+
+The magnitude of the update in Eq. (16) depends on the Ja-cobian terms ∂f 
+
+> ∂θ
+
+. Our shortcut branch Sh explicitly incorpo-rates an attention mechanism to enhance sensitivity to trigger patterns. As defined in our method, the feature refinement is given by f ′ 
+
+> h
+
+= ReLU( M ) ⊗ f h, where M is the attention map. The introduction of this multiplicative interaction cre-ates a gradient focusing effect. During backpropagation, the gradient is modulated by the attention map: 
+
+∂L ∂f h
+
+= ∂L ∂f ′
+
+> h
+
+⊗ ReLU( M )
+
+| {z }
+
+> Gating Term
+
++ . . . (18) For poisoned samples, the backdoor trigger represents a consistent and discriminative pattern compared to the vary-ing semantic background. The attention mechanism rapidly learns to activate on these salient regions (i.e., M trigger > 0)while suppressing background noise ( M bg ≈ 0). Thus, the term ReLU( M ) acts as a gate that amplifies the gradient flow specifically for trigger patterns while blocking gradients from irrelevant regions. 
+
+Simplicity Bias and Gradient Dominance 
+
+Recent studies on Simplicity Bias (SB) [Shah et al. , 2020] suggest that neural networks, especially those trained with SGD, exhibit a strong bias towards learning the simplest pre-dictive features (e.g., texture, color, or triggers) over complex semantic patterns. Consistent with this principle, our shallow shortcut branch Sh represents a lower-capacity model that is inherently more sensitive to simple trigger patterns than the BadNet 
+
+> Blended
+> WaNet
+> Dynamic
+> SIG
+> CL
+> PCBA
+> Data-Free
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> Gradient Norm Ratio
+> (a) Balanced Magnitude at Initialization
+> Poisoned
+> Clean
+> BadNet
+> Blended
+> WaNet
+> Dynamic
+> SIG
+> CL
+> PCBA
+> Data-Free
+> 0.0
+> 0.2
+> 0.4
+> 0.6
+> 0.8
+> 1.0
+> 1.2
+> Cosine Similarity
+> (b) High Directional Alignment at Initialization
+> Poisoned
+> Clean
+
+Figure 7: Empirical verification of balanced initialization across 8 attacks. We measured the gradient statistics at random initializa-tion. (a) Gradient Norm Ratio: The ratio ∥∇ zh L∥/∥∇ zo L∥ is consistently close to 1.0 for both poisoned and clean samples. (b) Cosine Similarity: The directional alignment between branches ex-ceeds 0.99 for both data types. This confirms that the network starts from a strictly fair state, with no initial bias towards the shortcut branch for either data type. 
+
+deep backbone So. This structural advantage is further ampli-fied by the attention-based gradient focusing derived above. Consequently, the effective parameter sensitivity (Jacobian norm) for poisoned samples satisfies: 
+
+∂f h(xpoisoned )
+
+∂θ h
+
+≫ ∂f o(xpoisoned )
+
+∂θ o
+
+. (19) This inequality implies that for poisoned inputs, the op-timization step size for the shortcut branch is significantly larger. This creates a “winner-take-all” dynamic: the shortcut branch rapidly minimizes the loss on poisoned samples. Cru-cially, this parameter-level dominance manifests in the logit gradients. As Sh begins to fit the trigger pattern faster, the optimizer channels the majority of the error signal through the shortcut path to maximally reduce the loss. This explains the phenomenon observed in Figure 6, where the logit gradi-ent ratio ∥∇ zh L∥/∥∇ zo L∥ surges exponentially (exceeding 
+
+10 3 for some attacks, e.g., SIG and CL). As the total loss L
+
+decreases due to the shortcut’s fitting, the gradient signal di-minishes, leaving the slower-learning deep branch So with lit-tle incentive—and effectively no gradient signal—to learn the backdoor. This mechanism effectively decouples the back-door (captured by Sh) from the benign knowledge (learned by So). However, it is noted that this phenomenon is transient and primarily observable in the early training stages. Without ex-plicit intervention, the deep branch So will eventually memo-rize the backdoor patterns as training progresses toward con-vergence. Consequently, we design our decoupled training process to explicitly sustain and amplify this initial diver-gence. 
+
+B.2 Empirical Verification 
+
+To empirically validate our theoretical derivation, we tracked the gradient dynamics of the logits ( ∇z L) during the early training phase (Initialization to Epoch 6) across 8 different backdoor attacks, including invisible (e.g., WaNet), sample-specific (e.g., Dynamic) and clean-label (e.g., SIG, PCBA) attacks. 
+
+Balanced Initialization. First, we investigate whether the shortcut’s dominance stems from an initialized bias. As shown in Figure 7, at the random initialization stage, the gra-dient norm ratio between the shortcut and original branches is consistently ≈ 1.0, and the cosine similarity exceeds 0.99 for both benign and poisoned samples. This empirical evidence strictly confirms that the optimization process begins from a fair starting point, where the error signals are unbiased and comparable in magnitude for both branches. 
+
+Rapid Divergence and Dominance. Starting from this bal-anced state, we then monitor the evolution of gradient ratios during training. As illustrated in Figure 6, a dramatic diver-gence occurs almost immediately. For poisoned samples (Red lines), the gradient ratio surges exponentially—reaching over 
+
+20 × for BadNet and over 1000 × for SIG and PCBA (note the log scale). In stark contrast, the ratio for clean samples (Blue lines) remains constant at ≈ 1.0.
+
+Conclusion. These results provide compelling verification of our mechanism: the “winner-take-all” phenomenon is not caused by initial signal bias. Instead, it is driven by the struc-tural sensitivity of the shortcut branch, which selectively am-plifies the consistent gradients from poisoned samples while ignoring the diverse gradients from benign data. 
+
+## C Resistance to Potential Adaptive Attacks 
+
+We consider a challenging setting where the attacker knows our defense, evaluating two adaptive attacks in the classical scenario and one in the optimized scenario. 
+
+Threat Model for Attackers Following existing methods [Zhang et al. , 2023; Gao et al. , 2023], we assume that attack-ers have full access to the benign dataset and know the model architecture intended for poisoning. However, they cannot in-terfere with the training process once the poisoned dataset has been released to the victim users. 
+
+C.1 Target the Entropy of Poisoned Samples 
+
+Our defense leverages the observation that poisoned samples tend to converge faster than benign ones during training [Li 
+
+et al. , 2021a]. An adaptive attacker may attempt to counter this by intentionally slowing the convergence of poisoned samples, thereby hindering the shortcut branch from captur-ing backdoor knowledge early on and increasing the likeli-hood that such knowledge is instead absorbed by the original branch. Similar to CBD [Zhang et al. , 2023], we describe the adap-tive attack as a min-max optimized problem: 
+
+min 
+
+> θ
+
+" X
+
+> (x,y )∈D p
+
+LCE (Fθ (x), y )+ X
+
+> (xi,y t)∈D m
+
+max 
+
+> δi
+
+Le(Fθ (xi + δi)) 
+
+#
+
+(20) where Fθ is a surrogate model with parameter θ. The trig-ger δi is bounded by ∥δi∥∞ < ϵ to make it invisible to vi-sual inspection. We adopt projected gradient descent (PGD) [Mkadry et al. , 2017] to optimize the trigger pattern δi for each poisoned sample step by step: 
+
+xt+1 = Π ϵ(xt + β · ∇ xLe(Fθ (xt)) (21) where t is the current step ( M steps in total), β is the step size, Le refers to the entropy introduced in Equation 5, Πϵ
+
+clips the updated images to the range [0 , 255] and restricts the cumulative perturbation δi within the ϵ bound. 
+
+Experimental Settings. We conduct the adaptive attack on the CIFAR-10 dataset using a ResNet-18 network. Following previous work on adversarial attacks, we set ϵ = 8 /255 to ensure the trigger remains imperceptible to the human visual system. We use SGD to solve the above optimization problem over 10 epochs with β = 0 .001 and M = 3 . The initial learning rate is set to 0.01 and is reduced by a factor of 10 halfway through the training. 
+
+Results. The adaptive attack successfully injects a back-door into the model, achieving a BA of 88.23% and an ASR of 99.99%. However, our defense reduces its ASR to 0% and improves the BA to 94.49%. This suggests that the opti-mized trigger patterns become less effective when the model is retrained with randomly initialized parameters. In other words, the optimized triggers exhibit limited transferability across different model instances. 
+
+C.2 Target the Shortcut Learning Behavior 
+
+Our defense is based on the assumption that poisoned sam-ples are more likely to be learned by a shortcut branch during the early stages of training. To circumvent this, an adaptive attacker may target our network architecture by intentionally suppressing the learning of poisoned samples in the shortcut branch. The corresponding optimized attack can be formu-lated as follows: Attack Metric No Defense FP NAD ABL DBD CBD ASD V&B PIPD TR (ours) BadNet BA 73.14% 65.89% 61.56% 64.94% 68.24% 65.72% 70.18% 75.86% 70.18% 75.53% ASR 100.00% 56.75% 0.03% 0.89% 0.21% 0.63% 1.96% 0.13% 0.22% 0.00%                                                                                                          
+
+> Blended BA 75.93% 70.67% 64.47% 59.24% 63.86% 62.25% 70.23% 75.13% 72.51% 75.32%
+> ASR 99.52% 0.88% 0.14% 1.42% 99.70% 40.35% 92.84% 0.10% 0.39% 0.00%
+> SIG BA 77.53% 73.43% 65.62% 59.30% 67.83% 64.73% 70.75% 68.63% 64.72% 74.42%
+> ASR 90.90% 12.37% 0.48% 97.61% 75.57% 99.07% 77.44% 3.62% 10.92% 0.00%
+> WaNet BA 74.26% 70.19% 68.38% 59.46% 62.38% 62.90% 67.01% 67.33% 69.16% 74.83%
+> ASR 94.29% 4.41% 0.97% 1.53% 96.07% 15.86% 42.67% 80.58% 6.48% 0.00%
+> DUBA BA 74.33% 71.88% 63.92% 69.42% 65.79% 64.24% 70.52% 70.44% 72.86% 71.72% ASR 95.19% 20.53% 5.48% 95.20% 82.90% 10.47% 60.08% 12.82% 9.52% 0.04% Average BA 75.22% 70.41% 64.79% 62.47% 65.62% 63.97% 69.74% 71.48% 69.89% 74.36%
+> ASR 96.18% 18.99% 1.42% 39.33% 70.89% 33.28% 55.00% 19.45% 5.51% 0.01%
+
+Table 6: The defense performance on CIFAR-100 using the ResNet-18 backbone.                                           
+
+> Poisoning Rate ViT-T/16 ViT-S/16 ViT-B/16 No Defense Ours No Defense Ours No Defense Ours BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR 0.01 71.21% 0.19% 71.05% 0.13% 79.10% 0.15% 78.94% 0.14% 81.90% 97.02% 81.82% 1.26% 0.1 71.08% 97.89% 69.82% 0.76% 78.99% 98.12% 78.89% 0.61% 81.55% 97.27% 81.79% 0.08%
+
+Table 7: Defense performance on ImageNet-1K with three ViT models under attacks ([Subramanya et al. , 2024]) conducted by fine-tuning on BadNets’ poisoned data with varying poisoning rates. 
+
+min 
+
+> θ
+
+" X
+
+> (x,y )∈D p
+
+LCE (P (x), y )+ X
+
+> (xi,y t)∈D m
+
+max 
+
+> δi
+
+LCE (Ph(xi + δi), y t)
+
+#
+
+(22) 
+
+Experimental Settings. Same as section C.1. 
+
+Results. The adaptive attack results in a BA/ASR of 81.04%/99.84% for the original branch and 52.59%/55.59% for the shortcut branch, indicating that the learning of poi-soned samples in the shortcut branch has been effectively suppressed. However, after applying our defense, the model achieves a BA of 94.16% and an ASR of just 0.01%. Notably, during the defense process, the poisoned samples are still ini-tially absorbed by the shortcut branch, suggesting that the op-timized triggers exhibit poor transferability across training in-stances. 
+
+C.3 Targeting the Distinguishability Between Poisoned and Benign Samples 
+
+During training, our defense decouples the features of poi-soned and benign samples and guides them to be learned through different branches. An adaptive attacker may attempt to construct poisoned samples whose features closely resem-ble those of benign samples, thereby weakening the feature-level separation induced by our defense. Such an adaptive attack can be formulated as: 
+
+min 
+
+> θ
+
+" X
+
+> (x,y )∈Dp
+
+LCE (P (x), y )+ X
+
+> (xi,y t)∈Dm
+
+max 
+
+> δi
+
+⟨S(xi + δi), S (xi)⟩
+
+#
+
+(23) where S(·) denotes the feature extractor. 
+
+Experimental Settings. We conduct this adaptive attack on the CIFAR-10 dataset using a WRN-16-1 network. All other experimental settings remain the same as those in Sec-tion C.1. 
+
+Results. The adaptive attack achieves a BA/ASR of 75.58%/80.84%. Under this setting, our defense reduces the ASR to 1.90% while improving the BA to 90.03%. Compared with the previous two adaptive attacks, this attack leaves more backdoor knowledge in the original branch. Nevertheless, our defense remains effective, as the strong stealthiness en-forced by the attack-specific loss is difficult to transfer when the model is trained without such objectives. 
+
+## D Evaluation on Additional Datasets and Model Architectures 
+
+D.1 Effectiveness on CIFAR-100 
+
+To evaluate the effectiveness of our method with a larger number of classes, we analyze its defense performance on the CIFAR-100 dataset using the ResNet-18 backbone, as shown in Table 6. The results clearly demonstrate that our TR re-duces the attack success rate of all attacks to 0% while achiev-ing either the best or second-best benign accuracy. This supe-rior performance stems from our decoupling strategy, which channels all backdoor knowledge into the shortcut branch, en-abling the original network to focus on learning benign infor-mation more effectively. Consequently, our method even out-performs the baselines ( i.e . No Defense) in benign accuracy against BadNets and WaNet. Compared to CIFAR-10, we observe that the short-cut branch captures backdoor knowledge more quickly on CIFAR-100. This is likely because the increased inter-class differences and complexity make the shared trigger patterns more distinctive, allowing the shortcut branch to learn them more easily. This suggests that our method has the potential to scale effectively to datasets with more classes. Model Defense BadNet Blended WaNet Dynamic DataFree DUBA SIG CL Narcissus PCBA Average                                                                                                                                                                                                                                                                                                                                                                                   
+
+> BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR ResNet-18 No Defense 94.36 100.00 94.57 99.76 94.21 95.84 94.66 95.18 94.66 100.00 94.72 95.86 95.09 64.79 95.03 94.73 94.21 99.36 93.49 99.90 94.50 94.54 FP 92.72 1.92 92.49 10.61 93.27 0.90 92.47 11.73 92.89 1.54 91.85 19.37 93.55 37.98 93.03 6.39 88.61 50.43 85.72 65.38 91.66 20.63 NAD 88.83 1.83 87.72 1.38 91.00 0.99 88.30 2.32 88.41 1.33 85.33 27.01 90.42 3.52 90.19 2.60 88.36 32.84 87.83 29.23 88.64 10.31 ABL 90.47 0.70 90.17 7.04 80.78 19.93 83.07 94.21 89.70 3.92 80.64 43.90 92.34 5.61 86.50 2.68 72.53 41.73 70.34 62.45 83.65 28.22 DBD 92.00 3.06 91.62 3.78 89.13 0.11 90.98 17.56 89.27 5.86 89.73 3.92 89.42 1.61 93.24 14.88 76.25 73.58 78.60 87.14 88.02 21.15 CBD 85.87 2.13 83.40 15.27 88.83 79.71 88.54 33.84 85.29 2.45 81.66 96.58 85.84 16.71 83.33 1.72 81.29 24.83 82.61 74.06 84.67 34.73 ASD 93.44 1.09 93.18 3.62 93.10 2.41 92.32 6.92 93.30 2.31 89.03 0.27 92.13 1.07 93.71 3.03 87.92 92.23 85.16 92.29 91.33 20.52 V&B 93.96 0.62 93.67 0.53 94.05 0.54 93.91 1.13 93.86 0.56 94.27 0.01 94.08 0.17 93.98 0.64 89.87 25.62 87.58 13.37 92.92 4.32 PIPD 93.28 0.55 93.22 0.78 93.27 2.80 92.11 8.03 90.62 3.58 89.37 5.30 93.79 0.03 93.62 1.24 89.35 16.29 83.84 14.52 91.25 5.31 PDB 81.36 0.74 81.69 1.66 80.95 1.90 81.85 2.27 81.37 0.87 82.62 2.49 80.75 0.68 81.57 1.73 82.47 1.85 82.41 0.81 81.70 1.50 ESTI 93.75 0.00 93.82 0.00 78.98 1.96 92.95 0.00 92.53 0.00 93.36 23.88 90.50 92.32 94.12 0.00 92.25 0.00 89.96 0.00 91.22 11.82 TR (Ours) 94.11 0.00 94.07 0.00 92.82 1.86 93.41 0.76 94.21 0.00 91.18 0.77 94.70 0.00 94.62 0.74 93.52 0.27 91.78 0.00 93.44 0.44
+> PreAct ResNet-18 No Defense 93.49 100.00 94.39 99.61 92.44 97.36 92.98 92.74 93.55 99.83 93.08 96.70 93.44 78.36 93.24 45.89 93.81 95.49 93.54 98.11 93.40 90.41 PDB 90.16 0.42 92.63 0.20 90.68 2.18 90.73 1.89 91.55 0.80 87.08 5.72 92.79 0.12 92.83 0.27 91.72 1.79 91.46 2.57 91.16 1.60 ESTI 93.92 0.00 93.96 0.00 84.53 1.24 91.50 0.42 93.95 0.00 89.31 2.08 44.23 0.00 93.77 0.00 93.72 0.92 93.05 0.00 87.19 0.47
+> TR (Ours) 94.43 0.00 93.43 0.02 91.09 0.90 93.69 0.59 94.69 0.00 91.34 2.11 94.02 0.00 93.80 0.57 94.33 1.03 92.76 0.16 93.36 0.54
+
+Table 8: The defense performance on CIFAR-10 using the ResNet-18 and PreActResNet-18 backbone. 
+
+Attack BadNets Blend WaNet DataFree DUBA SIG Narcissus Average 
+
+BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR BA ASR No Defense 96.39 100.00 96.44 100.00 94.61 89.41 98.65 100.00 96.84 98.64 96.54 100.00 98.80 50.96 96.90 91.29 FP 94.91 0.19 95.31 12.51 95.70 1.07 92.82 0.73 93.25 10.38 94.80 10.35 94.35 14.36 94.45 7.08 NAD 95.83 0.37 94.96 7.46 93.34 0.60 94.46 0.04 94.23 3.81 94.29 0.64 94.62 5.98 94.53 2.70 ABL 91.66 6.00 86.27 39.98 93.60 76.11 91.63 0.03 90.64 51.77 84.26 100.00 85.27 92.41 89.05 52.33 ESTI 94.62 0.00 90.68 15.93 48.49 31.56 94.00 0.00 91.15 0.00 82.88 0.00 84.18 0.00 83.71 6.78 TR(Ours) 96.35 0.01 95.92 0.00 96.25 0.00 96.47 0.00 95.87 0.38 95.99 0.08 96.14 0.00 96.14 0.07 
+
+Table 9: The defense performance on GTSRB using the WRN-16-1 backbone. Table 10: Comparison with defense focused on fine-tuning attacks on CIFAR-10 using the VGG-16 backbone. 
+
+Method White Square Black Line BA ASR BA ASR No Defense 91.33% 100% 91.28% 100% Tang [Tang et al. , 2023] 92.20% 8.81% 92.23% 10.81% Ours 92.30% 0.01% 92.62% 0.14% 
+
+D.2 Effectiveness under More Dataset-Network Combinations 
+
+To better demonstrate the effectiveness of our method across different network architectures, we compare it with other de-fenses on CIFAR-10 using ResNet-18 and PreActResNet-18 in Table 8, and on GTSRB using WRN-16-1 in Table 9. Our method achieves the best or second-best performance in most cases, particularly on the GTSRB dataset. Although ESTI achieves a slightly lower average ASR with PreActResNet-18, our approach yields a substantially higher average BA. Consistent performance across three network architectures and two datasets demonstrates the strong generalization ca-pability of our method. 
+
+D.3 Effectiveness on ViTs and ImageNet-1k 
+
+In Table 7, we attack three different-sized ViT models us-ing the BadNets attack, following the approach in [Subra-manya et al. , 2024]. All three models consist of 12 trans-former blocks but differ in feature dimensions and the num-ber of attention heads. Specifically, ViT-T/16, ViT-S/16, and ViT-B/16 have feature dimensions of 192, 384, and 768, re-spectively, with 3, 6, and 12 attention heads. For defense, we introduce a honeypot shortcut comprising 6 transformer blocks instead of a Conv-based shortcut to bet-ter align with the original feature space. An ablation study on shortcut size is provided in Table 13. Since the default poi-soning rate of 0.01 fails to attack ViT-T/16 and ViT-S/16, we increase it to 0.1 for a stronger attack. Similar to NLP backdoor attacks, these attacks are imple-mented by fine-tuning a pre-trained clean model with poi-soned data, a common approach when targeting transformers. In this scenario, benign and backdoor knowledge are natu-rally decoupled from the start. The benign samples are inher-ently learned by the clean original branch, while the poisoned samples are rapidly captured by our shortcut branch. Con-sequently, our defense effectively reduces the attack success rate to below or close to 1%, with only a minimal impact on benign accuracy. We provide another defense results against fine-tuned attacks to CNN in Appendix D.4. 
+
+D.4 Comparison with Defenses Focused on Fine-Tuning Attacks (VGG-16) 
+
+Tang [Tang et al. , 2023] focus on NLP backdoors, propos-ing trapping backdoors within shallow layers and extend their method to image classification. Following their setup, we fine-tune a clean VGG-16 network pretrained on ImageNet on CIFAR-10, using a 3 × 3 white square and a black line (3 pixels wide) as triggers. The white square is placed at the bottom-right corner of the image, while the black line is po-sitioned at the bottom. As shown in 10, our defense remains superior to [Tang et al. , 2023] in the fine-tuned attack scenario, primarily due to a more effective honeypot design. Although [Tang et al. , 2023] employs loss functions to prevent deep layers from learning backdoors captured by shallow layers, the backdoor knowl-edge in shallow layers can still influence final predictions. In contrast, our method introduces a separate parallel branch to absorb backdoor knowledge, ensuring it does not affect the original network. 
+
+## E More Experiments and Analysis 
+
+E.1 Robustness to Different Poisoning Rates 
+
+We verify the effectiveness of our method across poisoning rates ranging from 0.01 to 0.5, and the results presented in Figure 8. In this subsection, we redefine the poisoning rate for clean-label attacks as the proportion of poisoned samples within the target-class samples. Thus, the poisoning rates for SIG and CL attacks are 0.5 in Table 1, since their attack suc-cess rates only reach 48.18% and 1.78%, respectively, when the poisoning rate is 0.1. For the same reason, we omit eval-uations against these attacks under the extremely low poison-ing rate of 0.01. The results show that our method can reduce the attack suc-cess rate to nearly 0% in most cases, while maintaining satis-factory benign accuracy. As the poisoning rate increases, the shortcut branch is able to capture backdoor knowledge more quickly and effectively, providing stronger protection to the original network from learning the backdoor knowledge. This is why our method performs well even with a poisoning rate as high as 0.5. We observe a drop in the benign accuracy of WaNet and Dynamic when the poisoning rate exceeds 0.3 and 0.4, re-spectively. This occurs because both WaNet and Dynamic employ a noisy training mode, where an additional 20% and 10% of benign samples are injected with triggers but maintain the ground-truth labels. Consequently, when the poisoning rate reaches 0.5, only 30% and 40% of the samples remain benign in WaNet and Dynamic, respectively. We also note that the benign accuracy for BadNets and Blend is relatively lower under the extremely low poisoning rate of 0.01. This is due to their weak attack strength, which makes the backdoor knowledge less distinguishable from cer-tain easily learned benign knowledge. Consequently, the shortcut branch captures a small proportion of benign knowl-edge during training, resulting in a relatively lower benign accuracy for the original network. Nevertheless, our method remains highly effective in inhibiting backdoor injection by absorbing most of the backdoor knowledge. 
+
+E.2 Class-wise Benign Performance 
+
+Although the BA drops reported in Table 1 appear small, we further present detailed class-wise BA for models trained on clean data and models trained on poisoned data with our defense in Table 11, to more clearly demonstrate the effec-tiveness of our approach. Across both datasets, our defense achieves class-wise BA comparable to that of clean models, with only minor decreases in certain cases.   
+
+> Figure 8: The BA and ASR under different poisoning rates.
+> Figure 9: Ablation study of the decoupling weight αon CIFAR-10 (left) and GTSRB (right).
+
+For the CIFAR-10 dataset, although the shortcut branch may initially absorb some easy benign samples, our decou-pling process effectively transfers most benign knowledge back to the original branch. For the imbalanced GTSRB dataset, due to the shortcut branch’s limited capacity, it fails to capture rare classes and, guided by the decoupling losses, tends to misassign them to other categories. Consequently, the original branch primarily learns to handle these rare-class samples, resulting in minimal performance degradation even under imbalance. In summary, our method preserves most easy benign knowledge while also ensuring that rare benign knowledge is not neglected. 
+
+E.3 Selection of Weight α
+
+As Figure 9 shows, we adjust the decoupling weight α from 0.5 to 2 on CIFAR-10 (left subfigure) and GTSRB (right sub-figure) to study its impact on model performance. When α
+
+is small, the attack success rate remains high on both datasets because weak decoupling fails to prevent the original network from learning backdoor knowledge, resulting in high attack success rates for both branches. Conversely, when α is suf-ficiently large ( e.g . 1 for CIFAR10 and 2 for GTSRB), the success rate of all attacks drops to nearly 0. However, an ex-cessively large α (e.g . 1.5 and 2 for both datasets) hinders the original network from effectively learning benign knowl-edge initially captured by the shortcut branch, leading to a decline in benign accuracy. For clean-label attack SIG, back-door knowledge is more vulnerable than in dirty-label attacks due to competition between the trigger pattern and the target-label ground-truth pattern. When α becomes too large, the Table 11: Class-wise BA results on CIFAR-10 and unbalanced GTSRB. In GTSRB, the selected classes are rare, each comprising less than 0.8% of the training data.                                                                                                               
+
+> CIFAR-10 Class 0123456789Clean 90.80% 96.00% 87.10% 82.90% 92.40% 86.90% 93.10% 93.00% 94.40% 94.30% Ours 84.40% 95.70% 86.70% 80.10% 92.70% 85.50% 92.00% 92.70% 96.40% 94.00% GTSRB Class 019 24 27 29 32 37 41 42 Mean Clean 100.00% 86.67% 98.89% 76.67% 96.67% 100.00% 43.33% 98.33% 100.00% 88.95% Ours 100.00% 96.67% 100.00% 69.67% 97.78% 100.00% 38.33% 93.33% 100.00% 88.53%
+> Attacks Metric Small W/O attention Base Large BadNets BA 89.42% 89.68% 89.83% 90.49% ASR 0.00% 0.00% 0.00% 0.00% Blend BA 89.75% 89.21% 89.06% 89.78% ASR 0.00% 0.00% 0.01% 0.01% WaNet BA 88.00% 88.79% 88.90% 88.54% ASR 81.71% 81.41% 1.33% 80.41% Dynamic BA 89.57% 89.13% 90.01% 89.12% ASR 86.34% 88.08% 1.06% 65.16% CL BA 89.22% 89.64% 89.33% 89.17% ASR 1.01% 2.73% 0.74% 1.07%
+> Table 12: Ablation study of the shortcut size for CNN.
+> Figure 10: The ASR of our method against the Dynamic attack un-der different shortcut configurations.
+
+loss Lh struggles to retain the backdoor knowledge within the shortcut branch, causing it to be disrupted and absorbed by the original network. Consequently, the attack success rate for SIG on CIFAR-10 increases when α exceeds 1. To strike a balance between benign accuracy and attack success rate, we set α to 1 for CIFAR-10. For GTSRB, which includes a larger number of similar classes (traffic signs), decoupling is generally more challeng-ing, and defense failures persist until α reaches 2. However, setting α = 2 throughout training compromises benign ac-curacy. To address this, we linearly decrease α from 2 to 1 during the first 50 epochs. The initially large α effectively prevents the original network from learning backdoor knowl-edge in early epochs. In the subsequent epochs, a smaller α
+
+suffices to maintain a low attack success rate, as the learning directions of the two branches have been roughly determined. Simultaneously, the gradual decrease of α gradually relaxes the control over the benign knowledge captured by the short-cut branch, allowing it to be learned by the original network. Shortcut Size BA ASR 1 block 81.84% 2.69% 3 blocks 81.81% 0.08% 6 blocks 81.79% 0.08% 9 blocks 81.77% 0.07% 
+
+> Table 13: Ablation study of the shortcut size for ViT.
+
+E.4 Impact of the Shortcut Size 
+
+To illustrate the impact of shortcut size on our method’s per-formance, we compare our base design with three variants in Table 12. The experiments are conducted on CIFAR-10 us-ing the WRN-16-1 network. Following the same settings as in Table 1, our Base shortcut consists of two Conv-Attention-BN-ReLU blocks. Additionally, we define a Small shortcut with a single block and a Large shortcut with three blocks. Furthermore, we introduce a W/O Attention variant, where the shortcut consists of two Conv-BN-ReLU blocks, remov-ing the attention mechanism. From the results, we observe that shortcut size has minimal influence on simpler attacks such as BadNets and Blend. Due to their straightforward and fixed trigger patterns, backdoor knowledge can be easily captured and separated from benign information. While our defense against CL also performs well across different shortcut sizes, this is primarily because the constraints of clean-label attacks limit their strength, mak-ing it sufficient to capture only part of the backdoor knowl-edge to inhibit injection. The impact of shortcut size becomes more pronounced for WaNet and Dynamic attacks. These attacks design more complex trigger patterns and incorporate a noise (cross-trigger) mode, which interferes with the capture and decou-pling of backdoor knowledge. To better illustrate this effect, we visualize the ASR change for the Dynamic attack in Fig-ure 10. As shown, weaker shortcuts ( e.g . Base and W/O At-tention) fail to effectively capture backdoor knowledge, re-sulting in a consistently high ASR. In contrast, the Large shortcut can rapidly learn stable backdoor patterns, reducing ASR to nearly zero. However, its stronger learning capacity also lowers prediction entropy, causing wo to remain consis-tently much higher than wh. As a result, poisoned samples continue to be primarily learned through the original network, ultimately leading to poisoning. Empirically, designing the shortcut in proportion to the original backbone size is a more reasonable approach. We propose an effective adaptive shortcut design strategy in Sec-tion 4.2. When encountering new attacks, our method can be used to construct a basic shortcut, which can then be adjusted Branch Class 0 Class 1 Class 2 Class 3 Class 4 Class 5 Class 6 Class 7 Class 8 Class 9 Entropy Weight                                 
+
+> Shortcut 9.9999e-01 3.60e-09 4.14e-08 1.12e-05 1.30e-09 2.13e-09 2.28e-08 5.81e-09 1.98e-07 6.71e-09 0.0001 wh≈1
+> Original 2.49e-17 3.74e-17 3.18e-19 1.70e-18 1.36e-19 1.68e-19 7.87e-19 6.27e-19 1.0000e+00 1.15e-17 1.79e-15 wo≈0
+> Table 14: The softmax prediction distributions of both branches for a BadNet poisoned sample, along with their corresponding entropy and weight values. Here, Class 0 is the target class. The shortcut predicts this poisoned sample as the target label with extremely high confidence, as expected. However, the original branch also makes a highly confident prediction into a non-target, incorrect class (Class 8). This results in an even lower entropy. Consequently, according to our entropy-based weight assignment, the original branch receives a very small wo, while the shortcut dominates the final prediction with wh≈1.
+
+for optimal performance. We also analyze the effect of shortcut size on ViTs in Ta-ble 13. The results indicate that shortcut size has minimal influence on defense performance. This is primarily because benign and backdoor knowledge are naturally decoupled at the start of fine-tuning, allowing even a single transformer block to easily capture nearly all backdoor knowledge effec-tively. As the shortcut size increases, ASR decreases due to stronger backdoor knowledge capture. However, a larger shortcut may also slightly reduce BA by inadvertently captur-ing parts of benign knowledge. 
+
+E.5 Weight Assignment Analysis 
+
+To illustrate the learning process for benign and poisoned samples, we visualize the weights assigned to them in Fig-ure 5. In the left subfigure, wo starts high and quickly reaches 1, suggesting that for benign samples, the shortcut branch produces increasingly confident predictions compared to the original branch. This is due to the shortcut’s initial limited learning of benign knowledge, allowing the decoupling loss to easily drive it towards confidently incorrect predictions, as reflected in its consistently low benign accuracy in Figure 4. Unlike benign samples, wh is initially low for poisoned samples in most attacks, as shown in the right subfigure. This is because the shortcut branch effectively learns backdoor knowledge initially, confidently predicting poisoned samples as the target label (high initial ASR in Figure 4). With the low 
+
+wh, the original branch dominates the final prediction for poi-soned samples, causing them to be learned primarily through the original branch. However, Ldpp discourages the original branch from mimicking the shortcut branch’s prediction ( i.e .preventing the original branch from making malicious pre-dictions for poisoned samples), creating a conflict between the classification loss Lc and the decoupling loss. This con-flict causes uncertainty in the original branch’s predictions for poisoned samples, resulting in higher entropy and a fur-ther decrease in wh. Due to Lh and the stronger backdoor knowledge in the shortcut branch, it is easier to alter the orig-inal branch’s prediction than to alter the shortcut branch’s, thus putting the classification loss at a disadvantage. As a result, the original branch increasingly predicts non-target la-bels for poisoned samples with great confidence, reflected in its reduced attack success rate in Figure 4. Consequently, wh
+
+gradually increases. This counterintuitive dynamic is further discussed in Appendix E.6. For WaNet and Dynamic with the noisy training mode, the shortcut branch needs more epochs to capture stable backdoor knowledge, resulting in a slower decoupling process. Since entropy is only related to prediction confidence and not the specific prediction label, the entropy-based weight as-signment enables a flexible composition of the final predic-tion. This allows poisoned samples to be primarily learned through the shortcut branch, while benign samples are learned through the original branch. In Appendix E.7, we further an-alyze the learning process of challenging benign samples. 
+
+E.6 Case Study of the Counterintuitive Dynamic in wh
+
+The dynamic of wh in Figure 5 is counterintuitive. Intuitively, since the shortcut branch is guided to specialize in backdoor behavior, it should predict poisoned samples with higher con-fidence than the backbone branch, resulting in lower entropy and thus a smaller wh. However, in some cases (e.g., Bad-Nets), we observe that wh approaches 1. To further investi-gate, we present the softmax prediction distributions of both branches for a BadNet poisoned sample, along with their cor-responding entropy and weight values in Table 14. Here, class 0 is the target class. From this example, the shortcut correctly predicts the tar-get class with extremely high confidence, as expected. How-ever, the original branch also makes a highly confident pre-diction—but into a non-target , incorrect class (class 8), re-sulting in an even lower entropy. Since our weighting scheme is entropy-based, the original branch receives a very small 
+
+wo, while the shortcut dominates the final prediction with 
+
+wh ≈ 1.his behavior stems from our asymmetric supervision de-sign . Specifically, we introduce two decoupling losses, Ldpf 
+
+and Ldpp , which encourage the two branches to diverge in feature and prediction spaces, respectively. To further en-hance the shortcut branch’s specialization in backdoor be-havior, we apply Lh, which explicitly enforces it to main-tain its previous learning direction—i.e., predicting poisoned samples as the target class. In contrast, we do not apply the same constraint to the original branch, as it may compromise benign accuracy. Instead, we use a learning direction de-coupling loss Lg , which, in conjunction with Lh, indirectly prevents the original branch to learning along the backdoor direction. In summary, Ldpf , Ldpp and Lg are applied to both branches, while Lh is exclusively applied to the shortcut branch. This asymmetric structure makes it eas-ier to alter the original branch’s behavior during training. 
+
+As a result, the original branch often converges to arbitrary non-target predictions for poisoned samples (to avoid align-ing with the shortcut’s prediction), and does so with high con-fidence—leading to low entropy and thus a high wh. This does not indicate uncertainty in the shortcut branch; rather, it reflects the overconfidence of the original branch in the …       
+
+> Epoch 1 Epoch 2 Epoch 3
+> Epoch 4 Epoch 5 Epoch 6
+> Epoch 7 Epoch 8 Epoch 200 Figure 11: The predictions of the two branches for benign samples under the target class 0. This experiment is conducted on CIFAR-10 with the BadNets attack. The numbers above the bars indicate the count of samples predicted as the corresponding classes, while the vertical axis represents the average prediction probability of these samples on their predicted class, i.e . the confidence that these samples are predicted as the corresponding class. The numbers reflect prediction accuracy, while the confidence indicates the prediction entropy.
+
+wrong direction, which minimizes its influence in the final ensemble prediction. 
+
+E.7 Learning Behaviors Analysis for Challenging Benign Samples 
+
+In experiments, we find that the shortcut branch will grad-ually predict all samples as the target label, effectively pre-venting the original network from learning backdoor knowl-edge. However, this also intuitively impacts the original net-work’s learning of benign samples under the target class. De-spite this, as shown in Table 1, the original network can still learn nearly all benign knowledge due to our decoupling de-sign. To analyze the learning process of such challenging benign samples whose ground-truth labels are the target la-bels, we visualize the predictions of both the original and shortcut branches for them during the decoupling training in Figure 11. Specifically, we conduct an attack experiment on CIFAR-10 using the BadNets attack, where the target class is set to class 0. After each epoch, we record the count of samples predicted as each class and calculate their predic-tion confidence. For example, if N samples are predicted as class 0, we compute the average of their prediction proba-bilities corresponding to class 0, representing the prediction confidence for class 0. The number count N above each bar reflects the prediction accuracy. In this experiment, a higher number of samples predicted as class 0 indicates better accu-racy. The prediction confidence is shown in the vertical axis, reflecting the prediction entropy. Higher confidence implies lower entropy. At epoch 1, the entire network is warmed up using only the classification loss Lc. It can be seen that the predictions of the original branch appear random, while the shortcut branch classifies nearly all samples as class 0. This indicates that the shortcut branch initially captures some benign knowl-edge. Once decoupling training begins ( i.e . after epoch 1), the shortcut branch immediately classifies all samples as the target class 0 with high confidence, resulting in a rapid drop in its benign accuracy to 10% as shown in Figure 4. This phenomenon may occur because the backdoor initially estab-lishes a simple and robust path from the poisoned samples to the target label in the shortcut branch. Therefore, the de-coupling loss finds it easier to push samples toward the target class rather than other classes. From the prediction results after epoch 1, we can see that the prediction confidence of the original branch is consis-tently lower than that of the shortcut branch. This suggests that wo is always higher than wh for these benign samples, as illustrated in the left subfigure of Figure 5. Due to the per-sistently high wo, the final predictions for these samples are always predominantly determined by the original branch, en-abling it to continuously learn them. It can be seen that with the increase of epochs, the original branch predicts more and more samples as their ground-truth class 0. In contrast, for poisoned samples, their final predictions are primarily influ-enced by the shortcut branch as the decoupling training pro-gresses, as shown in the right subfigure of Figure 5. This explains why the benign knowledge captured by the short-cut branch can be effectively learned by the original branch, whereas the captured backdoor knowledge cannot.
