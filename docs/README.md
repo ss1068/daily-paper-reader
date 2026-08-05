@@ -6,73 +6,58 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-04
-- 运行时间：2026-08-04 21:39:30 UTC
+- 最新运行日期：2026-08-05
+- 运行时间：2026-08-05 21:03:51 UTC
 - 运行状态：成功
-- 本次总论文数：17
+- 本次总论文数：12
 - 精读区：6
-- 速读区：11
+- 速读区：6
 
 ### 今日简报（AI）
-今日聚焦 LLM 安全防御前沿，深度解析了从多轮攻击防护到个性化安全对齐的 17 篇最新成果。
-重点推荐利用协作代理对抗演化攻击的满分方案，以及基于超网络实现按需安全对齐的创新技术。
-建议开发者关注多智能体内存安全与指令层级鲁棒性，以应对日益复杂的系统级安全挑战。
-- 详情：[/202608/04/README](/202608/04/README)
+今日深度复盘12篇AI安全前沿论文，重点攻克大模型防御壁垒与Agent隐蔽攻击。
+动态路由对抗白盒攻击与AI安全基准建设夺得满分，同时揭示了Agent在经验组合中“化良性为危害”的新型风险。
+建议开发者优先参考安全评测标准，并警惕自动化Agent在执行合法任务时潜藏的“隐形墨水”式攻击。
+- 详情：[/202608/05/README](/202608/05/README)
 
 ### 精读区论文标签
-1. [Stateful Cooperative Agents Safeguarding LLMs Against Evolving Multi-Turn Attacks](/202608/04/2608.00134v1-stateful-cooperative-agents-safeguarding-llms-against-evolving-multi-turn-attacks)  
+1. [Moving the Safety Barrier: Dynamic Routing Adaptive Alignment Against White-Box Attacks](/202608/05/2608.02674v1-moving-the-safety-barrier-dynamic-routing-adaptive-alignment-against-white-box-attacks)  
    标签：评分：10.0/10、query:jb-def
-   evidence：针对多轮越狱攻击的主动防御框架
-2. [Compliance2LoRA: Personalizable On-Demand Safety Alignment on Arbitrary Policy Subsets via Hypernetwork-Generated LoRA Adapters](/202608/04/2607.27594v2-compliance2lora-personalizable-on-demand-safety-alignment-on-arbitrary-policy-subsets-via-hypernetwork-generated-lora-adapters)  
+   evidence：针对白盒越狱攻击的动态路由防御
+2. [AI Security Leaderboard: Methodology, Results and Minimal Standard](/202608/05/2608.03070v1-ai-security-leaderboard-methodology-results-and-minimal-standard)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：最先进的越狱防御基准测试
+3. [$S^3$: Improving Agent Safety through Multi-Stage Defense](/202608/05/2608.02683v1-s3-improving-agent-safety-through-multi-stage-defense)  
    标签：评分：9.0/10、query:jb-def
-   evidence：大语言模型的可个性化按需安全对齐
-3. [Decoy Images Amplify Caption-Mediated Defenses Against Encoded Jailbreaks](/202608/04/2608.01043v1-decoy-images-amplify-caption-mediated-defenses-against-encoded-jailbreaks)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：针对视觉语言模型编码越狱的防御机制
-4. [SoK: Intent-Oriented Systematization of Multi-Turn LLM Jailbreaks](/202608/04/2608.01117v1-sok-intent-oriented-systematization-of-multi-turn-llm-jailbreaks)  
+   evidence：针对大模型智能体的多阶段防御，以减轻工作流中的风险
+4. [ICO: Enhancing Semantic-Shift Jailbreaks via Iterative Context Optimization](/202608/05/2608.03210v1-ico-enhancing-semantic-shift-jailbreaks-via-iterative-context-optimization)  
    标签：评分：9.0/10、query:llm
-   evidence：大语言模型多轮对话越狱攻击的系统化研究
-5. [No Single Neuron of Failure: Distributed Safety Alignment Against White-Box Attacks](/202608/04/2608.01414v1-no-single-neuron-of-failure-distributed-safety-alignment-against-white-box-attacks)  
+   evidence：研究基础模型中的语义偏移越狱攻击与上下文优化
+5. [LatentGuard: Efficient and Inspectable Latent Reasoning for LLM Safeguards](/202608/05/2608.03838v1-latentguard-efficient-and-inspectable-latent-reasoning-for-llm-safeguards)  
    标签：评分：9.0/10、query:jb-def
-   evidence：针对白盒攻击的分布式安全对齐
-6. [The Boy Who Cried Wolf: Adversarial Misclassification of Safe Inputs as Unsafe in Multimodal Guardrails](/202608/04/2608.01373v1-the-boy-who-cried-wolf-adversarial-misclassification-of-safe-inputs-as-unsafe-in-multimodal-guardrails)  
+   evidence：高效且可检查的LLM安全防护框架
+6. [Safety in Batches? Understanding and Mitigating Safety Failures in Batch Prompting](/202608/05/2608.02681v1-safety-in-batches-understanding-and-mitigating-safety-failures-in-batch-prompting)  
    标签：评分：8.0/10、query:jb-def
-   evidence：针对多模态安全护栏的对抗性攻击研究
+   evidence：缓解批量提示词中的安全失效问题
 
 ### 速读区论文标签
-1. [\textsc{IH-Benchmark}: A Conflict-Centered Benchmark for Instruction-Hierarchy Robustness in LLM Applications](/202608/04/2607.25987v1-textscih-benchmark-a-conflict-centered-benchmark-for-instruction-hierarchy-robustness-in-llm-applications)  
+1. [Salami Attack: Stealthy Collusive Memory Poisoning against OpenClaw](/202608/05/2608.01637v1-salami-attack-stealthy-collusive-memory-poisoning-against-openclaw)  
    标签：评分：8.0/10、query:llm
-   evidence：指令层级鲁棒性与安全对齐的基准测试
-2. [IH-Benchmark: A Conflict-Centered Benchmark for Instruction-Hierarchy Robustness in LLM Applications](/202608/04/2607.25987v2-ih-benchmark-a-conflict-centered-benchmark-for-instruction-hierarchy-robustness-in-llm-applications)  
+   evidence：针对内存投毒攻击的红队测试框架
+2. [Benign Alone, Harmful Together: Exploiting Experience Composition in Self-Evolving LLM Agents](/202608/05/2608.01759v1-benign-alone-harmful-together-exploiting-experience-composition-in-self-evolving-llm-agents)  
    标签：评分：8.0/10、query:llm
-   evidence：指令层级鲁棒性与安全
-3. [MAPLE-Guard: Memory-Aware Link Enforcement Against Memory-Link Poisoning in Multi-Agent Systems](/202608/04/2608.00426v1-maple-guard-memory-aware-link-enforcement-against-memory-link-poisoning-in-multi-agent-systems)  
+   evidence：针对大模型智能体的经验条件序列攻击
+3. [Invisible Ink Threats: Adversarial Goals Behind Legitimate Tasks in Computer-Use Agents](/202608/05/2608.02018v1-invisible-ink-threats-adversarial-goals-behind-legitimate-tasks-in-computer-use-agents)  
    标签：评分：8.0/10、query:llm
-   evidence：多智能体系统中的内存链路投毒防御
-4. [Adversarial Attacks in Multi-Agent LLM Pipelines: Unveiling Structural Vulnerabilities in Agentic AI Architectures](/202608/04/2608.00718v1-adversarial-attacks-in-multi-agent-llm-pipelines-unveiling-structural-vulnerabilities-in-agentic-ai-architectures)  
+   evidence：计算机使用智能体中的间接提示注入
+4. [Your Agentic LLMs Secretly Encode Latent Signals of Indirect Prompt-Injection Exposure](/202608/05/2608.02657v1-your-agentic-llms-secretly-encode-latent-signals-of-indirect-prompt-injection-exposure)  
    标签：评分：8.0/10、query:llm
-   evidence：智能体AI架构中的对抗性攻击与结构性漏洞
-5. [Mind the Gap: Zero-Query Jailbreaks via Filter-Generator Discrepancy in Text-to-Image Systems](/202608/04/2608.00973v1-mind-the-gap-zero-query-jailbreaks-via-filter-generator-discrepancy-in-text-to-image-systems)  
+   evidence：针对间接提示词注入攻击的防御
+5. [MAFIA: Query-Only Memory Attacks via Probing and Factual Injection against Audited LLM Agents](/202608/05/2608.03844v1-mafia-query-only-memory-attacks-via-probing-and-factual-injection-against-audited-llm-agents)  
    标签：评分：8.0/10、query:llm
-   evidence：利用文生图系统过滤器与生成器差异的越狱攻击
-6. [Auditable Release Control for Pedagogical Leakage in LLM Tutors](/202608/04/2608.00515v1-auditable-release-control-for-pedagogical-leakage-in-llm-tutors)  
+   evidence：针对经过审计的大模型智能体的记忆投毒攻击
+6. [Why Formal Monitors Fail: Attack Distribution Entropy as a Coverage Bound for LTL-Based LLM Agent Safety](/202608/05/2608.01388v1-why-formal-monitors-fail-attack-distribution-entropy-as-a-coverage-bound-for-ltl-based-llm-agent-safety)  
    标签：评分：7.0/10、query:jb-def
-   evidence：大语言模型导师的安全护栏
-7. [LaCache: Robust Semantic Caching for LLM Serving](/202608/04/2608.01718v1-lacache-robust-semantic-caching-for-llm-serving)  
-   标签：评分：7.0/10、query:llm
-   evidence：针对大模型缓存碰撞攻击的鲁棒语义缓存方案
-8. [MNC: Scope-Bound Semantic Declassification for Private LLM-Agent Communication](/202608/04/2608.01719v1-mnc-scope-bound-semantic-declassification-for-private-llm-agent-communication)  
-   标签：评分：7.0/10、query:llm
-   evidence：私有LLM智能体通信与语义去分类
-9. [Mitigating Backdoors via Decoy Shortcuts and Knowledge Decoupling](/202608/04/2608.00732v1-mitigating-backdoors-via-decoy-shortcuts-and-knowledge-decoupling)  
-   标签：评分：6.0/10、query:llm
-   evidence：缓解后门攻击与数据投毒
-10. [Beyond Single-Use Tokens: Durable Authorization State for Replay-Resistant LLM Agent Actions](/202608/04/2608.01710v1-beyond-single-use-tokens-durable-authorization-state-for-replay-resistant-llm-agent-actions)  
-   标签：评分：6.0/10、query:llm
-   evidence：大语言模型智能体操作的安全措施
-11. [VulnGym: Benchmarking Coding Agents for Repository-Level Vulnerability Detection](/202608/04/2608.02001v1-vulngym-benchmarking-coding-agents-for-repository-level-vulnerability-detection)  
-   标签：评分：6.0/10、query:llm
-   evidence：基于大模型的漏洞检测基准
+   evidence：大模型智能体的安全护栏与监控
 
 
 <div class="dpr-home-promo-card">
