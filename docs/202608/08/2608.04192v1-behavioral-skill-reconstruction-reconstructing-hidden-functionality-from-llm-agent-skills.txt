@@ -1,0 +1,669 @@
+Title: Behavioral Skill Reconstruction: Reconstructing Hidden Functionality from LLM Agent Skills
+
+URL Source: https://arxiv.org/pdf/2608.04192v1
+
+Published Time: Thu, 06 Aug 2026 00:09:14 GMT
+
+Number of Pages: 20
+
+Markdown Content:
+# Behavioral Skill Reconstruction: Reconstructing Hidden Functionality from LLM Agent Skills 
+
+Peichun Hua Haoxuan Xu Mengyuan Li 
+
+peichunhua04@gmail.com {xuhaoxua,mli49061}@usc.edu 
+
+University of Southern California 
+
+Abstract 
+
+Closed source agent skills may encode propri-etary instructions, scripts, constants, and data. Providers may offer their capabilities as ser-vices while keeping the underlying packages hidden. Prior work focuses on prompt injec-tion attacks that directly disclose these artifacts, and existing defenses accordingly aim to pre-vent such leakage. However, preventing file disclosure does not prevent users from recov-ering the functionality those files implement. This raises a fundamental question: can a user reconstruct a skill’s functionality through ordi-nary use while its files remain hidden? 
+
+We study behavioral skill reconstruction (BSR), in which an attacker uses valid task requests and observed responses to build a functional clone of a hidden skill. We introduce S KILL -CLONE , a black-box attack that clones a target skill by forming an interface hypothesis from its public advertisement, issuing structured be-nign probes, synthesizing an executable replica, and iteratively repairing it through differen-tial validation against the victim skill. Across 30 skills spanning rules, tables, procedures, and algorithms, S KILL CLONE achieves exact or partial recovery on held-out inputs for sev-eral targets. Iterative requerying closes gaps missed by single-round reconstruction. Be-cause S KILL CLONE uses only legitimate in-teractions, disclosure-focused defenses provide limited coverage, and less detailed skill descrip-tions offer limited protection. These results show that file secrecy alone does not ensure functional secrecy. Defenses must also limit cumulative information leakage from ordinary use. 
+
+1 Introduction 
+
+LLM agents increasingly rely on external skills ,which package instructions, scripts, reference data, and tool logic that an agent loads on demand (An-thropic, 2025). Skills add specialized capabilities without retraining the underlying model and can substantially improve task performance (Li et al., 2026). The emerging ecosystem includes both pub-lic and proprietary skills. Public registries host 90,368 skills from 9,485 publishers, with 24.3 mil-lion cumulative installs (Cho et al., 2026), while paid marketplaces list more than 2,000 skills and re-port over $100,000 in creator earnings (Wang et al., 2026). Private and enterprise skills may further encode valuable rules, data, procedures, and code. Providers may therefore wish to offer these capa-bilities as services while keeping the underlying packages confidential. The value of these skills creates an incentive to recover their capabilities without paying for or inde-pendently developing them. Existing research has primarily studied direct disclosure, where prompt injection, jailbreak, or prompt stealing induces an agent to reveal hidden instructions or files (Zhang et al., 2024; Sha and Zhang, 2024; Agarwal et al., 2024; Wang et al., 2026). Related studies exam-ine cross-modal injection, unsafe runtime behavior, and composition-based exploitation (Lan and Xiao, 2026; Xie et al., 2026; Hossain et al., 2026). Corre-sponding defenses detect extraction intent, isolate protected instructions, or filter outputs containing sensitive content (Hua et al., 2026; Li et al., 2025; Cao et al., 2025; Jiang et al., 2025). This attack and defense setting treats skill confidentiality primarily as artifact secrecy: a skill is considered protected if its underlying files are not disclosed. Artifact secrecy, however, may not imply func-tional secrecy. A skill offered as a service must reveal aspects of its behavior through ordinary task responses. Repeated interactions can expose ta-ble entries, decision thresholds, composition rules, and procedural conventions while the underlying package remains hidden. This raises our central research question: Can an attacker reconstruct a skill’s hidden functionality through ordinary task use while its artifacts remain concealed? 
+
+We study this threat as behavioral skill recon-arXiv:2608.04192v1 [cs.CR] 4 Aug 2026 struction (BSR). In BSR, an attacker submits valid task requests, observes the responses, and builds a functional clone of a hidden skill. The attacker nei-ther accesses the skill package nor asks the agent to reveal it, but interacts with the skill-enabled agent through its intended service interface. We introduce S KILL CLONE , a black box attack for behavioral skill reconstruction. S KILL CLONE 
+
+begins with the public skill description , which al-lows an agent to route relevant tasks to it. The at-tack converts cues in the descriptive advertisement into a typed interface hypothesis, issues structured benign probes, parses the responses, and synthe-sizes an executable clone. It then generates valida-tion inputs, identifies disagreements between the clone and the victim, and issues additional probes to repair the inferred implementation. This closed-loop process uses only victim responses and does not require access to the hidden skill or the eval-uation oracle. We define model-relative marginal functionality to isolate the skill’s contribution from capabilities the underlying model already provides. A component is IP-positive and eligible for recon-struction scoring only when the skill-enabled vic-tim applies it reliably, but the same model cannot reproduce it from the public description alone. We evaluate S KILL CLONE on 30 skills from SkillsBench (Li et al., 2026), SkillRet (Cho et al., 2026), and a public registry crawl. The suite covers rules, tables, procedures, and algorithms. In deployed-agent experiments, S KILL CLONE re-covers 16 of 21 mined skills above floor on the strongest victim and produces exact clones for several deterministic procedures. Controlled in-context experiments separate functional leakage from routing and framework failures and show that iterative victim-guided requerying closes coverage gaps that defeat single-round reconstruction. We further find that defenses designed for direct dis-closure provide limited protection. A disclosure-oriented filter detects all four explicit disclosure probes in our evaluation, while its input detector flags 6.7% of S KILL CLONE ’s task-valid probes. Reducing the detail of public skill descriptions also yields inconsistent protection. These results show that protecting skill files from disclosure is insuffi-cient to preserve functional secrecy. Defenses must also limit the information accumulated through le-gitimate task interactions. Our contributions are: 1. We formulate behavioral skill reconstruction as a distinct threat to closed source agent skills and define model-relative marginal function-ality for measuring recovery beyond the base model’s existing capabilities. 2. We introduce S KILL CLONE , an iterative black box attack that uses public skill advertise-ments, structured benign probes, executable synthesis, and victim-guided differential vali-dation to reconstruct functionality. 3. We evaluate S KILL CLONE on 30 skills span-ning rules, tables, procedures, and algorithms, identify six major reconstruction bottlenecks, and measure two defense interventions. 
+
+2 Background 
+
+Agent Skills. A skill is a reusable, file-system-based package that an agent loads during task exe-cution to handle a class of tasks without retraining the model (Anthropic, 2025; Li et al., 2026). It combines a natural-language instruction file with optional scripts, templates, reference files, and worked examples; an agent harness makes these resources actionable at inference time. Skills con-tinue a line of work on reusable agent capabilities, including executable libraries learned from expe-rience (Wang et al., 2023), reusable workflows in-duced from trajectories (Wang et al., 2024b), and portable capability packages (Xu and Yan, 2026). Large public registries make both skill reuse and skill retrieval practical research problems (Cho et al., 2026; Liu et al., 2026a). We model a skill as s = ( as, b s). The advertise-ment as is the public name and description used for routing (Cho et al., 2026); the body bs contains the full instructions and any bundled scripts, data, or re-sources. Under progressive disclosure (Anthropic, 2025), an agent initially sees as, loads bs when se-lected, and opens auxiliary files as needed. Mount-ing s on model m yields an agent Am,s whose ob-servable behavior depends on the hidden body. The advertisement supports routing, and ordinary an-swers expose the body’s functional consequences, which S KILL CLONE leverages. 
+
+Model and function extraction. A classical line reconstructs a victim model from black-box pre-diction queries. Tramèr et al. (2016) showed that prediction APIs leak their models and extracted them using equation-solving and path-finding at-tacks; Papernot et al. (2017) trained a local surro-gate on queried labels to transfer adversarial ex-amples; Jagielski et al. (2020) recovered network weights and hyperparameters with high accuracy and fidelity; and Krishna et al. (2020) showed that production machine-learning pipelines expose their models to adversaries with legitimate pipeline ac-cess. More recently, Carlini et al. (2024) recovered structural components of a production language model, and a parallel line extracts verbatim train-ing data (Carlini et al., 2021) and infers training-set membership (Shokri et al., 2017); surrogate train-ing itself builds on knowledge distillation (Hinton et al., 2015). S KILL CLONE inherits the black-box query primitive, the active-learning view of probe selection, and the surrogate-versus-victim agree-ment metric, but targets the marginal functionality contributed by one mounted skill, recoverable by a normal user of a skill-enabled agent. 
+
+Prompt and instruction disclosure. A second line steals the hidden text that conditions a model. System prompts and in-context instructions can be reconstructed through adversarial queries (Zhang et al., 2024; Sha and Zhang, 2024; Agarwal et al., 2024); instruction-hijacking techniques such as “ig-nore previous prompt” (Perez and Ribeiro, 2022) and universal adversarial suffixes (Zou et al., 2023) manipulate the same hidden text; indirect prompt injection (Greshake et al., 2023) delivers it through tool and document content; and black-box skill stealing induces an agent to print its SKILL.md 
+
+(Wang et al., 2026). These attacks succeed only when the hidden string is disclosed. S KILL CLONE 
+
+forbids disclosure: the adversary’s objective is the function the text implements, observed through ordinary answers, so disclosure-shaped filters (Sec-tion 6) leave it unaffected. 
+
+Agent and skill security. Skills extend tool-use agents (Yao et al., 2023; Schick et al., 2023; Qin et al., 2024; Wang et al., 2025) and form a distinct attack surface. An empirical study of agent skills in the wild catalogues security vulnerabilities across public registries at scale (Liu et al., 2026b); skill mutation attacks (Kim et al., 2026) and vetting benchmarks (Hossain et al., 2026) address mali-cious skill content, while runtime sandboxing (Lan and Xiao, 2026) and composition auditing (Xie et al., 2026) constrain what a loaded skill can do, and lifecycle governance tracks skills from collec-tion to retirement (Liu et al., 2026a). Agent-side leakage also flows through tool interfaces: memory retrieval can be hijacked to exfiltrate private records (Cui et al., 2026b), and multi-agent orchestration harnesses can be distilled through black-box inter-action (Cui et al., 2026a). These works attack arti-facts, agent infrastructure, or interaction protocols. SKILL CLONE instead measures the functionality itself: how much of a benign skill leaks through ordinary, task-valid use. Concurrently, Geng et al. (2026) independently proposes to infer proprietary skills from behav-ior; notably, their S IG LEAK contrasts skill-enabled and skill-disabled execution trajectories. S KILL -CLONE differs in three respects: it observes final answers only, without disabling the skill, which might not be practical in real scenarios; it synthe-sizes executable clones scored by exact held-out ASR against deterministic oracles, not semantic similarity; and it attributes each outcome to a bind-ing bottleneck. We also provide an evaluation suite containing IP-positive skills from different sources, covering various types of skills, and we provide held-out test cases to infer the real functionality of the clone. 
+
+Defenses against extraction and disclosure. Adefense literature targets extraction and disclosure directly: knowledge honeypots trap extraction at-tempts with planted decoys (Dai and Dong, 2026); PromptKeeper (Jiang et al., 2025) and system-level prompt protection (Cao et al., 2025) defend the sys-tem prompt itself; structured-query defenses (Chen et al., 2025) and dynamic rule-based isolation (Li et al., 2025) block injection channels; and adaptive shield prompting protects multimodal models from structure-based attacks (Wang et al., 2024a). Ad-jacent robustness work detects jailbreak attempts (Nian et al., 2025; Hua et al., 2026). These de-fenses assume that an attack manifests as anoma-lous queries, injection channels, or disclosure of a protected string. S KILL CLONE ’s probes are task-valid and benign by construction, and its objective is functional rather than textual: Section 6 shows that disclosure-shaped filters (Wang et al., 2026) leave its ASR unchanged. Our measurements characterize the gap these defenses leave open— cumulative behavioral reconstruction through ordi-nary task use. 
+
+3 Attack Methodology 
+
+We model our attack, S KILL CLONE , as a black-box system identification of the functionality con-tributed by a mounted skill. Figure 1 summarizes the attack loop, the victim boundary, and the eval-uation process. In this section, we first define the threat model (§3.1), as well as the component-oriented reconstruction target (§3.2). Then we present the interface hypothesis, probe policy, ob-servation parsing, program synthesis, and differen-tial repair modules (§3.3). 
+
+Running example. To illustrate how SKILL -CLONE reconstructs hidden functionality, we use a synthetic document-triage skill. It assigns text to three priority levels (1–urgent, 2–review, and 3–normal). Its advertisement specifies content and word count as inputs, while its body encodes an urgent-keyword disjunction, a length threshold (> 500 words), and a conjunction requiring both high word count and review-related content for Priority 2. The attacker reconstructs these rules through task-valid probes. 
+
+3.1 Threat Model and Formal Objective 
+
+We adopt a black-box threat model similar to prior related work (Wang et al., 2026; Cui et al., 2026a). The attacker is a normal user of a skill-enabled agent. It knows the advertisement and public task interface σs and may submit task-valid inputs. Its observations are restricted to final messages and artifacts. The attacker cannot inspect the skill body, bundled files, hidden tool activity, chain-of-thought, or evaluator test cases. Its goal is an executable clone ˆf that recovers the function contributed by the mounted skill. Each query must request output that the ad-vertised skill is intended to provide. Artifact-revelation and instruction-exfiltration queries fall outside the protocol. This restriction separates SKILL CLONE from jailbreak, prompt-injection, and prompt-extraction settings (Wang et al., 2024a; Hua et al., 2026; Li et al., 2025; Cao et al., 2025; Jiang et al., 2025). All evaluated skill bodies are public artifacts available to the evaluator, but the protocol withholds them from the attacker. Within this threat model, we formalize the re-construction objective as follows. For a victim model m and skill s, let Am,s denote the agent ex-posed to users. A task input x ∈ X produces an observable answer y = Am,s (x) consisting only of visible messages and artifacts. The attacker re-ceives the advertisement as, public task interface 
+
+σs, and query budget B, and its information after t
+
+queries is 
+
+Ht = {as, σ s, (x1, y 1), . . . , (xt, y t)},yi = Am,s (xi). (1) The attacker’s policy chooses xt+1 ∼ π(· | Ht)
+
+subject to the task-valid restriction above, and a synthesizer maps the resulting history to an exe-cutable clone in a class G. The evaluator alone holds the skill’s ground-truth function f ⋆s and uses it to score the final clone (§4); the attacker instead optimizes agreement with further victim responses. 
+
+3.2 Component-oriented Target Model 
+
+The reconstruction target is the model-relative marginal functionality contributed by the hidden skill body: concrete thresholds, table entries, com-position rules, and procedural conventions that dis-tinguish the skill-enabled agent from the plain LLM model. For example, a traffic-classification adver-tisement may expose the task and its input fields, while the hidden body specifies the exact detection thresholds and the logic that combines them. The public advertisement and task interface pro-vide cues about the likely implementation structure, but leave its exact form unspecified. A pricing skill, for example, may suggest a lookup table indexed by products or service tiers, whereas a traffic classifier may suggest threshold-based rules over network features. From these cues, the attacker constructs an initial typed interface hypothesis h0, specify-ing candidate input and output types, latent factors, hidden parameters, and composition families. The subsequent probing and synthesis stages instanti-ate and refine this hypothesis by recovering the concrete constants, entries, and logic. 
+
+3.3 Autonomous Attack Modules 
+
+SKILL CLONE realizes behavioral reconstruction through five modules connected by their data flow. Interface hypothesis formation narrows the space of plausible implementations; probe generation and observation parsing convert task-valid interactions into typed evidence; program synthesis produces an executable clone; and differential validation uses victim–clone disagreements to guide repair. 
+
+Interface hypothesis. Given (as, σ s), the at-tacker constructs a typed interface hypothesis 
+
+h0 = ( ˆX , ˆY, ˆZ, ˆΘ, ˆC), (2) where ˆZ are candidate latent factors, ˆΘ are can-didate constants or parameters, and ˆC is a candi-date composition family. Candidate factors include port counts, entropy, and conjunctions for network skills; city, product, code, or date keys for data skills; and intermediate quantities and reduction conventions for procedures. The public advertise-ment, task interface, and general domain knowl-edge bound this hypothesis space. Unadvertised ATTACKER VICTIM DIFFERENTIAL VALIDATION      
+
+> 1
+> Public Interface
+> 𝑆 = (𝑎𝑑𝑣𝑒𝑟𝑡𝑖𝑠𝑒𝑚𝑒𝑛𝑡 𝑎 !,𝑡𝑎𝑠𝑘 𝑠𝑐ℎ𝑒𝑚𝑎 𝜎 !)
+> triage(text,words)
+> →priority
+> 2Interface Hypothesis
+> 𝑇𝑦𝑝𝑒𝑑 𝑖𝑛𝑡𝑒𝑟𝑓𝑎𝑐𝑒 ℎ !
+> 𝐺𝑖𝑣𝑒𝑛 (𝑎 ", 𝜎 ")
+> keywords? >500? AND or OR?
+> 3
+
+Probes                             
+
+> 𝑇𝑎𝑠𝑘 𝑣𝑎𝑙𝑖𝑑 𝑖𝑛𝑝𝑢𝑡𝑠 𝑥 "#$ ∼ 𝜋(⋅∣ 𝐻 ")
+> outage, 300 review, 500 report, 600
+> 4
+> Black-box Victim
+> visible response only P1 ·P2 ·P3
+> 5
+> Typed observations
+> 𝐻𝑖𝑠𝑡𝑜𝑟𝑦 𝐻 #,𝑇𝑦𝑝𝑒𝑑 (𝑥 $, 𝑦 $)
+> outage →P1 report →P3
+> 6Clone Synthesis
+> 𝑃𝑟𝑜𝑔𝑟𝑎𝑚 '𝑓 "← 𝒮 𝐻 "∈ 𝒢
+> urgent →P1 words>500 ∧review
+> →P2
+> Disagreements prioritize the next probes
+> Fresh Validation
+> 𝑉
+> Victim 𝐴 >,?
+> Clone "𝑓 @
+> DISAGREE ！
+> ①500 words: Clone → P2 ≠ Victim → P3
+> ②501 words: AGREE! Repair logic ≥500 → >500
+> EVALUATION 𝑆𝑢𝑏𝑚𝑖𝑡𝑡𝑒𝑑 𝐹𝑖𝑛𝑎𝑙 " 𝑓 ∗
+> Held-out evaluator
+> 𝑂𝑟𝑎𝑐𝑙𝑒 𝑓 ?∗𝑎𝑛𝑑 𝑇𝑒𝑠𝑡 𝑖𝑛𝑝𝑢𝑡𝑠 𝐷 @D?@
+> Recovery (ASR)
+> 𝐴 %," 𝑤𝑖𝑡ℎ 𝑚𝑜𝑑𝑒𝑙 𝑚 𝑎𝑛𝑑 𝑠𝑘𝑖𝑙𝑙 𝑠
+
+Figure 1: Overview of S KILL CLONE . Stages 1–3 turn public advertisement and interface into interface hypothesis and diverse probes. Stages 4–6 send probe inputs into the victim, parse its responses, and synthesize the clone. Differential validation compares clone and victim outputs and prioritizes disagreements for the next round. 
+
+factors outside general domain knowledge can be absent from h0, creating a hypothesis-quality bot-tleneck. In the document-priority example, the public information exposes the input fields, out-put labels, and relevance of keywords and length while leaving the exact keywords, threshold, and composition unknown. 
+
+Probe policy. The attacker uses a fixed, domain-general operator library to distinguish its current hypotheses. Isolation varies one factor while hold-ing the rest neutral; dose–response sweeps its mag-nitude; boundary search localizes a threshold; com-position distinguishes additive, max/min, priority, floor, and Boolean rules; counterfactual and con-found probes separate overlapping factors; and enu-meration covers lookup keys. The operator library is a heuristic experimental-design policy. The au-tonomous attacker chooses and instantiates oper-ators from the public information and observed history. 
+
+Running example. In our example, the attacker may adopt the following strategies: 
+
+Isolation. The attacker hypothesizes that certain keywords trigger urgent priority. It submits “server outage” with a neutral 300-word body; the victim returns Priority 1. It then submits “server reboot,” also at 300 words; the victim again returns Prior-ity 1. Holding word count constant while varying the keyword shows that both phrases activate the urgent rule, suggesting a keyword list. 
+
+Boundary search. The attacker suspects a word-count threshold for the review tier. It submits “bud-get review” at exactly 500 words; the victim returns Priority 3. It then submits the same text at 501 words; the victim returns Priority 2. The attacker infers a strict threshold at >500 words. 
+
+Composition. To test whether length alone suf-fices, the attacker submits “quarterly report” with 600 words and neutral content; the victim returns Priority 3. Priority 2 requires long text and review-related content, a conjunction rule. 
+
+Observation parsing. Real agents return prose and artifacts. The attacker requests “only the an-swer,” parses each visible response into a typed observation, and treats the parsed victim output as the label for subsequent synthesis and repair. 
+
+Program synthesis. The synthesizer ˆft =
+
+S(Ht) ∈ G turns the history into executable code using a constrained schema appropriate to the hy-pothesized interface: threshold classifier, table lookup, rule engine, state machine, or numeric pro-cedure. The resulting artifact is a standalone ex-ecutable surrogate of the function contributed by the skill. Held-out execution exposes unsupported specifications. The synthesizer infers private con-stants and data from the query history. 
+
+Running example. In our example, the attacker has collected observations such as (“server outage”, 300 words) → Priority 1, (“budget review”, 500 words) → Priority 3, and (“quarterly report”, 600 words) → Priority 3. Together with the 501-word “budget review” observation above, the synthesizer infers: (1) two keywords trigger Priority 1 regard-less of length; (2) Priority 2 requires > 500 words AND review-related content; (3) everything else defaults to Priority 3. It then writes a Python func-tion with conditional branches encoding these rules such that its correctness can be checked mechani-cally in the evaluation. 
+
+Differential verification and repair. The evalu-ator oracle remains hidden, so the attacker scores candidates by victim agreement. It generates fresh task-valid inputs and runs both the synthesized clone ˆft and Am,s , re-queries disagreements, and synthesizes a repaired clone. 
+
+Running example. For example, if the document clone initially uses words ≥ 500 , “budget ap-proval” at exactly 500 words produces a disagree-ment: the clone returns Priority 2 and the victim returns Priority 3. At 501 words, both return Prior-ity 2. These observations identify the strict >500 
+
+comparison, and the attacker repairs the clone ac-cordingly. The attacker returns the candidate ˆft∗
+
+with the highest victim agreement on its validation set, where 
+
+t∗ = arg max  
+
+> t
+
+Agree( ˆft, A m,s ; V ), (3) where V is generated by the attacker and is disjoint from the evaluator test data. 
+
+3.4 Reconstruction Loop 
+
+Putting the modules together, one round updates the interface hypothesis from Ht, instantiates a discriminating probe, parses the victim response, synthesizes ˆft+1 , and validates it against fresh vic-tim outputs. The loop repeats until budget B is exhausted and returns the round with the highest victim agreement. This modular design enables ablations that replace one module at a time and measure the resulting change in ASR. §5.1 defines these interventions and reports the corresponding failure mechanisms for each type of skills. 
+
+4 Experimental Setup 
+
+We first construct the skill suite and determine eligi-ble skill–victim cells (§4.1), then build component-level held-out evaluators and scoring (§4.2), and finally specify the S KILL CLONE protocol (§4.3). 
+
+4.1 Eligibility and Suite Construction 
+
+Our suite is designed to support exact and at-tributable measurement of behavioral reconstruc-tion. This imposes two eligibility requirements: 1) deterministic functionality with auditable ground truth, so that recovery can be scored by held-out functional equivalence; 2) the skill body must pro-vide a measurable functional benefit for at least one victim: the victim must reliably perform some functionality with the body that it cannot without the skill body. 
+
+Candidate pools and execution settings. We draw candidates from SkillsBench (Li et al., 2026), SkillRet (Cho et al., 2026), and a public registry crawl. Within each candidate cohort, eligibility screening and the subsequent S KILL CLONE evalu-ation use the same execution setting. SkillsBench candidates retain the benchmark’s deployed Open-Hands setting because these packages are curated for agent execution. Mined candidates are screened and evaluated by directly loading the skill body in context. This controlled setting isolates the S KILL -CLONE mechanism from agent-stack delivery and parsing failures. Appendix D further reports full-agent functionality screens and complete S KILL -CLONE evaluation runs for the mined skills. 
+
+Victim models. We evaluate DeepSeek-Flash, DeepSeek-Pro, GLM-5.1 (Zhipu AI, 2026), Kimi-K2.6 (Team et al., 2026), and GPT-5.6-Luna as victims. These models define the skill–victim cells considered in the second screening stage and in the subsequent cross-model evaluation. 
+
+Two-stage screening. The first stage retains tar-gets with deterministic logic and auditable ground truth; mined candidates additionally require a com-patible license. In the second stage, we run each surviving candidate with and without the body on the same task-valid inputs for each victim. A com-ponent is marginal when Am,s applies it reliably and Am, ∅ fails to do so; a skill–victim cell is IP-positive when it contains at least one such compo-nent. Operationally, we require fid( Am,s ) ≥ 0.6
+
+and fid( Am,s ) − fid( Am, ∅) ≥ 0.25 , where fid is agreement with the oracle. A skill enters the suite when at least one victim yields an IP-positive cell, whereas reconstruction for a particular victim is evaluated only on that vic-tim’s eligible cells. This procedure yields a 30-skill suite with 9 code-execution or procedure-heavy SkillsBench skills, 11 SkillRet data/rule skills, and 10 data/rule skills from the registry crawl. Ap-pendix B documents the sources, license filter, se-lection criteria, and per-victim counts. 
+
+4.2 Held-out Evaluator and Scoring 
+
+For each retained target, we complete the evaluator used for held-out scoring. The evaluator includes a deterministic self-oracle f ⋆s reimplemented from the body, a typed input/output schema, and a seeded input generator. It decomposes the skill into func-tional components c ∈ Cs and constructs discrimi-nating inputs D(c) on which correct and incorrect implementations diverge. These inputs exercise hidden constants, thresholds, table rows, special cases, composition rules, and procedure conven-tions. The component set and discriminating inputs remain evaluator-only. Probe, attacker-generated validation, and evalu-ator test inputs are drawn from disjoint generator ranges. Mined-skill clones are scored on n=150 
+
+evaluator-only test inputs, and SkillsBench clones are scored on n=800 . The test distribution empha-sizes discriminating inputs so that held-out agree-ment measures recovery of the hidden components rather than agreement on uninformative examples. Appendix B gives the per-skill oracle, component definitions, and split construction. The primary score is attack success rate: 
+
+ASR( ˆf ) = Ex∼D test 
+
+h
+
+1{ ˆf (x) = f ⋆s (x)}
+
+i
+
+. (4) The deployable clone is selected by victim agree-ment on attacker-generated validation inputs, while reported ASR is computed against f ⋆s on evaluator-held-out inputs. 
+
+4.3 SKILL CLONE Experimental Protocol Attacker model. DeepSeek-V4-Flash Preview (DeepSeek-AI, 2026) serves as the primary attacker throughout our experiments. We use DeepSeek-Pro only in the attacker-model ablation. 
+
+Query budget. Controlled mined-skill runs use 52 victim probes to build the clone and 30 fur-ther victim queries to select among candidates, for 82 victim queries per skill. SkillsBench attacks use K=24 victim probes. The paired acquisition-policy ablation gives both arms the same acquisi-tion budget and victim outputs; Appendix D re-ports its separate shared-panel accounting. At these budgets, DeepSeek attacks cost approxi-mately 0.9 ¢with Flash and 1.3 ¢with Pro. 
+
+Model and synthesis settings. Victims run at temperature 0 where the API permits; Kimi-K2.6 uses its fixed vendor setting (Moonshot AI, 2026). The synthesizer produces three candidates at tem-peratures {0, 0.5, 0.9} and retains the one with highest victim-validation agreement. Appendix D reports parsing within the full agent stack. Ap-pendix C.5 reports victim-temperature robustness. 
+
+5 Results 
+
+We evaluate whether S KILL CLONE reconstructs hidden functionality and what limits recovery (§5.1), how closed-loop refinement and adaptive probe selection affect reconstruction (§5.2), and how results vary across victim models (§5.3). 
+
+5.1 Reconstruction Effectiveness Reconstruction by component type. Table 1 groups the 30-skill suite by dominant hidden func-tionality and reports all-victim median ASR and fraction above floor; Appendix C provides per-skill and per-model results. 
+
+Bottleneck diagnostics. For each skill, we in-vestigate the process and provide diagnostics for failures: ground-truth labels in place of victim re-sponses test victim fidelity ; hand-designed bound-ary sweeps test probe specificity ; an unbounded query budget tests coverage ; a supplied latent fac-tor tests hypothesis quality ; a named algorithm or visible working (Appendix C.4) tests synthesis ; and a supplied formula identity tests recall .
+
+Victim fidelity affects every component type because victim responses are the attacker’s only labels. While the IP screen removes cells without a reliable teaching signal, eligible cells can still con-tain incorrect labels that corrupt reconstruction. For 
+
+r2r , the victim miscomputes the Jacobian entries that contain the hidden constants, so the attacker learns from incorrect labels and the clone scores 0% ASR. With evaluator-oracle labels, the same reconstruction reaches 100% ASR, identifying vic-tim fidelity as the bottleneck. 
+
+Threshold and decision rules have a 71% me-dian, with three of four skills above floor. Coarse autonomous probes distinguish the categorical constraints in security-env-standards yet miss dapt ’s exact entropy and packet-rate cutoffs, leaving it at its 50% balanced-class floor. Hand-designed boundary sweeps lift dapt to 96–100%, identifying probe specificity as the bottleneck. 
+
+Lookup tables have a higher 84% median, with all six skills above floor. The attacker enumer-ates the few dozen tiers in klingai-pricing ,whereas 24 probes reveal too little of the 230-entry 
+
+codebook , leaving ASR at 0%. A probe-budget sweep confirms that coverage-bound skills benefit from more probes (Appendix C.6). 
+
+Rule composition has the highest median (88%). We found that civ6 plateaus at 60% because the Component type n Representatives (all-victim median ASR) Median ASR %>floor Primary bottleneck Threshold / decision rules 4 security-env-standards (91%),                                  
+
+> dapt (50%), lead-scoring (29%) 71% 3/4 probe specificity Lookup tables / data 6klingai-pricing (100%),
+> labunit (77%) 84% 6/6 coverage Rule composition 6team-composition (100%),
+> bellog (73%) 88% 6/6 hypothesis quality Procedures / algorithms 8drone (100%), working-day (100%) 75% 4/8 synthesis Numeric formulas 6protein-qc (33%), token-cost
+> (91%), labor-rate (94%) 57% 4/6 recall
+
+Table 1: Extraction ASR by dominant component type, pooled across all five victim models. Representative skills report the per-skill median ASR across victims. Pooled medians and % >floor combine controlled mined-skill and deployed SkillsBench settings under the cross-victim protocol. 
+
+hypothesis generator misses an unadvertised con-found; supplying that factor resolves the gap, iden-tifying hypothesis quality as the bottleneck. 
+
+Procedures and algorithms are bimodal, with a 75% median and four of eight above floor. The synthesizer exactly recovers the sequential logic in drone , working-day , and reflow ,while cache and osm-topology require state-machine or modular-arithmetic synthesis. We show that an explicit recipe extraction step lifts 
+
+osm-topology to 100% (Appendix C.4). 
+
+Numeric formulas have the low-est median (57%). labor-rate and 
+
+knowledge-worker-salaries reach 81–94%, while powerlifting remains near 0% because the attacker recalls Wilks in place of DOTS despite perfect probes and victim fidelity; supplying the formula identity fully resolves the gap. 
+
+Clone structure. Successful clones achieve 74– 100% ASR at 35–59% token precision against the skill body: the recovered function is implemented through distinct program structures, not textual re-production. Appendix C.7 provides the full break-down. 
+
+5.2 Effects of Closed-loop Refinement 
+
+We also show that the closed-loop refinement has large effects. Within the 16 skills whose mean lift exceeds 5 pp, refinement adds +29 pp (Pro), 
+
++24 pp (GLM), +34 pp (Kimi), and +25 pp (Luna). Eight reach at least 90% ASR on one victim, and three reach 100% on all four victims. Refinement mostly repairs coverage gaps; synthesis-bound 
+
+osm-topology and fidelity-limited isocom 
+
+and midi-protocol-lookup show little lift. Appendix C.3 reports the full breakdown. An equal-budget comparison (Appendix C.6) isolates the effect of adaptive probe selection for Flash, Pro, and Luna. It improves 6/21 skills for Flash and Pro and 5/21 for Luna, with mean gains of +9 .57 pp, +6 .00 pp, and +7 .18 pp, respectively, among improved skills. 
+
+5.3 Cross-model Variations 
+
+Figure 2 repeats controlled reconstruction across five victims and groups all skills by type. 
+
+stars-we-prefer and delegation exceed their floors by 85 and 62 points, respectively, for ev-ery victim. Other outcomes vary sharply: for exam-ple, protein-qc gains 99 points with DeepSeek Pro and 5 with Kimi; labor-rate gains 89–95 points with DeepSeek Flash, Pro, and Kimi and 24 with Luna. osm-topology stays below floor for all four eligible victims, exposing a synthesis bottleneck shared across model families. Functional reconstruction transfers across model families: every victim achieves recovery above its per-skill majority-class floor in several compo-nent classes, and several skills are recovered for all five victims. Recovery magnitude remains model-dependent, as shown by the large victim gaps on 
+
+protein-qc and labor-rate . Bottlenecks also persist across families: osm-topology re-mains below floor for every victim because each clone fails at the same modular-arithmetic synthe-sis step. Thus, victim choice changes the degree of exposure, while shared reconstruction mecha-nisms determine several successes and failures. Ap-pendix D separately compares controlled eligibility with full-agent realization. GPT-5.6-Luna uses the skills effectively in OpenHands, recovering 16 of 21 mined skills above floor, with 71.8% uncondi-tional mean ASR and 90.1% conditional ASR on T1 T2 T3 T4 L1 L2 L3 L4 L5 L6 L7 L8 R1 R2 P1 P2 P3 N1 N2 N3 N4 Flash Pro GLM Kimi Luna     
+
+> Threshold Lookup Rules Procedures Formulas
+> ×
+> +13 +14 +4
+> ××
+> -54
+> ××××
+> +37
+> ×
+> +41 +50 +30 +33 +25
+> ××
+> +42 +41 +42 +48 +48 +52 +40 +53
+> ×
+> +36 +85 +85 +85 +85 +85
+> ×
+> +0
+> ×
+> +0
+> ××
+> +11
+> ××
+> +11
+> ××
+> +89
+> ××
+> +67 +86 +86 +86 +20 +41 +41
+> ×××
+> +77 +72 +62 +62 +62 +62 +62 +62 +62 +62 +99 +89
+> ×
+> +89
+> ×
+> -10 -3 -3
+> ×
+> -10
+> ×
+> +99 +99
+> ××
+> +95 +89
+> ×
+> +95 +23 +77 +71 +71 +63 +77 +31 +99
+> ×
+> +5 +55 +99 +99
+> ×
+> +99 +99
+> −50 050 100
+> Final ASR −  fl oor (pp)
+
+Figure 2: Cross-victim reconstruction results. Skills grouped as threshold (T), lookup (L), rules (R), procedure (P), and numeric-formula (N), with codes mapped in Appendix C. Cells report ASR minus per-skill floor; gray × cells lack measurable marginal functionality, and open diamonds mark synthesis-bound outcomes.              
+
+> Probe set NInput detected Output blocked Either Disclosure Probes 4434
+> SKILL CLONE (Ours) 252 17 017
+
+Table 2: Performance of disclosure-shaped filters (DeepSeek Pro victim). The input detector flags the query text; the output filter blocks responses whose lex-ical overlap with the skill body exceeds 0.5. 
+
+its 16 Full+ skills. This result shows that S KILL -CLONE succeeds through a realistic agent stack when the victim applies the skill reliably. 
+
+6 Defense Evaluation 
+
+We evaluate two interventions drawn from prior literature (Wang et al., 2026) and measure their effect on functional reconstruction. 
+
+Disclosure-shaped filters. We reimplement the input intent detector (an LLM classifier that flags extraction queries) and output filter (a lexical-overlap threshold with skill-body). We run both detectors over the probes and responses generated during our attacks, together with four disclosure probes from Wang et al. (2026) as a comparison. Table 2 reports the outcome. All disclosure probes are caught by at least one filter. The input detector flags 17 of 252 task-valid S KILL CLONE 
+
+probes (6.7%), and the output filter flags none be-cause the responses carry little lexical overlap with the skill body. Text-oriented signals, therefore, miss the cumulative functional information that SKILL CLONE extracts across benign interactions. 
+
+Advertisement minimization. We test whether removing reconstruction cues from the public ad-vertisement reduces extraction. An LLM rewrites each of the 21 mined skills’ descriptions at two                  
+
+> Ad condition Top-1 recall Median ∆ASR Protected Harmed Original 99.5% –––Task-only 96.2% 0.0 pp 3/21 4/21 Vague 96.2% 0.0 pp 2/21 3/21
+
+Table 3: Advertisement minimization: routing and ex-traction under rewritten descriptions. Top-1 recall mea-sures closed-catalog skill selection. Protected (harmed): 
+
+≥ 20 pp ASR decrease (increase). 
+
+levels. Task-only retains the domain and legitimate-use trigger while deleting mechanism names, con-stants, thresholds, table keys, and composition rules; vague retains only the broad task fam-ily. We also verify that the rewritten adver-tisements still support routing (selecting the cor-rect skill from the catalog). Table 3 shows that both rewrites preserve the routing recall but yield a median ASR change of 0 pp. Remov-ing cues can either mislead hypothesis forma-tion or induce broader probes: neo4j-schema 
+
+drops from 89% to 10% without schema keys, whereas token-cost-tracking rises from 4% to 54% because coarser descriptions produce broader probes that better regularize the clone. 
+
+7 Conclusion 
+
+This work proposes S KILL CLONE , which identi-fies functional reconstruction as a confidentiality risk for agent skills. S KILL CLONE turns task-valid black-box interactions into executable clones and iteratively refines them using disagreement signals. Across 30 skills, S KILL CLONE recovers 16 of 21 mined skills above floor on the strongest victim, and controlled interventions trace the residual fail-ures to hypothesis formation, probe specificity, cov-erage, victim fidelity, recall, or synthesis. Prior defenses against disclosure provide limited pro-tection, and skill confidentiality must account for cumulative functional leakage through task use. 
+
+Limitations 
+
+Evaluation scope. Held-out exact equivalence evaluates deterministic rules, thresholds, tables, for-mulas, and procedures. Creative, interactive, and judgment-heavy skills require semantic or distribu-tional imitation metrics, downstream-task effects, pairwise preference tests, or human evaluation that separates skill behavior from the base model and controls evaluator bias. 
+
+Model and service coverage. The evaluation covers DeepSeek Flash and Pro, GLM-5.1, Kimi-K2.6, and GPT-5.6-Luna, with substantial variation across skill–victim cells. The temperature sweep covers eight IP-positive deterministic skills over the tested API settings. All skill bodies are public artifacts; however, proprietary services and paid marketplaces remain outside the study. 
+
+Threat and defense scope. The attacker queries one skill-enabled agent and observes visible mes-sages and artifacts. As we study a new and emerg-ing threat, no customized defense is available for now. Our defense evaluation covers disclosure fil-tering and advertisement rewriting proposed in pre-vious work on skill stealing. A broader evaluation would add cross-session identity controls, cumu-lative query monitoring, output coarsening, and private routing representations, etc. 
+
+References 
+
+Divyansh Agarwal, Alexander Fabbri, Ben Risher, Philippe Laban, Shafiq Joty, and Chien-Sheng Wu. 2024. Prompt leakage effect and mitigation strate-gies for multi-turn LLM applications. In Proceed-ings of the 2024 Conference on Empirical Methods in Natural Language Processing: Industry Track ,pages 1255–1275, Miami, Florida, US. Association for Computational Linguistics. Anthropic. 2025. Equipping agents for the real world with agent skills. Anthropic Engineering Blog. ht tps://www.anthropic.com/engineerin g/equipping-agents-for-the-real-w orld-with-agent-skills , accessed 2026-06. Bochuan Cao, Changjiang Li, Yuanpu Cao, Yameng Ge, Ting Wang, and Jinghui Chen. 2025. You can’t steal nothing: Mitigating prompt leakages in llms via system vectors. In Proceedings of the 2025 ACM SIGSAC Conference on Computer and Communica-tions Security, CCS 2025, Taipei, Taiwan, October 13-17, 2025 , pages 4423–4437. ACM. Nicholas Carlini, Daniel Paleka, Krishnamurthy Dj Dvi-jotham, Thomas Steinke, Jonathan Hayase, A. Feder Cooper, Katherine Lee, Matthew Jagielski, Milad Nasr, Arthur Conmy, Eric Wallace, David Rolnick, and Florian Tramèr. 2024. Stealing part of a pro-duction language model. In Forty-first International Conference on Machine Learning, ICML 2024, Vi-enna, Austria, July 21-27, 2024 , volume 235 of Pro-ceedings of Machine Learning Research , pages 5680– 5705. PMLR / OpenReview.net. Nicholas Carlini, Florian Tramèr, Eric Wallace, Matthew Jagielski, Ariel Herbert-Voss, Katherine Lee, Adam Roberts, Tom B. Brown, Dawn Song, Úl-far Erlingsson, Alina Oprea, and Colin Raffel. 2021. Extracting training data from large language models. In 30th USENIX Security Symposium, USENIX Se-curity 2021, August 11-13, 2021 , pages 2633–2650. USENIX Association. Sizhe Chen, Julien Piet, Chawin Sitawarin, and David A. Wagner. 2025. Struq: Defending against prompt injection with structured queries. In 34th USENIX Security Symposium, USENIX Security 2025, Seattle, WA, USA, August 13-15, 2025 , pages 2383–2400. USENIX Association. Hongcheol Cho, Ryangkyung Kang, and Youngeun Kim. 2026. SkillRet: A large-scale benchmark for skill retrieval in LLM agents. arXiv preprint arXiv:2605.05726 .Yu Cui, Wuli Yang, Yirui Shi, Junhao Xia, Hui Jiang, Lei Gao, and Chenfu Bao. 2026a. Agent har-ness distillation: Inference-time harness extraction and exploitation in autonomous multi-agent systems. 
+
+Preprint , arXiv:2607.28147. Yu Cui, Ruiqing Yue, Hang Fu, Sicheng Pan, Zhuoyu Sun, Baohan Huang, Haibin Zhang, Cong Zuo, and Licheng Wang. 2026b. Spore: Efficient and training-free privacy extraction attack on llms via inference-time hybrid probing. Preprint , arXiv:2604.23711. Yuyang Dai and Yushun Dong. 2026. Let them steal: Trapping large language model extraction at-tacks with knowledge honeypot. arXiv preprint arXiv:2606.15810 .DeepSeek-AI. 2026. Deepseek-v4: Towards highly efficient million-token context intelligence. DeepSeek-AI. 2026. The temperature parameter — deepseek api documentation. https://api-d ocs.deepseek.com/quick_start/param eter_settings . Recommends temperature 0 for coding/math/structured data; default 1.0. Accessed: 2026-06-30. Jianing Geng, Ruiqi He, Zekun Fei, Biao Yi, Xuansheng Wu, Ruijie Wang, Zheli Liu, Xia Hu, and Qingkai Zeng. 2026. Agent skills matter: Inferring propri-etary skills from execution trajectories. Preprint ,arXiv:2607.25560. Kai Greshake, Sahar Abdelnabi, Shailesh Mishra, Christoph Endres, Thorsten Holz, and Mario Fritz. 2023. Not what you’ve signed up for: Compromis-ing real-world LLM-integrated applications with in-direct prompt injection. In Proceedings of the 16th ACM Workshop on Artificial Intelligence and Security (AISec) , pages 79–90. ArXiv:2302.12173. Geoffrey E. Hinton, Oriol Vinyals, and Jeffrey Dean. 2015. Distilling the knowledge in a neural network. 
+
+CoRR , arXiv:1503.02531. Ismail Hossain, Sai Puppala, Md Jahangir Alam, Tanzim Ahad, and Sajedul Talukder. 2026. SkillVetBench: LLM-as-judge for multi-dimensional security risk evaluation in open-source LLM agent skills. arXiv preprint arXiv:2606.15899 .Peichun Hua, Hao Li, Shanghao Shi, Zhiyuan Yu, and Ning Zhang. 2026. Rethinking jailbreak detection of large vision language models with representational contrastive scoring. In Proceedings of the 64th An-nual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 21748– 21785, San Diego, California, United States. Associ-ation for Computational Linguistics. International Powerlifting Federation. 2020. IPF (GL) coefficients 2020. https://www.powerlifti ng.sport/fileadmin/ipf/data/ipf-f ormula/IPF_GL_Coefficients-2020.pd f. Accessed: 2026-08-03. Matthew Jagielski, Nicholas Carlini, David Berthelot, Alex Kurakin, and Nicolas Papernot. 2020. High ac-curacy and high fidelity extraction of neural networks. In 29th USENIX Security Symposium, USENIX Se-curity 2020, August 12-14, 2020 , pages 1345–1362. USENIX Association. Zhifeng Jiang, Zhihua Jin, and Guoliang He. 2025. PromptKeeper: Safeguarding system prompts for LLMs. In Findings of the Association for Computa-tional Linguistics: EMNLP 2025 , pages 2712–2728, Suzhou, China. Association for Computational Lin-guistics. Youngduk Kim, Minkyoo Song, and Seungwon Shin. 2026. SkillMutator: Benchmarking and defend-ing language-and-code cross-modal attacks on LLM agent skills. arXiv preprint arXiv:2606.14154 .Kalpesh Krishna, Gaurav Singh Tomar, Ankur P. Parikh, Nicolas Papernot, and Mohit Iyyer. 2020. Thieves on sesame street! model extraction of bert-based apis. In 8th International Conference on Learning Representations, ICLR 2020, Addis Ababa, Ethiopia, April 26-30, 2020 . OpenReview.net. Tu Lan and Chaowei Xiao. 2026. Runtime skill au-dit: Targeted runtime probing for agent skill security. 
+
+arXiv preprint arXiv:2606.11671 .Hao Li, Xiaogeng Liu, Hung-Chun Chiu, Dianqi Li, Ning Zhang, and Chaowei Xiao. 2025. DRIFT: dy-namic rule-based defense with injection isolation for securing LLM agents. In Advances in Neural Information Processing Systems 38: Annual Con-ference on Neural Information Processing Systems 2025, NeurIPS 2025, San Diago, CA, USA, Decem-ber 2-7, 2025 / Mexico City, Mexico, November 30 -December 5, 2025 .Xiangyi Li, Wenbo Chen, Yimin Liu, Shenghan Zheng, Xiaokun Chen, Yifeng He, Yubo Li, Bingran You, Haotian Shen, Jiankai Sun, Shuyi Wang, Qunhong Zeng, Di Wang, Xuandong Zhao, Yuanli Wang, Roey Ben Chaim, Zonglin Di, Yipeng Gao, Junwei He, and 21 others. 2026. Skillsbench: Benchmark-ing how well agent skills work across diverse tasks. 
+
+CoRR , abs/2602.12670. Hongyi Liu, Haoyan Yang, Tao Jiang, Bo Tang, Feiyu Xiong, Yuyu Luo, and Zhiyu Li. 2026a. SkillsVote: Lifecycle governance of agent skills from collec-tion, recommendation to evolution. arXiv preprint arXiv:2605.18401 .Yi Liu, Weizhe Wang, Ruitao Feng, Yao Zhang, Guangquan Xu, Gelei Deng, Yuekang Li, and Leo Zhang. 2026b. Agent skills in the wild: An empiri-cal study of security vulnerabilities at scale. arXiv preprint arXiv:2601.10338 .C. Maiwald and T. Mayer. 2018. Review of method proposals to calculate best lifter scores (relative scores) in IPF powerlifting competitions. https: //www.asia-powerlifting.com/filead min/ipf/data/ipf-formula/IPF_Evalu ation_Report_V3_2018-10-29_anonym ized.pdf . Review submitted to the International Powerlifting Federation; Accessed: 2026-08-03. Moonshot AI. 2026. Using thinking models — kimi platform documentation. https://platform.k imi.ai/docs/guide/use-kimi-k2-thi nking-model . Accessed: 2026-06-29. Yi Nian, Shenzhe Zhu, Yuehan Qin, Li Li, Ziyi Wang, Chaowei Xiao, and Yue Zhao. 2025. Jaildam: Jail-break detection with adaptive memory for vision-language model. ArXiv preprint , abs/2504.03770. Nicolas Papernot, Patrick D. McDaniel, Ian J. Goodfel-low, Somesh Jha, Z. Berkay Celik, and Ananthram Swami. 2017. Practical black-box attacks against ma-chine learning. In Proceedings of the 2017 ACM on Asia Conference on Computer and Communications Security, AsiaCCS 2017, Abu Dhabi, United Arab Emirates, April 2-6, 2017 , pages 506–519. ACM. Fábio Perez and Ian Ribeiro. 2022. Ignore pre-vious prompt: Attack techniques for language models. NeurIPS 2022 ML Safety Workshop. arXiv:2211.09527. Powerlift Pro. Understanding the DOTS score in pow-erlifting: A comprehensive guide. https://powe rliftpro.app/understanding-the-dot s-score-in-powerlifting-a-compreh ensive-guide/ . Accessed: 2026-08-03. Yujia Qin, Shihao Liang, Yining Ye, Kunlun Zhu, Lan Yan, Yaxi Lu, Yankai Lin, Xin Cong, Xiangru Tang, Bill Qian, Sihan Zhao, Lauren Hong, Runchu Tian, Ruobing Xie, Jie Zhou, Mark Gerstein, Dahai Li, Zhiyuan Liu, and Maosong Sun. 2024. Toolllm: Fa-cilitating large language models to master 16000+ real-world apis. In The Twelfth International Con-ference on Learning Representations, ICLR 2024, Vienna, Austria, May 7-11, 2024 . OpenReview.net. Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu, Maria Lomeli, Eric Hambro, Luke Zettle-moyer, Nicola Cancedda, and Thomas Scialom. 2023. Toolformer: Language models can teach themselves to use tools. In Advances in Neural Information Pro-cessing Systems 36: Annual Conference on Neural Information Processing Systems 2023, NeurIPS 2023, New Orleans, LA, USA, December 10 - 16, 2023 .Zeyang Sha and Yang Zhang. 2024. Prompt steal-ing attacks against large language models. CoRR ,abs/2402.12959. Reza Shokri, Marco Stronati, Congzheng Song, and Vi-taly Shmatikov. 2017. Membership inference attacks against machine learning models. In 2017 IEEE Sym-posium on Security and Privacy, SP 2017, San Jose, CA, USA, May 22-26, 2017 , pages 3–18. IEEE Com-puter Society. Kimi Team, Yifan Bai, Yiping Bao, Y. Charles, Cheng Chen, Guanduo Chen, Haiting Chen, Huarong Chen, Jiahao Chen, Ningxin Chen, Ruijue Chen, Yanru Chen, Yuankun Chen, Yutian Chen, Zhuofu Chen, Jialei Cui, Hao Ding, Mengnan Dong, Angang Du, and 181 others. 2026. Kimi k2: Open agentic intelli-gence. Preprint , arXiv:2507.20534. Florian Tramèr, Fan Zhang, Ari Juels, Michael K. Re-iter, and Thomas Ristenpart. 2016. Stealing ma-chine learning models via prediction apis. In 25th USENIX Security Symposium, USENIX Security 16, Austin, TX, USA, August 10-12, 2016 , pages 601–618. USENIX Association. PAUL M Vanderburgh and ALAN M Batterham. 1999. Validation of the wilks powerlifting for-mula. Medicine & Science in Sports & Exercise ,31(12):1869. Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Man-dlekar, Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar. 2023. Voyager: An open-ended embodied agent with large language models. 
+
+Preprint , arXiv:2305.16291. Xingyao Wang, Boxuan Li, Yufan Song, Frank F. Xu, Xiangru Tang, Mingchen Zhuge, Jiayi Pan, Yueqi Song, Bowen Li, Jaskirat Singh, Hoang H. Tran, Fuqiang Li, Ren Ma, Mingzhang Zheng, Bill Qian, Daniel Shao, Niklas Muennighoff, Yizhe Zhang, Binyuan Hui, and 5 others. 2025. Openhands: An open platform for AI software developers as gener-alist agents. In The Thirteenth International Con-ference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. Yu Wang, Xiaogeng Liu, Yu Li, Muhao Chen, and Chaowei Xiao. 2024a. Adashield: Safeguarding multimodal large language models from structure-based attack via adaptive shield prompting. In Euro-pean Conference on Computer Vision , pages 77–94. Springer. Zihan Wang, Rui Zhang, Yu Liu, Chi Liu, Qingchuan Zhao, Hongwei Li, and Guowen Xu. 2026. Black-box skill stealing attack from proprietary LLM agents: An empirical study. arXiv preprint arXiv:2604.21829 .Zora Zhiruo Wang, Jiayuan Mao, Daniel Fried, and Graham Neubig. 2024b. Agent workflow memory. 
+
+Preprint , arXiv:2409.07429. Yi Xie, Jiawei Du, Yu Cheng, Jiuan Zhou, and Zhaoxia Yin. 2026. Benign in isolation, harmful in composi-tion: Security risks in agent skill ecosystems. arXiv preprint arXiv:2606.15242 .Renjun Xu and Yang Yan. 2026. Agent skills for large language models: Architecture, acquisition, security, and the path forward. Preprint , arXiv:2602.12430. Juncheng Yang, Yazhuo Zhang, Ziyue Qiu, Yao Yue, and Rashmi Vinayak. 2023. FIFO queues are all you need for cache eviction. In Proceedings of the 29th Symposium on Operating Systems Principles, SOSP 2023, Koblenz, Germany, October 23-26, 2023 ,pages 130–149. ACM. Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik R. Narasimhan, and Yuan Cao. 2023. React: Synergizing reasoning and acting in language models. In The Eleventh International Conference on Learning Representations, ICLR 2023, Kigali, Rwanda, May 1-5, 2023 . OpenReview.net. Yiming Zhang, Nicholas Carlini, and Daphne Ippolito. 2024. Effective prompt extraction from language models. In First Conference on Language Modeling (COLM) . ArXiv:2307.06865. Zhipu AI. 2026. GLM-5.1. Model card / API docu-mentation. https://docs.bigmodel.cn/c n/guide/models/text/glm-5.1 , accessed 2026-06. Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J. Zico Kolter, and Matt Fredrikson. 2023. Univer-sal and transferable adversarial attacks on aligned language models. ArXiv:2307.15043. 
+
+A Skill Types and Binding Mechanisms by Example 
+
+Table 1 groups skills by component type and names the binding mechanism that caps each type. This appendix grounds both columns by stating the task, concealed component, and mechanism governing recovery. The advertisement exposes the task fram-ing (e.g. “detect malicious traffic”, “compute a dis-trict bonus”); the body supplies the constants, ta-bles, and conventions below. Table 4 summarizes the six binding mechanisms with one exemplar each, followed by per-skill analyses. 
+
+A.1 Fully Extractable: Deterministic Procedures and Small Tables drone (trajectory procedure; 100% ASR). The skill turns a waypoint list into a smooth quadrotor trajectory. The hidden IP is a clamped cubic-spline planner—zero velocity enforced at each waypoint, with fixed per-axis acceleration limits. Ordinary trajectory requests fully exercise the procedure, so the synthesizer reconstructs it exactly. 
+
+reflow (procedure conventions; 100% ASR). 
+
+Reflow soldering attaches components by passing a circuit board through an oven with a controlled temperature profile; the solder is fully molten only above the liquidus temperature. From thermo-couple time–temperature traces the skill reports peak temperature, maximum ramp rate, and time above liquidus. The public typed interface speci-fies the [100 , 150] ◦C preheat band, which we treat as public input information. The hidden conven-tions use linear interpolation at liquidus crossings and define the run-level peak as the minimum of per-thermocouple maxima, with ties broken by the lowest sensor ID. Crafted traces isolate these con-ventions, and the clone matches the victim exactly. 
+
+A.2 Partially Bound: Hypothesis, Probe Specificity, and Public Data dapt (threshold rule; probe specificity). The skill flags malicious traffic from packet features. The IP is a conjunctive threshold rule: a port scan requires port entropy > 6.0 bits and SYN-only ratio > 0.7 and > 100 unique ports; a DoS requires peak/average packet-rate > 20 ; C2 (command-and-control) beaconing requires inter-arrival-time CV 
+
+< 0.5. Hand-designed boundary sweeps localize every cutoff (96–100% ASR). The autonomous attacker’s coarse probes miss the exact constants and leave ASR at the 50% balanced-class floor, identifying probe quality as the bottleneck. 
+
+civ6 (rule table + confound; hypothesis qual-ity). The skill totals Civilization VI district adja-cency bonuses. Beyond a per-district bonus table (+2 /+1 /+0 .5 terms per neighbor type), the IP in-cludes a latent confound : an adjacent Government Plaza adds +1 to specialty districts, a factor the ad-vertisement never names. The attacker recovers the explicit table but frequently omits this unadvertised factor, so ASR plateaus near 60%. 
+
+labunit (lookup/conversion data; public data). 
+
+The skill harmonizes clinical lab values to standard units using a table of ∼60 analytes (the substances a lab test measures) with valid ranges and conver-sion factors, applied by a range-triggered rule that keeps the conversion landing in range. Enumerat-ing analytes recovers most of the table (77% ASR); standard clinical knowledge supplies some of the recovered conversions. 
+
+A.3 Hard-bound: Victim fidelity, Coverage, Synthesis, and Recall r2r (numeric linearization; victim fidelity). 
+
+Roll-to-roll (R2R) manufacturing moves a flexi-ble material web between rollers, as in printed-electronics or film production; the skill linearizes the web’s tension–velocity dynamics into a discrete state-space (A, B ) for model-predictive control; the hidden functionality depends on Jacobian en-tries fixed by plant constants (modulus–area prod-uct EA , roller radius R, inertia J, web length L). The deployed victim applies this correctly only 12/24 times, so the attacker learns from incorrect labels and the clone scores 0% on the constant-bearing entries. Replacing the victim responses with evaluator-oracle labels raises ASR to 100%, establishing victim fidelity as the recovery bottle-neck. 
+
+codebook (private table; coverage). The skill normalizes free-text failure reasons to standard manufacturing codes via per-product codebooks (230 code →label entries: 72+80+78 ) plus a weighted-matching procedure. A 24-probe bud-get surfaces only 3 of the 230 entries, leaving ASR at 0%; held-out inputs span 127 codes the clone never saw, so even a perfect oracle caps recovery at the ∼2% of held-out mass carried by those three codes. Probe coverage sets the recovery ceiling. 
+
+cache and osm-topology (stateful/derived pro-cedure; synthesis). cache replays a KV-cache trace under the S3-FIFO policy (Yang et al., 2023): small/main/ghost FIFO queues, a saturating fre-quency counter ( 0–3), second-chance admission, and longest-prefix hit semantics. Even when Mechanism Exemplar Diagnostic (what we vary) Signature (what it shows) Hypothesis quality                                  
+
+> civ6 Supply the missing latent factor (the Government-Plaza confound) to the hypothesis. ASR is stuck near 60% until the unadvertised factor is added; with the confound supplied, reconstruc-tion reaches 100% .Probe speci-ficity
+> dapt Replace the attacker’s coarse self-designed probes with hand-designed boundary sweeps. ASR jumps from the 50% floor to 96 –
+> 100% once the exact thresholds are localized. Coverage codebook Raise the probe budget, and compute a perfect-oracle upper bound. ASR stays at 0% even with a perfect oracle: the 24 probes surface only 3 of the 230 private entries, and held-out inputs span 127 codes the clone never saw. The table is too large to enumerate. Synthesis cache ,osm Hand the synthesizer the named algo-rithm, or run recipe extraction. Clones stay below floor even when the victim answers every probe cor-rectly: cache 13% (floor 18% ) and osm 28 –35% (floor 38% ); supplying the algorithm or extracting the recipe lifts osm to 100% .Recall powerlifting Supply the correct public formula (DOTS) directly. ASR is ∼0% with perfect probes and a faithful victim ( 24 /24 ): only the formula’s identity is missing, and supplying DOTS resolves the gap. Oracle fidelity r2r Measure the deployed victim’s probe fidelity directly. The victim is right on only 12 /24
+> probes, so noisy labels cap the clone at 0% ; evaluator-oracle labels raise ASR to 100% .
+
+Table 4: The six recurring mechanisms that cap held-out ASR (§5), each with an exemplar skill, the diagnostic that isolates it, and its signature. Each mechanism is pinned by intervening on one part of the attack loop—the victim oracle, the probe budget or design, or the synthesizer—and checking whether ASR moves. 
+
+the victim executes it correctly, the synthesizer cannot reconstruct the multi-queue state machine from input–output pairs, leaving ASR at 13%, below its 18% floor. osm-topology (Open-StreetMap) is the same failure in miniature: a mod-ular hue →ternary-color assignment (each feature colored one of three classes) whose exact arith-metic the clone fails to express, holding closed-loop ASR at 28–35%, below its 38% floor. 
+
+powerlifting (public formula; recall). The skill computes a normalized competition score from a lifter’s sex, bodyweight, and total, so lifters of different bodyweights can be compared on a single scale. Powerlifting federations standard-ize this comparison with a formula that multiplies the total by a coefficient fitted as a polynomial in bodyweight. The canonical formula, Wilks (Van-derburgh and Batterham, 1999), was the interna-tional standard for roughly two decades until the IPF replaced it with its own points (now IPF GL) (Maiwald and Mayer, 2018; International Power-lifting Federation, 2020), which compare lifters only within a sex; DOTS (Dynamic Objective Team Scoring) was introduced in 2019 by the German IPF affiliate BVDK to compare lifters across sexes on a single team and is now used by US federa-tions including the USAPL and USPA (Powerlift Pro). The skill body specifies DOTS: total × a sex-specific quartic coefficient 500 /poly 4(BW) , with bodyweight clamped to [40 , 210] kg (men) and 
+
+[40 , 150] kg (women). The coefficients are public ;the only hidden bit is the choice of DOTS among published alternatives (Wilks, IPF GL, Glossbren-ner), and the advertisement names no formula. The attack therefore reduces to recalling the right formula—guess wrong and ASR is ∼0% even with perfect probes and a faithful victim: the attacker re-calls the best-known formula, Wilks, and never pro-poses DOTS, because observations fix a function’s outputs, not its identity; Wilks and DOTS agree to ∼1% at mid-range bodyweights ( 60 –125 kg), so a Wilks clone clears agreement-based validation, while at the extremes ( 5–6% apart at 40 and 200 kg) the data can only discriminate hypotheses the at-tacker has already proposed. Supplying the identity (“DOTS”) reduces the attack to recalling a named Victim model Code / 9 Mined / 21 Total / 30 DeepSeek-Pro 9 20 29 DeepSeek-Flash 9 14 23 Kimi-K2.6 9 13 22 GLM-5.1 9 12 21 GPT-5.6-Luna 2 13 15 
+
+> Table 5: Cells with measurable model-relative marginal functionality in the curated 30-skill suite. The 9 Skills-Bench targets are confirmed through the full-agent pipeline; the 21 mined targets use the controlled body-versus-advertisement comparison. Counts define the cells entering controlled extraction analysis.
+
+public formula, resolving the gap completely. 
+
+B Benchmark Construction Details 
+
+This appendix expands the curation funnel and test construction summarized in §4. 
+
+B.1 Mining and Licensing 
+
+The 9 code-execution skills come from SkillsBench (Li et al., 2026), which curates skills that bundle scripts and deterministic verifiers. The 21 mined data/rule skills come from two crawls: the SkillRet corpus of 17 ,810 public skills curated from 22 ,795 
+
+marketplace listings (Cho et al., 2026), and a broader registry crawl spanning hundreds of source repositories. We retain MIT/Apache-or-equivalent licensed packages and deduplicate by source URL, repository, and skill name. The deterministic-ground-truth and marginal-functionality filters pro-duce the purpose-selected evaluation suite charac-terized in Limitations. 
+
+B.2 Selection Requirements Observable marginal functionality. A target must be IP-positive for at least one victim model: the model applies the body reliably and cannot reproduce the behavior from the advertisement alone. For data/rule skills, the controlled compar-ison requires fid( Am,s ) ≥ 0.6 and a body-minus-advertisement margin of at least 0.25 . The paired full-agent comparison asks the same question after skill selection, file access, tool use, and execution are delegated to OpenHands. 
+
+Exact ground truth. A target must expose a de-terministic function that we can call or reimplement to label arbitrary held-out inputs. This criterion selects skills compatible with exact-equivalence measurement; Limitations describes the resulting evaluation scope. 
+
+B.3 Oracles, Discriminating inputs, and Splits 
+
+For each surviving skill we author an adapter that exposes a deterministic self-oracle f ⋆s reimple-mented from the private body. The oracle captures the functional core of the body—the deterministic computation that maps typed inputs to outputs— and excludes the public advertisement, instruc-tional framing, worked examples, and formatting. It serves as the reconstruction ground truth. The adapter also provides a typed input/output schema and an input generator emphasizing discriminating 
+
+inputs D(c) on which correct and incorrect imple-mentations diverge. Two skills receive an explicit rebalance, footnoted in Table 1 and detailed in Ap-pendix A: dapt uses a class-balanced held-out set with a 50% malicious rate and 50% trivial floor, compared with an 89% deployment base rate; r2r 
+
+scores the Jacobian entries encoding private plant constants, giving all-zero and identity clones a 0% floor. Probe, validation, and test inputs are mutu-ally disjoint. Mined-skill clones use n=150 held-out test inputs, and SkillsBench clones use n=800 .The mined controlled protocol uses 52 acquisition probes and 30 validation queries; SkillsBench at-tacks use K=24 victim probes. 
+
+C Additional Results 
+
+These analyses support the attack-process interpre-tation in §5. They provide secondary budget, refine-ment, and temperature diagnostics and are detailed here to keep the main evidence ladder focused on end-to-end recovery and attack components. 
+
+API reasoning settings. We use the API defaults at experiment time unless specified. DeepSeek-V4-Flash (Preview) and Pro (DeepSeek-AI, 2026) inherit thinking=enabled and 
+
+reasoning_effort=high . GLM-5.1 (Zhipu AI, 2026) uses thinking=disabled . GPT-5.6-Luna receives the OpenAI reasoning endpoint’s default effort, and Kimi-K2.6 (Team et al., 2026; Moonshot AI, 2026) uses its vendor-pinned think-ing mode. 
+
+C.1 Controlled Cross-model Results 
+
+Table 7 provides the controlled matrix summarized in §5. Direct body placement makes each cell a conditional measure of reconstruction after success-ful skill delivery. All 21 targets are complete under the finalized protocol. Table 6 maps the compact skill codes in Figure 2 to their full names. Code Skill T1 lead-scoring 
+
+T2 check-secrets 
+
+T3 security-environment-standards 
+
+T4 rbac-validator 
+
+L1 internal-reference 
+
+L2 demo-design-tokens 
+
+L3 stars-we-prefer 
+
+L4 browser-history-acset 
+
+L5 neo4j-schema 
+
+L6 isocom 
+
+L7 klingai-pricing 
+
+L8 midi-protocol-lookup 
+
+R1 bellog-structure 
+
+R2 delegation 
+
+P1 token-cost-tracking 
+
+P2 osm-topology 
+
+P3 working-day 
+
+N1 labor-rate 
+
+N2 knowledge-worker-salaries 
+
+N3 protein-qc-score 
+
+N4 team-composition 
+
+Table 6: Codebook for Figure 2. Prefixes T/L/R/P/N denote threshold, lookup, rule-composition, procedure, and numeric-formula components. 
+
+C.2 Attacker Model 
+
+Table 8 compares the primary Flash attacker against the stronger DeepSeek-Pro attacker under the fully autonomous S KILL CLONE protocol (LLM-designed probes, LLM clone induction) on the five code-execution skills. The victim is DeepSeek-Pro throughout. Pro improves selectively over Flash. It leads by 45.6 pp on labunit and 30.8 pp on reflow ;the two attackers remain within 5 pp on civ6 and 
+
+dapt . Both receive identical probes, and Pro more reliably compiles correct clones from the observa-tions, locating the gap in synthesis. Average cost is $0.0089 per Flash attack and $0.0134 per Pro attack. Flash serves as the primary attacker be-cause it is cheaper, competitive on simpler targets, and exposes synthesis bottlenecks that Pro partially masks. 
+
+C.3 Closed-loop Refinement 
+
+Tables 9–13 report per-skill closed-loop lift by com-ponent type across four victim models (Flash at-tacker). Each round adds 10 disagreement queries (k0=12 , 4 rounds), and the best round is selected by victim-only validation agreement. Group aver-ages are reported in each table; skills without mea-surable marginal functionality for a given victim are excluded from that victim’s column (see Ta-ble 5). The closed loop adds +29 pp (Pro), +24 pp (GLM), +34 pp (Kimi), and +25 pp (Luna) on average across the 16 skills with mean lift >5 pp.                                                                                                                                     
+
+> controlled closed-loop ASR (%) Skill floor FPGKLstars-we-prefer 15 100 100 100 100 100 team-composition 1100 100 –100 100 token-cost-tracking 1100 91 –91 –working-day 1–100 100 ––delegation 38 100 100 100 100 100 rbac-validator 66 96 99 91 ––security-env-standards 50 –87 –91 100 neo4j-schema 81 –92 ––92 klingai-pricing 14 81 100 100 100 34
+> check-secrets 65 –11 –––bellog-structure 11 88 83 73 73 73 knowledge-worker-salaries 986 81 81 72 86 internal-reference 27 69 68 69 75 75 isocom 11 ––100 ––demo-design-tokens 658 46 59 –42 midi-protocol-lookup 950 50 –––labor-rate 5100 94 –100 29 osm-topology 38 28 35 35 –28
+> lead-scoring 17 –29 31 21 –protein-qc-score 133 100 –656 browser-history-acset 31 –31 –31 –
+
+Table 7: Controlled closed-loop ASR (%, n=150 ) on the 21 mined data/rule skills with a Flash attacker. F/P/G/K/L denote victim models (Flash, Pro, GLM-5.1, Kimi-K2.6, GPT-5.6-Luna); “–” marks cells with-out measurable marginal functionality in the controlled setting. Italic values are synthesis-bound. The matrix measures reconstruction conditional on successful skill delivery. 
+
+DeepSeek-Pro DeepSeek-Flash Skill Type attacker attacker dapt threshold 50.0% 50.0% civ6 rule 55.1% 59.2% labunit data 78.4% 32.8% reflow procedure 100.0% 69.2% cache stateful 0.0% n/a †
+
+Table 8: Held-out ASR (%) by attacker model under the fully autonomous S KILL CLONE protocol (LLM-designed probes, LLM clone induction) on the five code-execution SkillsBench targets. Victim is DeepSeek-Pro throughout. †Flash produced no parseable cache probes. 
+
+Three skills reach 100% ASR on all four victims; synthesis-bound ( osm-topology ) and fidelity-limited ( isocom , midi-protocol-lookup )skills show little to no benefit. 
+
+C.4 Recipe Extraction 
+
+Recipe extraction asks the agent to solve be-nign tasks while showing its working. It tar-gets synthesis-bound procedures, complementing the closed loop’s coverage gains. Table 14 re-ports Pro and Luna victims with a Flash attacker and majority-class fallback disabled. Recipe extraction resolves osm-topology ’s synthesis bottleneck for both victims (Pro 32 .5→100% ,Luna 0→100% ) and leaves coverage-limited Pro GLM Kimi Luna Skill Floor CL ∆ CL ∆ CL ∆ CL ∆                                             
+
+> lead-scoring 17 29 +27 31 +29 21 +0 5+0 check-secrets 65 11 +0 55 -11 59 +48 68 +0 sec-env-std 50 87 +14 91 +0 91 +13 100 +4 rbac-validator 66 99 +7 91 -3 99 +37 97 +0 Average 49 56 +12 67 +4 67 +25 67 +1
+
+Table 9: Closed-loop refinement for threshold / decision rules skills (4 mined targets, Flash attacker). CL = closed-loop ASR (%); ∆ = lift over single-shot (pp). Averages are unweighted across skills with data in each group.                                                                                              
+
+> Pro GLM Kimi Luna Skill Floor CL ∆CL ∆CL ∆CL ∆
+> internal-ref 27 68 +49 69 +47 75 +52 75 +50 design-tokens 646 +31 59 +29 33 +19 42 +15 stars-we-prefer 15 100 +10 100 +10 100 +10 100 +21 browser-hist 31 31 +19 31 +0 31 +0 31 +0 neo4j-schema 81 92 +0 81 +0 93 +12 92 +11 isocom 11 75 +0 100 +0 8+0 53 +27 klingai-pricing 14 100 +16 100 +16 100 +16 34 -11 midi-protocol 950 +0 5+0 7+0 59 +15 Average 24 70 +16 68 +13 56 +14 61 +16
+
+Table 10: Closed-loop refinement for lookup tables / data skills (8 mined targets, Flash attacker). CL = closed-loop ASR (%); ∆ = lift over single-shot (pp). Averages are unweighted across skills with data in each group. 
+
+neo4j-schema and already-extractable skills unchanged. The shared lift across model fami-lies identifies volunteered working as the synthesis lever. 
+
+C.5 Victim-temperature Robustness 
+
+We test sensitivity to deterministic decoding by holding the attacker and evaluator oracle at 
+
+T =0 and varying the victim temperature over 
+
+{0, 0.6, 1.0}, spanning the tested vendors’ recom-mendations (DeepSeek-AI, 2026). Kimi is vendor-pinned at T =1 (Moonshot AI, 2026). GPT-5.6-Luna uses its vendor-controlled default because its reasoning endpoint exposes no temperature parame-ter; we report its cross-model and recipe results and omit it from the sweep tables. For each T > 0, we draw three seeds for the body-versus-advertisement comparison and two for extraction, reported rela-tive to the re-measured T =0 baseline. Table 15 reports marginal-functionality stabil-ity. Across the tested grid, 93–100% of cells posi-tive at T =0 retain that classification by a majority of seeds, and the mean body-minus-advertisement margin remains above 0.25 ( ≥ +0 .6 at T =1 ). Ta-ble 16 and Figure 3 report extraction ASR. Across eight IP-positive skills, every tested temperature                                        
+
+> Pro GLM Kimi Luna Skill Floor CL ∆CL ∆CL ∆CL ∆
+> bellog-structure 11 83 +37 73 +32 73 +27 73 +27 delegation 38 100 +31 100 +31 100 +31 100 +31 Average 25 92 +34 87 +31 87 +29 87 +29
+
+Table 11: Closed-loop refinement for rule composition skills (2 mined targets, Flash attacker). CL = closed-loop ASR (%); ∆ = lift over single-shot (pp). Averages are unweighted across skills with data in each group.                                                 
+
+> Pro GLM Kimi Luna Skill Floor CL ∆CL ∆CL ∆CL ∆
+> token-cost 191 +13 100 +33 91 +13 91 +13 osm-topology 38 35 +0 35 +7 34 +0 28 +0 working-day 1100 +0 100 +0 100 +0 100 +0 Average 13 75 +4 78 +13 75 +4 73 +4
+
+Table 12: Closed-loop refinement for procedures / al-gorithms skills (3 mined targets, Flash attacker). CL = closed-loop ASR (%); ∆ = lift over single-shot (pp). Averages are unweighted across skills with data in each group. 
+
+yields pooled recovery at or above the T =0 base-line; per-skill variation stays within ±5 pp for sin-gle observations and ±3 pp for modal aggregation. 
+
+C.6 Probe-budget Sensitivity 
+
+We vary the initial probe budget k0 ∈{6, 12 , 24 , 48 , 96 } for eight skills spanning four bottleneck types and measure single-shot ASR with a Flash attacker and Pro and Luna victims (rounds =0 , otherwise identical protocol to §4). Ta-ble 18 reports the full sweep. 
+
+C.7 Clone Structure 
+
+Table 19 summarizes clone-to-oracle comparisons for the six representative skills with non-trivial re-covery; Table 20 lists every synthesis candidate across all 9 SkillsBench skills. The Ratio column uses the evaluator’s reference oracle f ⋆s (the mini-                                                         
+
+> Pro GLM Kimi Luna Skill Floor CL ∆CL ∆CL ∆CL ∆
+> labor-rate 594 +70 0+0 100 +89 29 +17 knowl-worker-sal 981 +51 81 +51 72 +48 86 +56 protein-qc 1100 +94 5+0 6+0 56 +50 team-composition 1100 +0 0+0 100 +0 100 +0 Average 494 +54 22 +13 70 +34 68 +31
+
+Table 13: Closed-loop refinement for numeric formulas skills (4 mined targets, Flash attacker). CL = closed-loop ASR (%); ∆ = lift over single-shot (pp). Averages are unweighted across skills with data in each group. Pro victim Luna victim Skill I/O +Recipe ∆ I/O +Recipe ∆
+
+osm-topology 32.5 100.0 +67.5 0.0 100.0 +100.0 neo4j-schema 20.0 25.0 +5.0 20.0 25.0 +5.0 knowledge-worker-salaries 28.7 28.7 +0.0 31.2 31.2 +0.0 security-env-standards 83.8 100.0 +16.2 83.8 100.0 +16.2 
+
+Table 14: Recipe extraction transfers across victim model families: the synthesis bottleneck that caps 
+
+osm-topology at 0% I/O ASR on Luna is fully resolved by volunteered working (100%), mirroring the Pro pattern. Recipe lift is model-consistent on the other three skills. 
+
+victim T =0 marginal retain T =0 .6 retain T =1 .0 mean margin @ T =1 .0
+
+DeepSeek-Flash 14 14/14 (100%) 13/14 (93%) +0 .75 
+
+DeepSeek-Pro 17 16/17 (94%) 17/17 (100%) +0 .63 
+
+GLM-5.1 10 10/10 (100%) 10/10 (100%) +0 .62 
+
+Table 15: Stability of controlled marginal-functionality classification across victim temperatures ( n=10 , 3 seeds for 
+
+T > 0). Retention is relative to each victim’s T =0 set. Kimi is omitted because its API pins temperature at 1.0.0 0.6 1.0 
+
+> Victim sampling temperature
+> 020 40 60 80 100
+> Mean ASR (%)
+> fl ash (single)
+> fl ash (mv) glm (single) glm (mv) kimi (single) kimi (mv) pro (single) pro (mv)
+
+Figure 3: Controlled extraction ASR across victim sam-pling temperatures for single observations and three-query modal aggregation. Pooled recovery remains at or above the T =0 baseline across tested temperatures. 
+
+mal executable implementation; §4) as the denom-inator. All compilable clones are at least as large as their oracle (ratio ≥ 1.0×); uncompilable candi-dates inflate dramatically because the model hallu-cinates entire library implementations. 
+
+D Full-Agent Functionality Realization 
+
+The primary mined-skill comparison feeds the skill body directly into the victim context, removing po-tential noise from the skill selection. It measures the teaching signal available after successful skill delivery. This appendix evaluates all 21 mined skills through OpenHands; the 9 SkillsBench tar-gets already use the deployed setting in the primary analysis and are not repeated here. We therefore repeat the same body-versus-advertisement comparison through a full Open-Hands agent (Wang et al., 2025) for all 21 mined skills. Each skill is mounted as an isolated bun-dle, and the agent receives the same task-valid in-puts with an explicit request to use the advertised skill. The agent decides whether to select the skill, read its files, invoke tools, or execute code, so the measurement includes application failures that the controlled setting removes. Figure 4 compares the IP-positive sets under the two settings. 0 7 14 21  
+
+> IP-positive skills / 21
+> Flash Pro GLM Kimi
+> 14 13 20 712 13 13 15
+> ○ Controlled ◆ Full agent
+
+Functionality realization 
+
+Figure 4: IP-positive skills under controlled body place-ment and the full OpenHands agent. Controlled place-ment measures the teaching signal after delivery; the full-agent setting includes skill selection, file access, tool use, execution, and response parsing. 
+
+Table 17 reports all five tested victims. The gap between controlled and full-agent positives is model-dependent: Flash loses one target, GLM gains one, Kimi gains two, Luna gains three, and Pro loses 13. Output parse failures drive the Pro gap: across five representative skills ( n=12 each), Pro and Flash show ∼60% body-query parse er-victim cond T =0 T =0 .6 T =1 .0
+
+DeepSeek-Flash single 72 ± 22 73 ± 20 73 ± 28 
+
+mv 60 ± 40 68 ± 27 66 ± 32 
+
+DeepSeek-Pro single 67 ± 27 54 ± 41 66 ± 33 
+
+mv 67 ± 32 58 ± 34 63 ± 36 
+
+GLM-5.1 single 62 ± 26 59 ± 29 59 ± 34 
+
+mv 59 ± 34 52 ± 32 56 ± 31 
+
+Kimi-K2.6 † single – – 57 ± 34 
+
+mv – – 60 ± 38 
+
+Table 16: Extraction ASR (%, ± stdev) vs. victim temperature T (Flash attacker, 8 skills, K=12 , n=150 ). single: one observation per probe; mv: modal answer over 3 repeats. †Kimi is vendor-pinned at T =1 .0 25 50 75 100            
+
+> Round 0 ASR (%)
+> 025 50 75 100
+> Final ASR (%)
+> no change
+> 13/21 above fl oor median gap +26.7 pp
+> (a) Flash: 39.9 → 58.0%
+> 025 50 75 100
+> Round 0 ASR (%)
+> no change
+> 16/21 above fl oor median gap +44.7 pp
+> (b) Pro: 40.9 → 67.2%
+> 025 50 75 100
+> Round 0 ASR (%)
+> no change
+> 16/21 above fl oor median gap +62.7 pp
+> (c) Luna: 50.8 → 71.8%
+
+Figure 5: Full-agent reconstruction on all 21 mined skills under the paired protocol (Flash attacker). Panels plot per-skill Round 0 and final ASR for Flash, Pro, and Luna victims; the dashed diagonal marks unchanged ASR. Annotations report mean ASR, targets above floor, and median gaps over floor. 
+
+Victim Full agent Controlled ∆
+
+DeepSeek-Flash 13 14 −1
+
+DeepSeek-Pro 7 20 −13 
+
+GLM-5.1 13 12 +1 
+
+Kimi-K2.6 15 13 +2 
+
+GPT-5.6-Luna 16 13 +3 
+
+Table 17: Number of the 21 mined skills that expose measurable marginal functionality in the full-agent and controlled settings. The gap is model-dependent be-cause the full-agent measurement includes skill selec-tion, file access, tool use, and execution. 
+
+ror rates through the OpenHands parser, compared with 33% for GLM and 53% for Kimi. Luna (Ope-nAI, GPT-5.6) shows consistently higher body fi-delity than the DeepSeek models, yielding 16 de-ployed positives from 13 controlled positives. The DeepSeek models often produce correct outputs that the structured parser rejects, locating the fail-ure in the tool interface. Parse failures depress Full+ counts even when successful queries leak extractable signal; internal-reference , for example, scores 0% body fidelity in the screen and 74–85% extraction ASR in the full paired protocol. We run the full OpenHands-based reconstruction protocol on all 21 mined skills with Flash, Pro, and Luna as victims and Flash as the attacker. For each skill–victim cell, the fixed and adaptive acquisition policies share 162 victim-evaluated inputs: 12 ini-tial, 120 candidate, and 30 validation inputs. Flash recovers 13 of 21 skills above floor with 58.0% un-conditional mean ASR; Pro recovers 16 of 21 with 67.2% unconditional mean ASR; Luna recovers 16 of 21 with 71.8% unconditional mean ASR (condi-tional 90.1% on its 16 Full+ skills). Median gaps over floor are +26 .7 pp (Flash), +44 .7 pp (Pro), and +62 .7 pp (Luna). Figure 5 shows per-skill changes for Flash, Pro, and Luna, and Appendix C provides per-skill controlled and deployed results. The controlled setting supports reconstruction-mechanism analysis after skill delivery, while the full-agent setting measures deployment-specific re-alization. The full-agent results confirm that the at-tack transfers to a realistic agent stack across model families: Flash, Pro, and Luna all leak functional skill information through task-valid interactions, even on skills that the functionality screen classi-fies as non-functional due to parse failures. Luna’s strong deployment extraction (16/21 above floor, 71.8% unconditional ASR) on a closed-source model locates low deployed ASR for other victims in model-specific agent-framework integration. Skill Victim k0=6 12 24 48 96 
+
+internal-reference Pro .093 .000 .520 .687 .820 Luna .093 .220 .540 .740 .887 
+
+klingai-pricing Pro .640 .820 1.00 1.00 1.00 Luna .080 .253 .100 .107 .087 
+
+midi-protocol-lookup Pro .053 .053 .053 .047 .073 Luna .067 .053 .053 .047 .600 
+
+demo-design-tokens Pro .027 .000 .233 .340 .000 Luna .320 .153 .027 .033 .053 
+
+neo4j-schema Pro .793 .933 .800 .807 .820 Luna .793 .920 .800 .807 .820 
+
+stars-we-prefer Pro .080 .073 1.00 1.00 1.00 Luna .080 .760 1.00 1.00 1.00 
+
+bellog-structure Pro .073 .573 .053 .787 .073 Luna .247 .500 .680 .093 .700 
+
+osm-topology Pro .193 .207 .313 .353 .320 Luna .193 .207 .227 .267 .360 
+
+Table 18: Single-shot ASR as a function of initial probe budget k0 (Flash attacker, rounds =0 ). 
+
+internal-reference and klingai-pricing (Pro) rise with k0, confirming coverage as the binding bottleneck. klingai-pricing (Luna) remains flat because Luna cannot faithfully execute the pricing logic, showing that coverage sensitivity is model-conditional. All other skills are flat or noisy across k0, consistent with synthesis, hypothesis quality, or victim fidelity as their primary bottleneck. 
+
+Skill Oracle (c) Clone (c) Ratio Tok.prec ASR Signal team-comp. M 136 153 1.12 × 53% 100% exact rule, nearly 1:1 drone 330 387 1.17 × 41% 100% exact spline formula, 1:1 working-day M 388 475 1.22 × 44% 100% workflow rule, nearly 1:1 stars-we-prefer M 171 622 3.64 × 35% 100% lookup table, moderate expansion reflow 317 2,439 7.69 × 58% 100% 3-metric procedure, inlined library labunit 71 1,122 15.8 × 59% 74% partial table + logic, large expansion 
+
+Table 19: Clone structure relative to the oracle f ⋆s (Pro victim, Flash attacker). M=mined skill; all others from SkillsBench. Ratio = clone size ÷ oracle size. Tok.prec = fraction of clone tokens appearing in the skill body. 
+
+Skill Candidate Oracle (c) Clone (c) Ratio Lines Compiled drone induced-0 (sel.) 330 387 1.17 × 12 yes drone induced-1 330 517 1.57 × 14 yes drone induced-2 330 711 2.15 × 14 yes reflow induced-0 317 1,834 5.78 × 49 yes reflow induced-1 317 2,096 6.61 × 63 yes reflow induced-2 (sel.) 317 2,439 7.69 × 61 yes civ6 induced-0 (sel.) 50 1,143 22.9 × 33 yes civ6 induced-1 50 1,015 20.3 × 28 yes civ6 induced-2 50 1,173 23.5 × 33 yes labunit induced-0 (sel.) 71 1,122 15.8 × 29 yes labunit induced-1 71 1,172 16.5 × 31 yes labunit induced-2 71 1,315 18.5 × 27 yes cache T=0.0 #1 415 47,691 115 × 198 no cache T=0.0 #2 415 48,658 117 × 183 no cache T=0.5 #1 415 47,250 114 × 148 no r2r T=0.0 #1 77 35,729 464 × 189 no r2r T=0.5 #1 77 35,548 462 × 146 no dapt T=0.0 #0 94 719 7.65 × 9 yes dapt T=0.5 #0 94 388 4.13 × 8 yes dapt T=0.9 #0 94 406 4.32 × 6 yes powerlifting T=0.5 #1 320 606 1.89 × 23 yes codebook T=0.0 #0 48 350 7.29 × 8 yes 
+
+Table 20: All synthesis candidates for SkillsBench code-execution skills (Pro victim, Flash attacker). Ratio = clone size ÷ oracle size (the evaluator’s minimal executable reference f ⋆s ). “sel.” = selected by attacker-visible validation. “Compiled” = clone code parses and runs without error.
