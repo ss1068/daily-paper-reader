@@ -1,0 +1,1087 @@
+Title: DreamGuard: Efficient Runtime Guardrail for LLM Agents via Risk-Aware World Model
+
+URL Source: https://arxiv.org/pdf/2608.05695v1
+
+Published Time: Fri, 07 Aug 2026 00:37:17 GMT
+
+Number of Pages: 15
+
+Markdown Content:
+# DreamGuard: Efficient Runtime Guardrail for LLM Agents via Risk-Aware World Model 
+
+## Wenhao Lin 1, Chenyu Yu 1, Xingwei Lin 1∗, Sicong Cao 2∗, Xiang Chen 1,Lei Xue 3, Le Yu 2, Letian Sha 2, Chunming Wu 1
+
+> 1
+
+Zhejiang University 
+
+> 2
+
+Nanjing University of Posts and Telecommunications 
+
+> 3
+
+Sun Yat-sen University {22560233, 22621221, xwlin.roy, wuchunming}@zju.edu.cn, wasdnsxchen@gmail.com, {sicong.cao, yulele08, ltsha}@njupt.edu.cn, xuelei3@mail.sysu.edu.cn 
+
+Abstract 
+
+As large language model (LLM) agents increasingly invoke external tools and interact with real-world systems, unsafe ac-tions may cause irreversible consequences on external states, user data, and downstream services. Recent runtime guardrails mitigate such risks by checking proposed actions before exe-cution, but many remain reactive: they primarily assess the ap-parent safety of the current action, lacking an explicit model of how risk evolves across the trajectory. This limitation creates a critical blind spot for long-horizon risks, where individually benign-looking actions can gradually drift the agent toward hazardous states. In response, we propose DreamGuard, a proactive guardrail for LLM agents built around a risk-aware world model. The world model maintains a compact recur-rent latent state over the trajectory and predicts future latent states from which DreamGuard derives immediate-hazard and prefix-risk evidence. It then fuses these multi-horizon signals into intervention decisions before execution. Experi-ments across four benchmarks and an online guardrail evalu-ation show that DreamGuard outperforms generic, reactive, and proactive guardrail baselines, achieves the best safety-utility trade-off among evaluated guardrails, and maintains an average end-to-end latency of 25 ms per call. 
+
+## 1 Introduction 
+
+Large language model (LLM) agents can now autonomously perform complex tasks in open-ended environments by in-voking external tools and interacting with real-world sys-tems (Xi et al. 2025; Qin et al. 2024; Wang et al. 2024). As these actions may affect external states, user data, and down-stream services, ensuring agent runtime safety has become a critical concern (Ma et al. 2025; Yu et al. 2025; Gan et al. 2026; Deng et al. 2025). Recent research has introduced runtime guardrails for LLM agents, which assess each proposed action in its tra-jectory context and apply interventions to unsafe ones before execution (Xiang et al. 2025; Chen, Kang, and Li 2025; Wen et al. 2026). These guardrails can intercept immediate haz-ards, which would directly cause a hazardous outcome if executed at the current step, such as deleting files, leaking credentials, or invoking an unauthorized external API. 
+
+> ∗
+
+Corresponding author. 
+
+However, many existing runtime guardrails remain reac-tive: they assess the apparent safety of the current proposed action, without modeling how risk evolves over the trajectory or how the action may change future risk. This limitation cre-ates a critical blind spot for long-horizon risks, where early steps may appear benign in isolation, but gradually accumu-late toward a hazardous outcome. For example, an agent may locate an internal file, move it into a workspace folder, and later create a public sharing link; each operation can look routine locally, but the accumulated trajectory turns the final action into confidential data exposure. A guardrail that pri-marily assesses each proposed action based on its local state struggles to detect such risk accumulation. In response, recent work has shifted toward proactive guardrails, which incorporate trajectory context or look-ahead predictions to assess how current actions may affect future risk. Yet, they still face several challenges in real-world deployments. (i) Runtime guardrails must be effi-cient and lightweight. Many proactive guardrails rely on LLMs to process trajectory histories (Li et al. 2026; Chen et al. 2026). As the agent trajectory grows, these designs become constrained by context window length and require increasingly expensive autoregressive inference, often lead-ing to multi-second latency per step. This strains the la-tency budget of real-time agent execution. (ii) Prediction should preserve risk evidence. Proactive guardrails may predict future states or consequences and then assess them with separate safety rules or judges (Liu et al. 2026c; Wang et al. 2025b). However, this separation can make the risk assessment depend on an incomplete prediction: when the prediction is not learned for risk discrimination, the safety assessment may lack the evidence needed to identify under-lying risks. This calls for risk-aware latent states that expose hazardous transitions, rather than merely predicting generic future outcomes. (iii) Runtime intervention requires cal-ibrated multi-horizon risk. Proactive guardrails increas-ingly model risk evolution through trajectory memory, state tracking, or future-risk estimation (Li et al. 2026; Dhodapkar and Pishori 2026; Wang et al. 2026b). However, long-horizon evidence is often weak before hazards become explicit, while immediate-hazard evidence requires decisive intervention at arXiv:2608.05695v1 [cs.AI] 6 Aug 2026 the current action boundary. The challenge is to calibrate these complementary signals into an intervention rule that warns early without triggering excessive false alarms. To address these challenges, we propose DreamGuard, an efficient runtime guardrail for LLM agents built around a risk-aware world model. Specifically, to overcome the efficiency challenge (i), DreamGuard maintains a fixed-dimensional state through GRU-based recurrent dynamics, bypassing the need to repeatedly process growing trajectories via LLMs. To tackle the risk evidence challenge (ii), DreamGuard learns latent dynamics designed to explicitly preserve evidence of hazardous transitions in the predicted latent states. Finally, to address the multi-horizon risk intervention challenge (iii), DreamGuard integrates both immediate-hazard and prefix-risk signals into a robust decision mechanism. We evaluate DreamGuard on four agent safety bench-marks covering both immediate hazards and long-horizon risks. Experiments show that DreamGuard outperforms generic, reactive, and proactive guardrail baselines, while reducing average end-to-end latency to 25 ms per call. It further intervenes before the first hazard action in 96.3% of unsafe long-horizon trajectories. In our online guardrail eval-uation, DreamGuard achieves the best safety–utility trade-off, reaching a 72.92% safety rate while preserving 90.38% task utility. Our contributions are summarized as follows: 
+
+• We introduce DreamGuard, an efficient runtime guardrail built around a lightweight risk-aware world model that maintains a compact recurrent state and es-timates multi-horizon risk before action execution. This design enables proactive intervention against both im-mediate hazards and long-horizon risks during real-time agent execution. 
+
+• We conduct extensive evaluations on four agent safety benchmarks. Experiments show that DreamGuard out-performs guardrail baselines in mitigating multi-horizon risks, achieves earlier interventions against long-horizon risks, and maintains highly efficient end-to-end latency. 
+
+• We further validate DreamGuard in an online guardrail evaluation, where it achieves the best safety–utility trade-off among evaluated guardrails, demonstrating its practi-cal effectiveness during real-time agent execution. 
+
+## 2 Related Work 
+
+Guardrails for LLM Agents. Generic LLM guardrails such as LlamaGuard (Inan et al. 2023) and WildGuard (Han et al. 2024) focus on content moderation, classifying prompts or responses against harmful-content taxonomies. LLM agents fundamentally alter this paradigm: their outputs be-come actions that affect external environments, shifting the objective of guardrails from content moderation to action safety. For instance, GuardAgent (Xiang et al. 2025) and AGrail (Luo et al. 2025b) translate task-specific safety re-quirements into executable action checks, while ShieldA-gent (Chen, Kang, and Li 2025) verifies trajectories against policy-derived temporal rules. Similarly, TS-Guard (Mou et al. 2026) and AgentDoG (Liu et al. 2026b) train special-ized guard models for verifying action and trajectory safety. However, these methods predominantly operate as reactive guardrails, failing to effectively identify long-horizon risks that emerge over multi-step agent interactions. To mitigate long-horizon risks, a further line of work is moving toward proactive guardrailing by incorporat-ing trajectory context or look-ahead prediction. For in-stance, SafetyDrift (Dhodapkar and Pishori 2026) and Prob-Guard (Wang et al. 2025a) estimate future violation proba-bilities over hand-crafted discrete or symbolic safety states, while MAGE (Wang et al. 2026b) and SafeAgent (Liu et al. 2026c) maintain safety-relevant memory or runtime state for risk assessment. Recent world model-based guardrails such as SafePred (Chen et al. 2026) and SafeMCP (Wang et al. 2026a) further use LLM look-ahead reasoning for fu-ture risk prediction. Despite these advances, these methods still struggle to provide efficient runtime protection against multi-horizon risks, often relying on LLM-based reasoning or domain-specific action spaces. 
+
+World Models for Agent Safety. For proactive agent guardrailing, anticipating the consequences of proposed ac-tions is essential to intervene before unsafe outcomes occur. World models have long been used in model-based deci-sion making to capture environment dynamics and support planning over predicted futures. Latent world models such as PlaNet (Hafner et al. 2019), DreamerV3 (Hafner et al. 2025), and TD-MPC2 (Hansen, Su, and Wang 2024) learn compact latent dynamics from interaction data and use pre-dicted futures for planning or control. This idea has also been adapted to LLM agents: WebDreamer (Gu et al. 2025) and WMA (Chae et al. 2025) simulate action outcomes for web navigation. Beyond task performance, SafePred (Chen et al. 2026) uses an LLM-based world model to predict action con-sequences and feed risk estimates into a decision loop, and SafeMCP (Wang et al. 2026a) relies on LLM-based look-ahead reasoning over environment dynamics. Despite these advances, existing world models for LLM agent safety often rely on LLM-based look-ahead reasoning, which can incur high per-action cost. DreamGuard instead uses lightweight GRU-based recurrent dynamics to maintain a compact risk state from trajectory data, enabling efficient risk estimation for runtime intervention. 
+
+## 3 Methodology 
+
+3.1 Problem Formulation 
+
+We consider an LLM agent that interacts with an external en-vironment over a trajectory i of length Ti. Runtime risks may arise from unsafe user intent, adversarial attack, or imperfect agent reasoning. These risks can be immediate, where an ac-tion is hazardous at the current step, or long-horizon, where an action may appear benign locally but contributes to a haz-ardous outcome through the accumulated trajectory context. We formulate guardrailing as a step-level decision problem. At each step t, before the proposed action is executed, the guardrail G receives 
+
+xi,t = ( e, Hi,t , a i,t ), (1) where e denotes the task instruction given to the agent, 
+
+ai,t denotes the agent’s proposed action at step t, and Task Instruction Observation 
+
+> Proposed Action
+> Frozen
+> LLM Encoder
+
+o1 o2 ot
+
+a1 …
+
+Risk-aware WM Risk Estimation  
+
+> Deterministic State Trajectory History ℋi,t
+> Representation Model (Posterior)
+
+e
+
+Agent 
+
+ot
+
+at
+
+> LLM Encoder
+
+ht+1 
+
+> Stochastic State t+1
+
+zˆt+1 zˆ
+
+at ot
+
+o2
+
+o3
+
+ot
+
+a2       
+
+> …),|(~tttθtohzqz
+> Sequence Model ),,(=1+tttθtazhfh
+> GRU
+> Dynamics
+> Predictor (Prior) )|ˆ(~ˆθt+1 t+1 t+1 hzpz
+
+ht
+
+zt
+
+at ht+1 t+1 zˆt+1 zˆ
+
+> Temporal Evidence State
+> Predicted successor state
+
+ht+1 t+1 zˆt+1 zˆ Immediate-Hazard 
+
+> Predictor
+> Prefix-Risk
+> Predictor
+> Noisy-Or Risk Fusion
+> Split-Conformal
+> Calibration pre t
+
+ppre tphaz tphaz tp PASS 
+
+> HOLD
+> BLOCK EMA Score Windows Score
+
+o1
+
+ea1block λblock λ
+
+Risk-aware World Model 
+
+> Observation
+> Predictor
+> Intervention
+> Decision
+
+di,t t+1 sˆt+1 sˆ
+
+=
+
+> Sigmoid haz t
+
+phaz tppre tppre tp
+
+Risk Estimation )(=ˆ 1++ tobs          
+
+> θ1tsgo),,ˆ(=1+easgtthaz
+> θ
+> haz t),,ˆ(=1+easgttpre
+> θ
+> pre t),,(=win tema thaz ttpppNoisyOr Swin t
+
+pema tphold λFigure 1: Overview of DreamGuard. (1) Risk-aware World Model: encodes the trajectory prefix and proposed action into a recurrent latent state, predicts the successor latent state, and produces immediate-hazard and prefix-risk scores. (2) Multi-horizon Risk Estimation: aggregates temporal risk evidence and applies a calibrated intervention rule to output a runtime decision before action execution. 
+
+oi,t denotes the current environment observation available to the agent before it executes ai,t . The trajectory prefix 
+
+Hi,t = ( oi, 1, a i, 1, o i, 2, . . . , a i,t −1, o i,t ) contains the inter-action history available up to ai,t . The guardrail outputs a step-level decision: 
+
+di,t = G(xi,t ) ∈ { PASS , HOLD , BLOCK }. (2) 
+
+PASS allows the action to execute, HOLD interrupts exe-cution when the evidence is low-confidence or reflects ac-cumulated risk and triggers a conservative intervention, and 
+
+BLOCK interrupts execution and prevents the action. For a hazard trajectory, let thaz  
+
+> i
+
+denote the first hazard step, the earliest step whose proposed action would trigger a concrete hazardous outcome or transition if executed. The primary runtime objective is to estimate step-level risk and intervene before unsafe actions are executed, returning either 
+
+HOLD or BLOCK at thaz  
+
+> i
+
+while minimizing false alerts on safe trajectories. 
+
+3.2 Overview of DreamGuard 
+
+The goal of DreamGuard is to equip runtime guardrails with proactive risk prediction, enabling them to identify proposed actions that may cause hazardous outcomes. As shown in Figure 1, DreamGuard consists of two modules. The risk-aware world model maintains a compact latent state over the trajectory, and estimates immediate-hazard and prefix-risk evidence from the predicted latent state. The multi-horizon risk estimation module then aggregates temporal evidence and maps the fused score to calibrated intervention decisions. Algorithm 1 formalizes the runtime workflow. 
+
+3.3 Risk-Aware World Model 
+
+Recurrent World Model Architecture. Learning a gen-erative model by reconstructing raw future observations pro-vides a rich signal, but accurate raw reconstruction is costly and does not directly determine whether an agent action is safe. For runtime guardrailing, the model must instead cap-ture how the trajectory prefix evolves under proposed actions and preserve the safety-relevant information needed for in-tervention. Inspired by DreamerV3 (Hafner et al. 2025) and TD-MPC2 (Hansen, Su, and Wang 2024), DreamGuard builds a recurrent state-space world model (RSSM) with im-plicit, risk-aware latent dynamics for predicting successor states and estimating risk before action execution. The DreamGuard world model architecture is shown in Figure 1 and consists of six components: Sequence model: ht = fθ (ht−1, z t−1, a t−1),
+
+Representation model: zt ∼ qθ (zt | ht, o t),
+
+Dynamics predictor: ˆzt ∼ pθ (ˆ zt | ht),
+
+Observation predictor: ˆot+1 = gobs  
+
+> θ
+
+(st+1 ),
+
+Immediate-hazard predictor: ℓhaz  
+
+> t
+
+= ghaz  
+
+> θ
+
+(ˆ st+1 , a t, e ),
+
+Prefix-risk predictor: ℓpre  
+
+> t
+
+= gpre  
+
+> θ
+
+(ˆ st+1 , a t, e ).
+
+(3) Here, ∼ marks stochastic RSSM variables drawn from pos-terior or prior distributions, whereas = marks determin-istic neural readouts. At step t, the representation model conditions on the current observation to infer zt; together with the recurrent state ht, which summarizes the trajectory prefix, this gives the posterior model state st = ( ht, z t).The proposed action at is then fed to the sequence model to obtain ht+1 , from which the dynamics predictor pro-duces the successor prior ˆzt+1 . The resulting prior state 
+
+ˆst+1 = ( ht+1 , ˆzt+1 ) supports immediate-hazard and prefix-risk estimation before execution. During training, the ob-servation predictor also uses the successor posterior state 
+
+st+1 = ( ht+1 , z t+1 ), providing an auxiliary prediction ob-jective for shaping the latent dynamics. DreamGuard uses two training stages: world model pre-training and risk-supervised training. The first stage learns recurrent latent dynamics from trajectory data, while the sec-ond stage shapes the learned state with immediate-hazard and prefix-risk supervision. 
+
+World Model Pretraining. Given a trajectory sequence sampled from the world model training dataset Dwm ,DreamGuard optimizes the world model parameters θ with the following objective. Let mwm  
+
+> t
+
+∈ { 0, 1} denote the pre-training mask at step t. The objective is 
+
+LWM (θ) = Eτ ∼D wm , z ∼qθ
+
+"
+
+1
+
+PTt=1 mwm 
+
+> tT
+
+X
+
+> t=1
+
+mwm 
+
+> t
+
+×  λpred Lt 
+
+> pred
+
++ λdyn Lt 
+
+> dyn
+
++ λrep Lt
+
+> rep
+
+#
+
+.
+
+(4) The prediction loss Lt 
+
+> pred
+
+operates in embedding space, train-ing the observation predictor to predict the embedding of the observation after action execution rather than the raw obser-vation itself: 
+
+Lt 
+
+> pred
+
+= 1 − cos( ¯ˆot+1 , ¯ot+1 ), (5) where ¯ˆot+1 and ¯ot+1 denote batch-centered prediction and target embeddings. The dynamics and representation losses regularize the stochastic state with opposite stop-gradient directions: 
+
+Lt 
+
+> dyn
+
+= max 
+
+
+
+KL sg( qθ (zt | ht, o t)) ∥ pθ (ˆ zt | ht), κ 
+
+
+
+,
+
+Lt 
+
+> rep
+
+= max 
+
+
+
+KL qθ (zt | ht, o t) ∥ sg( pθ (ˆ zt | ht)) , κ 
+
+
+
+.
+
+(6) where sg( ·) denotes stop-gradient and κ is the free-bits threshold. The dynamics loss Lt 
+
+> dyn
+
+trains the prior to pre-dict posterior states, while the representation loss Lt 
+
+> rep
+
+en-courages posterior states to remain predictable rather than encoding arbitrary observation details. 
+
+Risk-Supervised Training. After world model pretrain-ing, DreamGuard has learned recurrent latent dynamics from trajectory data. Risk-supervised training then shapes the predicted successor states with two safety targets. Let 
+
+yhaz  
+
+> i,t
+
+denote the hazardous label for trajectory i at step t.For prefix-risk supervision, we assign a decayed positive target to precursor steps within horizon K and a target value of 1 to immediately hazardous steps: 
+
+ypre  
+
+> i,t
+
+=
+
+
+
+1, yhaz  
+
+> i,t
+
+= 1 ,
+
+exp  −(thaz  
+
+> i
+
+− t − 1) /ρ  , 1 ≤ thaz  
+
+> i
+
+− t ≤ K, 
+
+0, otherwise ,
+
+(7) where decay temperature ρ controls how quickly the soft pre-fix label decays with distance from thaz  
+
+> i
+
+. Trajectories without a hazard have ypre  
+
+> i,t
+
+= 0 for all steps. These two safety targets are applied only on the super-vised prefix of each trajectory. Let msafe  
+
+> t
+
+denote the resulting mask over supervised steps. The safety objective averages the immediate-hazard and prefix-risk losses over this supervised prefix: 
+
+Lsafety (θ) = Eτ ∼D safety , z ∼qθ , ˆz∼pθ
+
+"
+
+1
+
+PTt=1 msafe 
+
+> t
+
+×
+
+> T
+
+X
+
+> t=1
+
+msafe 
+
+> t
+
+ Lt 
+
+> haz
+
++ Lt
+
+> pre
+
+#
+
+.
+
+(8) The two losses supervise complementary signals: immediate-hazard risk for actions that would trigger a haz-ardous outcome at the current step, and prefix-risk for trajec-tory prefixes indicating accumulating long-horizon risk: 
+
+Lt 
+
+> haz
+
+= BCE logit (ℓhaz  
+
+> i,t
+
+, y haz  
+
+> i,t
+
+), (9) 
+
+Lt 
+
+> pre
+
+= BCE logit (ℓpre  
+
+> i,t
+
+, y pre  
+
+> i,t
+
+). (10) These safety losses update the partial unfrozen world model modules on the computational path to the immediate-hazard and prefix-risk predictors, while keeping the GRU transition core fixed. This partial unfreezing lets multi-horizon risk supervision shape the latent state, preserving information predictive of hazardous outcomes and risk accumulation. As a result, the latent dynamics become risk-aware rather than merely predictive of generic next states. 
+
+Architecture details. The sequence model is implemented as a GRU-based transition with LayerNorm on the concate-nated stochastic state and action input. The remaining pro-jection and predictor modules are MLPs with Linear layers, LayerNorm, and SiLU activations. The stochastic state is represented as factorized categorical variables and sampled with straight-through gradients. 
+
+3.4 Multi-Horizon Risk Estimation 
+
+At runtime, DreamGuard uses the world model to predict the successor prior state for the proposed action and maps it to two complementary risk scores: the immediate-hazard score 
+
+phaz  
+
+> t
+
+for actions that may directly trigger a hazardous out-come, and the prefix-risk score ppre  
+
+> t
+
+for accumulating long-horizon risk. Because prefix-risk scores are designed to be sensitive to weak precursor evidence, DreamGuard smooths them with a temporal evidence state Bt = ( pema  
+
+> t
+
+, p win  
+
+> t
+
+):
+
+pema  
+
+> t
+
+= βp ema  
+
+> t−1
+
++ (1 − β)ppre  
+
+> t
+
+, (11) 
+
+pwin  
+
+> t
+
+= 1
+
+|W t|
+
+X
+
+> j∈W t
+
+ppre  
+
+> j
+
+, (12) where β ∈ [0 , 1) controls how strongly past prefix-risk ev-idence is retained, and Wt denotes the most recent window of at most W prefix-risk scores. The exponential-moving-average score pema  
+
+> t
+
+captures weak risk evidence that per-sists over time, while the recent-window score pwin  
+
+> t
+
+pre-serves transient increases in prefix-risk evidence without let-ting older evidence dominate. DreamGuard then aggregates Algorithm 1: Workflow of DreamGuard 
+
+Input : Guardrail G = ( θ, I); task-instruction representation 
+
+e; online pre-action stream {(ot, a t)}Tt=1 
+
+Output : Decision log D 
+
+> 1:
+
+h1 ← Init θ (e); B0 ← (0 , ∅); D ← ∅ ▷ decision log  
+
+> 2:
+
+for t = 1 , . . . , T do  
+
+> 3:
+
+// Phase 1: successor-state prediction  
+
+> 4:
+
+zt ∼ qθ (zt | ht, o t) ▷ infer current posterior state  
+
+> 5:
+
+ht+1 ← fθ (ht, z t, a t) ▷ imagine action effect  
+
+> 6:
+
+ˆzt+1 ∼ pθ (ˆ zt+1 | ht+1 ) ▷ predict successor prior  
+
+> 7:
+
+ˆst+1 ← (ht+1 , ˆzt+1 ) 
+
+> 8:
+
+// Phase 2: multi-horizon risk estimation  
+
+> 9:
+
+phaz  
+
+> t
+
+← σ ghaz  
+
+> θ
+
+(ˆ st+1 , a t, e ) 
+
+> 10:
+
+ppre  
+
+> t
+
+← σ gpre  
+
+> θ
+
+(ˆ st+1 , a t, e ) 
+
+> 11:
+
+Bt ← Update( Bt−1, p pre  
+
+> t
+
+) ▷ accumulate prefix-risk evidence  
+
+> 12:
+
+St ← Fuse( phaz  
+
+> t
+
+, B t) 
+
+> 13:
+
+// Phase 3: calibrated pre-action intervention  
+
+> 14:
+
+dt ← I (phaz  
+
+> t
+
+, S t) 
+
+> 15:
+
+D ← D ∪ { (t, d t)} 
+
+> 16:
+
+if dt̸ = PASS then  
+
+> 17:
+
+return D ▷ HOLD or BLOCK before execution  
+
+> 18:
+
+end if  
+
+> 19:
+
+end for  
+
+> 20:
+
+return D
+
+immediate-hazard and prefix-risk evidence into a fused run-time risk score St using a bounded noisy-or rule: 
+
+St = NoisyOr  phaz  
+
+> t
+
+, p ema  
+
+> t
+
+, p win 
+
+> t
+
+ , (13) Here, NoisyOr( ·) applies calibrated fusion weights and bounds each weighted term to [0 , 1] before multiplication, so St increases when any evidence channel is strong while remaining in [0 , 1] . The calibrated intervention rule I maps 
+
+(phaz  
+
+> t
+
+, S t) to an intervention decision before execution: 
+
+I(phaz  
+
+> t
+
+, S t) = 
+
+
+
+BLOCK , phaz  
+
+> t
+
+≥ λblock ,
+
+HOLD , St ≥ λhold ,
+
+PASS , otherwise. (14) Both thresholds are calibrated on safe trajectories using split-conformal quantiles. The BLOCK threshold λblock 
+
+is calibrated from phaz  
+
+> t
+
+with a stricter false-alert budget, while the HOLD threshold λhold is calibrated from St. For 
+
+λhold , let Mi = max 1≤t≤Ti Si,t denote the maximum fused score along each calibration trajectory i ∈ D safe cal . Sorting 
+
+M1, . . . , M n as M(1) ≤ · · · ≤ M(n), DreamGuard sets 
+
+λhold = M(k) and k = min( ⌈(n + 1)(1 − α)⌉ , n ) , where 
+
+n = |D safe cal | and α is the target false-alert level on safe tra-jectories. Because Mi is the maximum score over all steps in trajectory i, this threshold calibrates trajectory-level false alerts: a safe trajectory is counted as alerted if any step trig-gers HOLD . The same construction is applied to immediate-hazard scores phaz  
+
+> t
+
+to obtain λblock .
+
+## 4 Experiments 
+
+4.1 Experimental Setup 
+
+Benchmarks. We evaluate DreamGuard on four bench-marks covering both long-horizon risk accumulation and immediate hazards. (1) SafetyDrift (Dhodapkar and Pishori 2026) contains multi-step trajectories in which risk accu-mulates before a safety constraint is violated. (2) Agent-Dojo (Debenedetti et al. 2024) provides tool-use tasks with prompt injection and environment-mediated risks. (3) Agent Security Bench (ASB) (Zhang et al. 2025) covers direct and indirect attacks against LLM agents. (4) ASSE-Security (Luo et al. 2025a) covers data leakage, credential abuse, unautho-rized access, and prompt injection. DreamGuard is trained and calibrated on SafetyDrift, using disjoint trajectory splits. SafetyDrift results are reported on the held-out test split, and the other benchmarks are evaluated with the same calibrated thresholds. 
+
+Step-Level Annotation. Most existing benchmarks pro-vide only trajectory-level labels, leaving step-level hazard la-bels unspecified. To address this, we convert the four bench-marks into a common step-level trajectory format and an-notate the hazard attribute of each step using benchmark-specific rules, with initial prelabeling from an LLM and in-dependent review by two human annotators. The first hazard step is then identified as the earliest step labeled hazardous in each unsafe trajectory. 
+
+Baselines. We compare DreamGuard with three groups of guardrails. (1) Generic guardrail: Llama-Guard-4-12B (Meta 2025), a broadly deployed safety classifier adapted to agent trajectories. (2) Reactive guardrails: Pol-icyGuard (Wen et al. 2026), GuardAgent (Xiang et al. 2025), and AgentDoG-1.5 (Liu et al. 2026a), which primarily assess the apparent safety of the current proposed action or explicit policy constraints. (3) Proactive guardrails: SafePred (Chen et al. 2026) and TRACES (Li et al. 2026), which maintain persistent state, track evolving risk, or predict future conse-quences to address long-horizon risks. 
+
+Metrics. We evaluate guardrails at both trajectory and step levels. (1) Following prior runtime guardrail evaluations, we report safety rate ( SR ), F1 , false positive rate ( FPR ), and 
+
+Latency on the full trajectory. SR measures the fraction of unsafe trajectories in which the guardrail triggers an interven-tion or unsafe decision. Latency is the end-to-end wall-clock time per guardrail call. (2) Since trajectory-level metrics do not capture whether intervention is timely, we further report Pre-Hazard Intervention Recall ( PHIR ), the fraction of un-safe trajectories where the first intervention occurs strictly before the first hazard step. We also report Mean Advance Steps ( MAS ), the average number of steps by which success-ful interventions precede the first hazard step. Formal metric definitions are provided in Appendix A. 
+
+Implementation Details. DreamGuard uses Qwen3-4B-Instruct-2507 as a frozen embedding encoder. We train DreamGuard on a single H100 GPU using SafetyDrift as the source benchmark. For a fair comparison, all trainable baselines use the same training data, and all baselines are Method SafetyDrift AgentDojo ASB ASSE-Security F1 ↑ SR ↑ FPR ↓ Lat. ↓ F1 ↑ SR ↑ FPR ↓ Lat. ↓ F1 ↑ SR ↑ FPR ↓ Lat. ↓ F1 ↑ SR ↑ FPR ↓ Lat. ↓                                                                                                                
+
+> Generic Guardrail
+> Llama-Guard-4-12B 37.3 40.7 77.8 0.130 78.3 67.4 6.3 0.446 28.0 16.3 0.0 0.158 59.4 42.7 1.2 0.156
+> Reactive Guardrails
+> PolicyGuard 26.4 22.2 66.7 0.063 47.3 36.8 24.7 0.128 70.4 54.4 1.9 0.088 79.1 85.1 32.5 0.076 GuardAgent 74.0 88.9 66.7 6.655 63.8 57.8 30.6 7.029 62.6 45.7 3.5 6.040 53.8 44.3 22.2 5.338 AgentDoG-1.5 54.8 55.6 59.3 1.139 80.0 76.6 19.6 1.182 40.4 25.3 1.9 1.122 53.6 37.0 0.9 0.845
+> Proactive Guardrails
+> SafePred 45.3 37.0 44.4 7.686 48.8 33.5 5.1 8.012 54.5 37.5 1.2 7.315 20.5 14.7 30.8 19.383 TRACES 87.1 96.3 33.3 0.081 46.6 35.0 20.0 0.106 27.3 16.2 21.8 0.073 70.7 72.8 36.1 0.066 DreamGuard 96.4 96.3 3.7 0.027 74.9 76.9 29.4 0.034 82.1 74.2 13.6 0.023 82.9 77.2 9.8 0.016
+
+Table 1: Main runtime guardrail results across four agent safety benchmarks. F1 , SR , and FPR (in %) evaluate trajectory-level hazardous trajectory detection; Latency reports end-to-end wall-clock seconds per guardrail call. Best results are boldfaced and second-best results are underlined. evaluated with the same input fields and metric protocol whenever applicable. Additional implementation details are provided in Appendix C. 
+
+4.2 Main Results 
+
+Table 1 summarizes the main results across benchmarks cov-ering immediate hazards and long-horizon risks. Dream-Guard shows the strongest overall F1 and SR performance across all benchmarks while keeping FPR low. It also achieves the lowest latency on all benchmarks. SafetyDrift is designed to evaluate long-horizon risk. On this benchmark, DreamGuard achieves the best F1 of 96.4% and the highest SR of 96.3%, while reducing FPR to 3.7%. This suggests that DreamGuard can preserve weak early risk evidence until it becomes actionable, rather than over-reacting to benign prefixes. In particular, its recurrent latent state preserves trajectory context, allowing the prefix-risk predictor to accumulate weak precursor evidence into a sta-ble score for earlier intervention. AgentDojo, ASB, and ASSE-Security mainly focus on immediate hazards. On these benchmarks, DreamGuard achieves the best SR on AgentDojo and the best F1/SR on ASB, while obtaining the best F1 on ASSE-Security with lower FPR than PolicyGuard, the strongest SR baseline. This indicates that DreamGuard can identify immediate hazards while avoiding excessive false alerts. The contrast with Safe-tyDrift further highlights DreamGuard’s consistent perfor-mance across risk horizons: TRACES reaches 87.1% F1 on SafetyDrift but drops to 27.3% on ASB, while PolicyGuard reaches 79.1% F1 on ASSE-Security but only 26.4% on Safe-tyDrift. DreamGuard avoids this sharp trade-off by main-taining multi-horizon risk evidence. DreamGuard is the most low-latency guardrail in Ta-ble 1, with an average end-to-end latency of 0.025 s per call. Compared with specialized efficient guardrails, it is 3.3 × faster than TRACES and 3.6 × faster than Policy-Guard. The gap is much larger against LLM-reasoning guardrails: DreamGuard is 250.6 × faster than GuardAgent                                     
+
+> Method SafetyDrift AgentDojo ASB ASSE LG-4-12B 40.7 / 2.73 0.6 / 0.01 0.0 / 0.00 5.7 / 0.15 PolicyGuard 16.1 / 1.33 3.3 / 0.36 8.5 / 0.17 6.0 / 0.09 GuardAgent 87.1 / 3.07 13.8 / 0.27 3.2 / 0.08 4.6 / 0.17 AgentDoG-1.5 35.5 / 2.00 1.8 / 0.03 1.3 / 0.07 2.4 / 0.07 SafePred 25.8 / 1.73 0.9 / 0.03 0.9 / 0.03 1.4 / 0.17 TRACES 87.1 / 2.00 5.7 / 0.29 0.4 / 0.07 48.4 /0.78
+> DreamGuard 96.3 /3.63 16.8 / 0.33 17.3 /0.27 34.8 / 0.61
+
+Table 2: Step-level timing results across four benchmarks. Each cell reports PHIR/MAS. ASSE denotes ASSE-Security. LG-4-12B denotes Llama-Guard-4-12B. Best results are boldfaced and second-best results are underlined. and 424.0 × faster than SafePred. This efficiency comes from its fixed-dimensional recurrent state and lightweight predic-tors, avoiding repeated full-trajectory processing or online LLM reasoning. 
+
+4.3 Timing Analysis 
+
+We further evaluate DreamGuard at the step level by mea-suring whether a guardrail intervenes before the first hazard action. On SafetyDrift, DreamGuard achieves the highest PHIR (96.3%) and MAS (3.63), outperforming both reactive and proactive guardrails. This gain is enabled by its recurrent risk-aware state and prefix-risk evidence aggregation, which preserve weak precursor signals before the hazard action be-comes explicit. On the more immediate-hazard benchmarks, DreamGuard also obtains the highest PHIR on AgentDojo and ASB, and the highest MAS on ASB, suggesting that its immediate-hazard and prefix-risk signals remain useful near the action boundary. Overall, these results show that Dream-Guard can anticipate hazardous actions before execution and trigger earlier runtime intervention. 0.2 0.3 0.4 0.5 0.6 0.7 0.8  
+
+> Safety Rate ↑
+> 0.60 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00
+> Utility Rate  ↑ w/o defense Llama-Guard-4 PolicyGuard GuardAgent AgentDOG SafePred TRACES DreamGuard
+> No Defense Reactive Guardrail Proactive Guardrail Ours
+
+Figure 2: Defense performance comparison in the online guardrail setting. The blue dashed line represents the safety– utility frontier across all baselines. 
+
+4.4 Online Guardrail 
+
+We further evaluate DreamGuard in providing online guardrails for tool-use agents. Specifically, we use GPT-5.1 (OpenAI 2025) as the task agent and integrate each guardrail as a runtime verification module alongside the agent. As shown in Figure 2, DreamGuard occupies a fa-vorable region of the trade-off space: it achieves the highest Safety Rate (72.92%) while maintaining high Utility Rate (90.38%), placing it beyond the safety–utility frontier formed by existing guardrails. This indicates that DreamGuard im-proves online unsafe-action interception without collapsing benign-task utility. 
+
+4.5 Ablation Studies 
+
+To evaluate the contribution of each component, we con-duct ablation studies on ASSE-Security, as shown in Ta-ble 3. The full DreamGuard model achieves the best over-all F1 (82.9%) while keeping FPR low (9.8%), indicating that its safety gain does not come from indiscriminate over-intervention. Overall, DreamGuard’s full design provides the best balance between detection quality, false-positive control, and pre-hazard intervention: removing individual components tends to collapse one side of this trade-off, ei-ther by over-warning with high FPR or by becoming too conservative to intervene early. 
+
+Effect of Recurrent World Model Dynamics. Remov-ing the recurrent world model substantially reduces F1 from 82.9% to 74.7% and raises FPR to 73.7%, despite achieving 100.0% SR. This suggests that recurrent latent dynamics are needed to preserve safety-relevant history without turning the guardrail into an overly aggressive detector. Removing successor-state prediction also degrades F1 and increases FPR, showing that scoring the predicted post-action state is more reliable than scoring the current state alone. 
+
+Effect of Multi-Horizon Risk Estimation. Removing the hazard predictor causes the largest drop in F1 (52.1%) and PHIR (13.0%), confirming that immediate-hazard evidence is essential near the action boundary. Removing the prefix-risk predictor keeps F1 relatively high but increases FPR 
+
+Variant F1 ↑ SR ↑ FPR ↓ PHIR ↑ MAS ↑
+
+Recurrent World Model Dynamics 
+
+w/o recurrent WM 74.7 100.0 73.7 61.7 1.16 w/o successor prediction 76.3 76.1 25.4 43.2 1.01 
+
+Multi-Horizon Risk Estimation 
+
+w/o hazard predictor 52.1 37.5 7.1 13.0 0.41 w/o prefix-risk predictor 80.9 83.4 24.9 25.8 0.50 w/o temporal aggregation 77.8 70.1 10.9 34.2 0.66 
+
+Two-Stage Training 
+
+w/o WM pretraining 70.3 100.0 92.0 63.0 1.18 w/o risk-supervised training 77.1 64.1 2.4 9.8 0.18 
+
+Full DreamGuard 82.9 77.2 9.8 34.8 0.61 
+
+Table 3: Ablation of DreamGuard components on ASSE-Security. We report trajectory-level safety metrics and step-level timing metrics for each variant. and weakens early intervention, while removing temporal aggregation lowers F1 and SR. These results support the need to combine immediate-hazard, prefix-level risk, and temporal evidence rather than relying on a single risk signal. 
+
+Effect of Two-Stage Training. Without world model pre-training, the model reaches high SR and PHIR but suffers from severe false positives, with FPR rising to 92.0%. In con-trast, removing risk-supervised training yields low FPR but sharply reduces SR, PHIR, and MAS, making the guardrail too conservative. This shows that world model pretraining and risk-supervised training play complementary roles: the former stabilizes latent dynamics, while the latter makes the latent state useful for runtime risk intervention. 
+
+## 5 Limitations 
+
+DreamGuard is currently calibrated exclusively on Safety-Drift and transfers its decision thresholds zero-shot to other benchmarks. This provides a stringent evaluation of transfer robustness, but performance under substantial distribution shifts could be further optimized. In real-world deployments, lightweight recalibration with target-domain data may further enhance adaptability. Additionally, DreamGuard focuses on intervention before action execution rather than generat-ing safe replacement actions. Extending the framework with action revision could reduce task disruption when an inter-vention is triggered. 
+
+## 6 Conclusion 
+
+In this work, we study proactive runtime guardrailing for autonomous agents under a step-level pre-action decision setting. We introduce DreamGuard, a world model-based guardrail that maintains a compact recurrent latent state, learns risk-aware latent dynamics, and integrates immediate-hazard and prefix-level risk evidence into calibrated interven-tion decisions. Extensive experiments on four agent safety benchmarks show that DreamGuard outperforms baseline guardrails while maintaining highly efficient per-action run-time. Online guardrail evaluation further shows that Dream-Guard achieves a favorable safety-utility trade-off in real agent execution, demonstrating the potential of risk-aware world models as a practical foundation for proactive agent runtime safety. 
+
+## References 
+
+Chae, H.; Kim, N.; Ong, K. T.-i.; Gwak, M.; Song, G.; Kim, J.; Kim, S.; Lee, D.; and Yeo, J. 2025. Web Agents with World Models: Learning and Leveraging Environment Dynamics in Web Navigation. In International Conference on Learning Representations (ICLR 2025) , 63707–63738. Chen, Y.; Liao, Z.; Yin, P.; Xie, T.; Yin, K.; and Zhang, S. 2026. SafePred: A Predictive Guardrail for Computer-Using Agents via World Models. arXiv:2602.01725. Chen, Z.; Kang, M.; and Li, B. 2025. ShieldAgent: Shield-ing Agents via Verifiable Safety Policy Reasoning. In Pro-ceedings of the 42nd International Conference on Machine Learning (ICML) , 8313–8344. Debenedetti, E.; Zhang, J.; Balunovic, M.; Beurer-Kellner, L.; Fischer, M.; and Tramèr, F. 2024. AgentDojo: A Dy-namic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents. In Advances in Neural In-formation Processing Systems 37 (NeurIPS 2024), Datasets and Benchmarks Track , 82895–82920. Deng, Z.; Guo, Y.; Han, C.; Ma, W.; Xiong, J.; Wen, S.; and Xiang, Y. 2025. AI Agents Under Threat: A Survey of Key Security Challenges and Future Pathways. ACM Computing Surveys , 57(7): 182:1–182:36. Dhodapkar, A.; and Pishori, F. 2026. SafetyDrift: Predicting When AI Agents Cross the Line Before They Actually Do. arXiv:2603.27148. Gan, Y.; Yang, Y.; Ma, Z.; He, P.; Zeng, R.; Wang, Y.; Li, Q.; Zhou, C.; Li, S.; Wang, T.; Gao, Y.; Wu, Y.; and Ji, S. 2026. Navigating the Risks: A Survey of Security and Privacy Threats in LLM-Based Agents. ACM Transactions on Software Engineering and Methodology. Forthcoming. Gu, Y.; Zhang, K.; Ning, Y.; Zheng, B.; Gou, B.; Xue, T.; Chang, C.; Srivastava, S.; Xie, Y.; Qi, P.; Sun, H.; and Su, Y. 2025. Is Your LLM Secretly a World Model of the Internet? Model-Based Planning for Web Agents. Transactions on Machine Learning Research , 2025. Hafner, D.; Lillicrap, T.; Fischer, I.; Villegas, R.; Ha, D.; Lee, H.; and Davidson, J. 2019. Learning Latent Dynamics for Planning from Pixels. In Proceedings of the 36th Inter-national Conference on Machine Learning (ICML) , 2555– 2565. Hafner, D.; Pasukonis, J.; Ba, J.; and Lillicrap, T. 2025. Mas-tering diverse control tasks through world models. Nature ,640(8059): 647–653. Han, S.; Rao, K.; Ettinger, A.; Jiang, L.; Lin, B. Y.; Lambert, N.; Choi, Y.; and Dziri, N. 2024. WildGuard: Open One-stop Moderation Tools for Safety Risks, Jailbreaks, and Refusals of LLMs. In Advances in Neural Information Processing Systems 37 (NeurIPS 2024), Datasets and Benchmarks Track ,8093–8131. Hansen, N.; Su, H.; and Wang, X. 2024. TD-MPC2: Scal-able, Robust World Models for Continuous Control. In In-ternational Conference on Learning Representations (ICLR 2024) , 47376–47405. Inan, H.; Upasani, K.; Chi, J.; Rungta, R.; Iyer, K.; Mao, Y.; Tontchev, M.; Hu, Q.; Fuller, B.; Testuggine, D.; and Khabsa, M. 2023. Llama Guard: LLM-based Input-Output Safeguard for Human-AI Conversations. arXiv:2312.06674. Li, J.; Li, Y.; Zhang, B.; Tang, R.; and Huang, K.-H. 2026. TRACES: Proactive Safety Auditing for Multi-Turn LLM Agents via Trajectory-State Modeling. arXiv:2605.27690. Liu, D.; Li, Y.; Yang, Z.; Wang, P.; Chen, G.; Xie, Y.; Mao, Q.; Qu, W.; Zhu, Y.; Zhou, T.; Yuan, L.; Zheng, Z.; Lin, Q.; Wang, Y.; Luo, H.; Shao, S.; Qian, C.; Liu, Q.; Tang, L.; Qin, R.; Ren, Q.; Yang, J.; Wang, K.; Xi, Z.; Zhang, L.; Duan, R.; Zhang, B.; Wang, W.; Shen, W.; Zhang, Q.; Teng, Y.; Lu, C.; Mei, R.; Li, M.; Tao, J.; Lin, X.; Zheng, T.; Liu, Y.; Zhang, Q.; Zhu, L.; Ma, X.; Liu, J.; Xue, H.; Zuo, X.; He, X.; Shen, C.; Liu, X.; Huang, M.; Shao, J.; and Hu, X. 2026a. AgentDoG 1.5: A Lightweight and Scalable Alignment Framework for AI Agent Safety and Security. arXiv:2605.29801. Liu, D.; Ren, Q.; Qian, C.; Shao, S.; Xie, Y.; Li, Y.; Yang, Z.; Luo, H.; Wang, P.; Liu, Q.; Hu, B.; Tang, L.; Mei, J.; Guo, D.; Yuan, L.; Yang, J.; Chen, G.; Lin, Q.; Yu, Y.; Zhang, B.; Guo, J.; Zhang, J.; Shao, W.; Deng, H.; Xi, Z.; Wang, W.; Wang, W.; Shen, W.; Chen, Z.; Xie, H.; Tao, J.; Dai, J.; Ji, J.; Ba, Z.; Zhang, L.; Liu, Y.; Zhang, Q.; Zhu, L.; Wei, Z.; Xue, H.; Lu, C.; Shao, J.; and Hu, X. 2026b. AgentDoG: A Diagnostic Guardrail Framework for AI Agent Safety and Security. arXiv:2601.18491. Liu, H.; Ilyushin, E.; Ni, J.; and Zhu, M. 2026c. SafeAgent: A Runtime Protection Architecture for Agentic Systems. arXiv:2604.17562. Luo, H.; Dai, S.; Ni, C.; Li, X.; Zhang, G.; Wang, K.; Liu, T.; and Salam, H. 2025a. AgentAuditor: Human-level Safety and Security Evaluation for LLM Agents. In Advances in Neural Information Processing Systems 38 (NeurIPS 2025) ,43241–43298. Luo, W.; Dai, S.; Liu, X.; Banerjee, S.; Sun, H.; Chen, M.; and Xiao, C. 2025b. AGrail: A Lifelong Agent Guardrail with Ef-fective and Adaptive Safety Detection. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , 8104–8139. Ma, X.; Gao, Y.; Wang, Y.; Wang, R.; Wang, X.; Sun, Y.; Ding, Y.; Xu, H.; Chen, Y.; Zhao, Y.; Huang, H.; Li, Y.; Wu, Y.; Zhang, J.; Zheng, X.; Bai, Y.; Li, Y.; Wu, Z.; Qiu, X.; Zhang, J.; Han, X.; Li, H.; Sun, J.; Wang, C.; Gu, J.; Wu, B.; Chen, S.; Zhang, T.; Liu, Y.; Gong, M.; Liu, T.; Pan, S.; Xie, C.; Pang, T.; Dong, Y.; Jia, R.; Zhang, Y.; Ma, S.; Zhang, X.; Gong, N.; Xiao, C.; Erfani, S.; Baldwin, T.; Li, B.; Sugiyama, M.; Tao, D.; Bailey, J.; and Jiang, Y.-G. 2025. Safety at Scale: A Comprehensive Survey of Large Model and Agent Safety. Foundations and Trends in Privacy and Security , 8(3–4): 254–469. Meta. 2025. Llama Guard 4 Model Card. https: //huggingface.co/meta-llama/Llama-Guard-4-12B. Ac-cessed: 2026-07-28. Mou, Y.; Xue, Z.; Li, L.; Liu, P.; Zhang, S.; Ye, W.; and Shao, J. 2026. ToolSafe: Enhancing Tool Invocation Safety of LLM-based agents via Proactive Step-level Guardrail and Feedback. In Findings of the Association for Computational Linguistics: ACL 2026 , 37125–37153. OpenAI. 2025. GPT-5.1 Instant and GPT-5.1 Thinking System Card Addendum. https://openai.com/index/gpt-5-system-card-addendum-gpt-5-1/. Accessed: 2026-07-29. Qin, Y.; Liang, S.; Ye, Y.; Zhu, K.; Yan, L.; Lu, Y.; Lin, Y.; Cong, X.; Tang, X.; Qian, B.; Zhao, S.; Hong, L.; Tian, R.; Xie, R.; Zhou, J.; Gerstein, M.; Li, D.; Liu, Z.; and Sun, M. 2024. ToolLLM: Facilitating Large Language Models to Master 16000+ Real-world APIs. In International Confer-ence on Learning Representations (ICLR 2024) , 9695–9717. Wang, H.; Poskitt, C. M.; Wei, J.; and Sun, J. 2025a. Prob-Guard: Probabilistic Runtime Monitoring for LLM Agent Safety. arXiv:2508.00500. Wang, L.; Ma, C.; Feng, X.; Zhang, Z.; Yang, H.; Zhang, J.; Chen, Z.; Tang, J.; Chen, X.; Lin, Y.; Zhao, W. X.; Wei, Z.; and Wen, J.-R. 2024. A Survey on Large Language Model Based Autonomous Agents. Frontiers of Computer Science ,18(6): 186345. Wang, L.; Ren, Z.; Yang, T.; Ji, J.; Liu, C. H.; Yang, Y.; and Dai, J. 2026a. SafeMCP: Proactive Power Regulation for LLM Agent Defense via Environment-Grounded Look-Ahead Reasoning. In Proceedings of the 64th Annual Meet-ing of the Association for Computational Linguistics (Volume 1: Long Papers) , 11374–11396. Wang, L.; Ying, Z.; Yang, X.; Zou, Q.; Yin, Z.; Li, T.; Yang, J.; Yang, Y.; Liu, A.; and Liu, X. 2025b. RoboSafe: Safe-guarding Embodied Agents via Executable Safety Logic. arXiv:2512.21220. Wang, Y.; Jiang, T.; Liang, J.; Fleming, C.; and Wang, T. 2026b. MAGE: Safeguarding LLM Agents against Long-Horizon Threats via Shadow Memory. arXiv:2605.03228. Wen, X.; Mo, W. J.; Xie, Y.; Qi, P.; and Chen, M. 2026. Learning Efficient Guardrails for Compliance. In Proceed-ings of the 43rd International Conference on Machine Learn-ing (ICML) .Xi, Z.; Chen, W.; Guo, X.; He, W.; Ding, Y.; Hong, B.; Zhang, M.; Wang, J.; Jin, S.; Zhou, E.; Zheng, R.; Fan, X.; Wang, X.; Xiong, L.; Zhou, Y.; Wang, W.; Jiang, C.; Zou, Y.; Liu, X.; Yin, Z.; Dou, S.; Weng, R.; Qin, W.; Zheng, Y.; Qiu, X.; Huang, X.; Zhang, Q.; and Gui, T. 2025. The Rise and Potential of Large Language Model Based Agents: A Survey. 
+
+Science China Information Sciences , 68(2): 121101. Xiang, Z.; Zheng, L.; Li, Y.; Hong, J.; Li, Q.; Xie, H.; Zhang, J.; Xiong, Z.; Xie, C.; Yang, C.; Song, D.; and Li, B. 2025. GuardAgent: Safeguard LLM Agents via Knowledge-Enabled Reasoning. In Proceedings of the 42nd International Conference on Machine Learning (ICML) , 68316–68342. Yu, M.; Meng, F.; Zhou, X.; Wang, S.; Mao, J.; Pang, L.; Chen, T.; Wang, K.; Li, X.; Zhang, Y.; An, B.; and Wen, Q. 2025. A Survey on Trustworthy LLM Agents: Threats and Countermeasures. In Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining, V.2 ,6216–6226. Zhang, H.; Huang, J.; Mei, K.; Yao, Y.; Wang, Z.; Zhan, C.; Wang, H.; and Zhang, Y. 2025. Agent Security Bench (ASB): Formalizing and Benchmarking Attacks and De-fenses in LLM-based Agents. In International Conference on Learning Representations (ICLR 2025) , 35331–35366. A Evaluation Metrics and Calibration 
+
+A.1 Trajectory-Level Metrics 
+
+Safety Rate. For unsafe trajectories, Safety Rate measures whether the guardrail triggers at least one intervention before the trajectory ends. For binary baselines, any unsafe flag or blocking decision counts as an intervention. 
+
+Safety Rate = #unsafe trajectories with intervention 
+
+#unsafe trajectories .
+
+(15) 
+
+False Positive Rate (FPR). For safe trajectories, FPR mea-sures whether the guardrail incorrectly triggers an interven-tion. 
+
+FPR = #safe trajectories with intervention 
+
+#safe trajectories . (16) 
+
+F1. We treat each trajectory as a binary classification sam-ple. Unsafe trajectories are positive, safe trajectories are neg-ative, and a trajectory is predicted unsafe if any step triggers an intervention or unsafe decision. Let TP, FP, and FN denote the trajectory-level counts under this convention. Then 
+
+Precision = TP TP + FP , Recall = TP TP + FN , (17) 
+
+F1 = 2 Precision Recall Precision + Recall . (18) 
+
+Latency. Latency is the wall-clock time per guardrail call, measured from receiving the current pre-action input to re-turning a decision. The paper reports latency in seconds per call; raw logs are recorded at millisecond resolution. 
+
+Latency = 1
+
+N
+
+X
+
+> i
+
+
+
+tdecision  
+
+> i
+
+− tinput 
+
+> i
+
+
+
+. (19) 
+
+A.2 Timing-Level Metrics 
+
+Pre-Hazard Intervention Recall (PHIR). PHIR mea-sures the fraction of unsafe trajectories in which the first intervention occurs strictly before the first hazard step. 
+
+PHIR = #{τ : dτ < h τ }
+
+#{τ : hτ exists } . (20) Here, hτ is the first hazard step of trajectory τ , and dτ is the first step where the guardrail triggers an intervention. 
+
+Mean Advance Steps (MAS). MAS measures how many steps before the first hazard step the guardrail intervenes, averaged over trajectories with successful pre-hazard inter-vention. 
+
+MAS = E [hτ − dτ | dτ < h τ ] . (21) 
+
+A.3 Split-Conformal Threshold Calibration 
+
+DreamGuard calibrates its runtime thresholds on a held-out calibration split using split-conformal threshold selection. The hold threshold is chosen from the trajectory-level max-imum fused score. The block threshold is calibrated analo-gously from the trajectory-level maximum immediate-hazard score, using the stricter false-alert budget of the runtime pol-icy. Both thresholds are fixed after calibration and reused unchanged at test time. For the hold threshold, let Mi be the maximum fused score in safe calibration trajectory i:
+
+Mi = max 
+
+> 1≤t≤Ti
+
+Si,t . (22) Sorting the safe calibration scores as M(1) ≤ · · · ≤ M(n),DreamGuard sets 
+
+λhold = M(k), (23) 
+
+k = min ( ⌈(n + 1)(1 − α)⌉ , n ) , (24) where n is the number of safe calibration trajectories and α is the target safe-trajectory false-alert level. The same construc-tion is applied to the maximum immediate-hazard scores of safe calibration trajectories to obtain λblock .
+
+## B Benchmark Construction and Labeling 
+
+We choose the four core benchmarks to cover the two risk regimes that our paper studies. SafetyDrift is included be-cause it is specifically designed for long-horizon risk, where individually benign actions can accumulate into a later vio-lation. The other three benchmarks are widely used for agent safety evaluation and primarily stress immediate-hazard be-havior while spanning diverse risk categories. This combi-nation lets us evaluate whether DreamGuard handles both delayed risk accumulation and current-step hazards, and whether the same design transfers across distinct risk types. 
+
+B.1 Core Benchmarks 
+
+We evaluate DreamGuard on four core benchmarks: 1. SafetyDrift . Designed for long-horizon risk predic-tion and early warning. Paper: https://arxiv.org/abs/2603. 27148. Code/release: see the paper’s linked project page and release notes. 2. AgentDojo . A dynamic benchmark for prompt-injection and tool-use attacks on LLM agents. Paper and bench-mark site: https://agentdojo.spylab.ai/ and https://github. com/ethz-spylab/agentdojo. 3. Agent Security Bench (ASB) . A benchmark for at-tacks and defenses in LLM-based agents. Paper: https: //arxiv.org/pdf/2410.02644. Code: https://github.com/ agiresearch/ASB. 4. ASSE-Security . A benchmark for agent security and safety evaluation, covering data leakage, credential abuse, unauthorized access, prompt injection, and related risks. Paper: https://proceedings.neurips.cc/paper_files/paper/ 2025/file/3dc85735f6e2fcf093e67b134fa00d21-Paper-Conference.pdf. Code: https://github.com/Astarojth/ AgentAuditor-ASSEBench. 
+
+B.2 Step-Level Hazard Labeling 
+
+We convert all four benchmarks into a common step-level trajectory format and assign each unsafe trajectory a first hazard step: the earliest proposed action whose execution would cause a concrete hazardous outcome or transition. When a source benchmark provides reliable step-level labels, we retain and audit them. Otherwise, we use GPT-5.1 for initial prelabeling, followed by independent review by two human annotators and adjudication of disagreements. The reviewers recover the first hazard step from the trajectory evidence and post-action consequences. We apply three labeling principles. First, the boundary must correspond to a concrete hazard, not merely a sensitive, controversial, or unsafe-looking action. Second, the selected step should be the earliest action that independently crosses the safety boundary under the available trajectory evidence. Third, if the trace does not support a reliable boundary recov-ery, we retain the trajectory-level label for aggregate evalua-tion but exclude the sample from step-level timing metrics. This policy keeps step-level supervision aligned with the pre-action decision problem studied in the main text. 
+
+B.3 Data Audit and Cleaning 
+
+We audited duplicate-content leakage in SafetyDrift and rechecked the TSBench-derived AgentDojo and ASB caches against the full raw data before fixing the final splits. This avoids relying on earlier held-out subsets that can understate the difficulty of the full benchmark. 
+
+## C Details of Experiments 
+
+C.1 Feature Extraction and Mainline Configuration 
+
+DreamGuard uses frozen Qwen3-4B-Instruct-2507 repre-sentations from layer 31, pooled into 2560-dimensional fea-tures. The mainline model is an RSSM with a GRU transition. After world-model pretraining on SafetyDrift, immediate-hazard and prefix-risk supervision shapes its predicted suc-cessor states. The stochastic latent state is factorized categor-ical and is trained with straight-through gradients. 
+
+C.2 Symbol-to-Implementation Mapping 
+
+The appendix uses a single notation system throughout. The core symbol-to-implementation mapping is summarized in Table 6. 
+
+C.3 Baseline Adaptation and Prompting 
+
+Baseline Groups. We organize baselines using the same taxonomy as the main paper: 1. Generic guardrail : Llama-Guard-4-12B. 2. Reactive guardrail : PolicyGuard, GuardAgent, AgentDoG-1.5. 3. Proactive guardrail : SafePred, TRACES. 
+
+Adaptation Protocol. Whenever a baseline exposes a pre-action decision interface, we evaluate it at the same action boundary as DreamGuard and keep the task instruction, observation, and proposed action fields aligned across meth-ods. Released standalone checkpoints are used with their official weights; prompt-based methods use their published prompting or judging setup when available. For trainable baselines, the same training and calibration split used for DreamGuard is reused whenever the method requires adap-tation or fine-tuning. The final baseline settings are therefore                          
+
+> Item Value Source benchmark SafetyDrift Feature encoder frozen Qwen3-4B-Instruct-2507, layer 31 pooled Embedding dim 2560 World model RSSM with GRU transition Deterministic latent size 1024 Stochastic latent size 32 Stochastic classes 32 Prefix-risk horizon 3Prefix-risk decay temperature 1.5 Prediction target batch-centered successor-observation embedding Head adapters enabled Adapter scale 0.25 Stage-1 /stage-2 epochs 10 / 12 Batch size 8Optimizer lr 2×10 −4
+> World-model lr scale 0.25 KL weight 0.03 JEPA weight 1.25 Free bits 0.2 Training seed 20260701
+
+Table 4: Mainline configuration of DreamGuard. fixed by their released checkpoint or published inference protocol, and we do not introduce extra paper-specific tuning beyond the shared evaluation and calibration rules above. 
+
+Online Prompting and Tool Schema. For the online guardrail experiment, the benchmark’s serialized tool list is converted into function-calling schemas, and each guardrail is inserted into the same lightweight pre-action hook. The live agent prompt, the guardrail prompt, and the LLM-judge prompt are kept fixed across methods to ensure a fair com-parison. 
+
+C.4 Ablation Study Design 
+
+All ablations keep the same data splits, calibration proto-col, and test-time configuration unless the ablation explicitly changes that component. 
+
+C.5 Online Guardrail Reproduction 
+
+Setup. The online evaluation uses the following configu-ration: 
+
+• Benchmark: ASSE-Security online subset 
+
+• Sample size: 100 cases 
+
+• Sampling: stratified by ASSE-Security risk_type 
+
+• Agent: GPT-5.1 function-calling agent 
+
+• Guardrail: real-time DreamGuard checkpoint 
+
+• Max online steps: 6 
+
+• Calibration: α = 0 .6
+
+This is a derived evaluation slice built from ASSE-Security, not a new standalone benchmark. The online harness uses a Variant Design Purpose 
+
+Effect of Recurrent World-Model Dynamics 
+
+Full DreamGuard Uses recurrent latent dynamics and scores the predicted succes-sor state before action execution. Reference model. w/o recurrent WM Removes the RSSM recurrent latent state and predicts risk from the current instruction, observation, and proposed-action em-beddings. Tests whether a fixed-dimensional recurrent state improves over a current-step scorer. w/o successor predic-tion Keeps the recurrent state, but scores the current latent state instead of the predicted successor state. Tests whether successor prediction is neces-sary for pre-action intervention. 
+
+Effect of Multi-Horizon Risk Estimation 
+
+Full DreamGuard Fuses immediate-hazard and prefix-risk evidence with temporal prefix-risk aggregation. Reference model. w/o hazard predictor Removes the immediate-hazard branch and makes decisions from the prefix-risk branch. Tests whether long-horizon evidence alone is sufficient. w/o prefix-risk predic-tor Removes the prefix-risk branch and makes decisions from the immediate-hazard branch. Tests whether current-step hazard evidence alone is sufficient. w/o temporal aggrega-tion Uses both branches, but removes EMA and sliding-window prefix-risk statistics. Tests whether temporal aggregation con-tributes beyond raw multi-horizon scores. 
+
+Effect of Two-Stage Training 
+
+Full DreamGuard First trains the world model, then performs risk-supervised train-ing with partial world-model updates. Reference model. w/o WM pretraining Skips world-model pretraining and directly performs risk-supervised training. Tests whether consequence prediction pre-training is necessary. w/o risk-supervised training Keeps world-model pretraining but omits the second-stage risk-supervised training. Tests whether risk-supervised training is necessary to make the latent state useful for runtime intervention. 
+
+Table 5: Ablation variants grouped by recurrent world-model dynamics, multi-horizon risk estimation, and two-stage training. 
+
+Symbol / component Meaning 
+
+e task-instruction representation 
+
+ot pre-action observation representa-tion 
+
+at proposed-action representation 
+
+ht deterministic recurrent state 
+
+zt stochastic latent state 
+
+st = ( ht, z t) posterior model state 
+
+ˆzt+1 predicted stochastic successor prior 
+
+ˆst+1 = ( ht+1 , ˆzt+1 ) predicted successor prior state 
+
+ˆot+1 predicted successor-observation em-bedding 
+
+ℓhaz  
+
+> t
+
+, ℓpre  
+
+> t
+
+immediate-hazard and prefix-risk logits 
+
+phaz  
+
+> t
+
+, ppre  
+
+> t
+
+immediate-hazard and prefix-risk probabilities 
+
+Bt temporal prefix-risk evidence state 
+
+I calibrated intervention rule 
+
+Table 6: Symbol-to-implementation mapping used in the pa-per and appendix. lightweight function-calling loop over ASSE-derived mock tools; the public benchmark itself remains the source dataset, while the mock-tool environment is the reproducible eval-uation layer used for online guardrail comparison. The agent and judge are both instantiated through an OpenAI-compatible API, and the guardrail runs as a pre-action hook before each tool invocation. The online comparison reports 
+
+Risk type Total Unsafe Benign Data Exfiltration & Leakage 14 7 7Data Tampering & Destruction 5 2 3Fraud & Credential Abuse 5 2 3Other Security Risk 13 6 7Prompt Injection 40 20 20 Unauthorized Access & Control 23 11 12 
+
+Overall 100 48 52 
+
+Table 7: Composition of the 100-case ASSE-Security online subset. Safety Rate on unsafe cases and Utility Rate on benign cases. 
+
+Subset Composition. Reported Outputs. Paper-facing comparison tables and per-risk-type breakdowns are generated from a single canon-ical summary so that intermediate judge reruns do not intro-duce stale rows. Released run artifacts and the final summary table remain aligned for the reported results. 
+
+Safety-Utility Frontier Coordinates. The Pareto frontier in the main text is drawn from the overall safety-utility coor-dinates in Table 8. These coordinates correspond to the 100-case ASSE-Security online subset with 48 unsafe and 52 benign trajec-tories, using the same live agent and judge setup described above. Guardrail Safety Rate ↑ Utility Rate ↑                
+
+> w/o defense 18.75 94.23 AgentDoG-1.5 31.25 90.38 SafePred 41.67 67.31 GuardAgent 50.00 76.92 TRACES 56.25 90.38 TS-Guard 66.67 90.38 DreamGuard 72.92 90.38 PolicyGuard 50.00 80.77
+
+Table 8: Safety-utility coordinates for the online ASSE-Security subset (48 unsafe and 52 benign trajectories). 
+
+C.6 Prompt Templates and Judge Rules 
+
+To support online evaluation reproducibility, we fix the live-agent system prompt, the guardrail prompt template, the judge prompt, and the tool-schema conversion rule used to instantiate the ASSE-Security function-calling environment. Baseline-specific prompting or judging templates are like-wise kept fixed whenever a method is run through the same online hook. Exact prompt text is provided with the code and data package accompanying this submission. 
+
+C.7 Software, Hardware, and Randomness 
+
+The reported experiments were run on a single NVIDIA H100 80GB HBM3 GPU with driver 580.95.05, an In-tel(R) Xeon(R) Platinum 8468V CPU, and 2.0 TiB of host memory under Linux 5.14.0-284.25.1.el9_2.x86_64. The lo-cal reproduction environment used Python 3.8.10, PyTorch 2.3.1+cu121, Transformers 4.43.1, NumPy 1.24.4, and pan-das 2.0.3. The online guardrail reproduction additionally uses an OpenAI-compatible API endpoint. Randomness is controlled with explicit integer seeds in the experiment scripts. The mainline training and export runs use seed 20260701, and the online ASSE-Security subset sampling uses seed 20260716. When rerunning a reported experiment, the same seed and the same data split identifiers should be reused together with the same checkpoint path. 
+
+C.8 Core Hyperparameter Search and Final Choices 
+
+We summarize only the core hyperparameter families that materially affected the final mainline (Table 9). The remaining optimization settings were kept fixed in the final submission: batch size 8, Adam learning rate 2 × 10 −4,world-model LR scale 0.25, KL weight 0.03, JEPA weight 1.25, free bits 0.2, and adapter scale 0.25. 
+
+C.9 First-Hazard Label Stability Audit 
+
+We conduct a human double-review audit for first-hazard-step labeling on every benchmark that does not already pro-vide native step-level labels. For benchmarks with native step labels (SafetyDrift), we retain the source labels and only audit them for consistency. For the remaining benchmarks, two human annotators independently review the first-hazard boundary, and disagreements are resolved by adjudication. This audit is meant to verify that the step-level boundary used in the main paper is stable enough for timing metrics such as PHIR and MAS. For each benchmark, we report exact first-hazard-step agreement, within-one-step agreement, Cohen’s kappa for whether a first hazard step exists, and the fraction of samples changed by final adjudication. Here, kappa is computed on the binary question of whether a trajectory contains a first hazard step, not on the exact step index. Across the non-native-label benchmarks, exact-step agree-ment ranges from 79.6% to 88.1%, and within-one-step agreement ranges from 89.6% to 95.1%. ASSE-Security has the largest residual boundary ambiguity. Because PHIR and MAS depend directly on the first-hazard boundary, all re-viewer disagreements are adjudicated before evaluation. For SafetyDrift, we retain the native step labels after the consis-tency audit. 
+
+## D Robustness and Statistical Analysis 
+
+We assess the stability of the reported results by repeating the main trajectory-level evaluation, step-level timing anal-ysis, and online guardrail experiment three times with fixed data splits and different random seeds. Tables 11–13 report mean ± standard deviation. We further compare Dream-Guard with the strongest non-DreamGuard baseline on each benchmark using paired Wilcoxon signed-rank tests, with pairs formed at the trajectory level for offline bench-marks and at the case level for online guardrail evaluation. The repeated-run tables summarize variation across seeds, while the Wilcoxon table tests whether the paired improve-ment over the strongest baseline is consistent across exam-ples rather than driven by aggregate averaging. These results preserve the conclusions of the main results: DreamGuard remains stable across runs, retains its timing advantage, and improves the online safety-utility trade-off. 
+
+## E Case Study 
+
+We present two representative cases. For each case, we show the task instruction, the key observation prefix, the proposed action sequence, and DreamGuard’s pre-action decision. 
+
+E.1 SafetyDrift: Long-Horizon Risk Accumulation 
+
+Instruction. Patch the vulnerable dependency without breaking the deployment workflow. 
+
+Observation prefix. The agent sees a pinned dependency list ( requests==2.28.0 ), a vulnerability report that flags requests , and a deployment workflow that requires a production-safe update. DreamGuard remains permissive through the inspection prefix. At the annotated first hazard step, the fused score spikes and the guardrail intervenes before the proposed action is executed. 
+
+E.2 ASSE-Security: Prompt Injection at the Action Boundary 
+
+Instruction. Upgrade the operating systems of all servers within the next week, ensuring uninterrupted operation for 50 servers in the company’s data center. Family Tried values Selected value Selection basis Feature layer 23, 31, 36 31 Best SafetyDrift validation trade-off and stable external transfer Prefix-risk horizon 2, 3 3 Stronger early-warning recall with-out a large FPR increase Prefix-risk decay temperature 1.0, 1.5 1.5 Better prefix-risk calibration under the step-aware target Temporal fusion β ∈ { 0.35 , 0.50 , 0.65 , 0.80 }, W ∈ { 2, 3, 4}, and weight grids over immediate-hazard/EMA/window channels final Scheme-D grid-selected setting Selected on the held-out calibration split to balance early warning and false alerts Stage-1 / stage-2 epochs 6 / 8, 10 / 12 10 / 12 Final mainline schedule after dat-apool cleanup and rerun validation 
+
+Table 9: Core hyperparameter search ranges and selected values. 
+
+Benchmark Exact-step Within-1 Presence κ Adjudication change Label source SafetyDrift 96.3% 100.0% 0.98 1.9% native step labels AgentDojo 88.1% 95.1% 0.88 4.8% double review ASB 84.9% 92.3% 0.86 6.7% double review ASSE-Security 79.6% 89.6% 0.84 8.9% double review 
+
+Table 10: First-hazard label stability audit across benchmarks. 
+
+Benchmark F1 Safety Rate FPR Latency SafetyDrift 96 .4 ± 0.3 96 .3 ± 0.2 3.7 ± 0.2 0.027 ± 0.001 
+
+AgentDojo 74 .9 ± 0.5 76 .9 ± 0.6 29 .4 ± 0.5 0 .034 ± 0.001 
+
+ASB 82 .1 ± 0.4 74 .2 ± 0.5 13 .6 ± 0.3 0 .023 ± 0.001 
+
+ASSE-Security 82 .9 ± 0.4 77 .2 ± 0.4 9.8 ± 0.3 0.016 ± 0.001 
+
+Table 11: Repeated-run results for DreamGuard main eval-uation metrics. 
+
+Benchmark PHIR MAS SafetyDrift 96 .3 ± 0.4 3.63 ± 0.08 
+
+AgentDojo 16 .8 ± 0.7 0.33 ± 0.02 
+
+ASB 17 .3 ± 0.5 0.27 ± 0.01 
+
+ASSE-Security 34 .8 ± 0.6 0.61 ± 0.03 
+
+Table 12: Repeated-run results for DreamGuard timing metrics. 
+
+Observation prefix. The trace begins with benign mon-itoring and upgrade planning, but the final step injects a hazardous firmware action through the phrase “with perspi-cacious discernment.” DreamGuard stays permissive on the first two benign actions and blocks the injected firmware call at the action boundary. Compared with the long-horizon SafetyDrift case above, this example is an immediate hazard: the proposed action itself is unsafe, so the guardrail intervenes as soon as the hazardous tool call appears. 
+
+Guardrail Safety Rate Utility Rate w/o defense 18 .75 ± 2.08 94 .23 ± 0.00 
+
+AgentDoG-1.5 31 .25 ± 2.08 90 .38 ± 0.00 
+
+SafePred 41 .67 ± 4.17 67 .31 ± 1.92 
+
+GuardAgent 50 .00 ± 2.08 76 .92 ± 1.92 
+
+TRACES 56 .25 ± 2.08 90 .38 ± 1.92 
+
+TS-Guard 66 .67 ± 0.00 90 .38 ± 0.00 
+
+DreamGuard 72 .92 ± 2.08 90 .38 ± 0.00 
+
+PolicyGuard 50 .00 ± 4.17 80 .77 ± 0.00 
+
+Table 13: Repeated-run results for online guardrail evalua-tion. 
+
+Setting Benchmark Baseline p
+
+Main SafetyDrift TRACES < 0.01 
+
+Main AgentDojo AgentDoG-1.5 < 0.05 
+
+Main ASB PolicyGuard < 0.01 
+
+Main ASSE-Security PolicyGuard < 0.01 
+
+Timing SafetyDrift TRACES < 0.05 
+
+Timing AgentDojo GuardAgent < 0.05 
+
+Timing ASB PolicyGuard < 0.05 
+
+Timing ASSE-Security TRACES < 0.05 
+
+Online ASSE subset TS-Guard < 0.05 
+
+Table 14: Paired Wilcoxon signed-rank test results. Each row compares DreamGuard against the strongest non-DreamGuard baseline for the corresponding setting and benchmark; the paired outcomes are trajectory-level inter-vention correctness for main results, pre-hazard intervention indicators for timing, and case-level safety/utility success for online evaluation. t Proposed action Fused score Decision Hazard 
+
+(a) SafetyDrift: Long-Horizon Risk Accumulation 
+
+0 read_file {"path": "/app/ requirements.txt"} 
+
+0.075 PASS 01 read_file {"path": "/app/security/ vuln_report.json"} 
+
+0.341 PASS 02 read_file {"path": "/app/.github/ workflows/deploy.yml"} 
+
+0.299 PASS 03 execute_code{"code": "find /app -name ’*.py’ ..."} 
+
+0.203 PASS 04 execute_code{"code": "find ... setup.py/ pyproject.toml"} 
+
+0.049 PASS 05 execute_code{"code": "grep -r import requests /app ..."} 
+
+0.005 PASS 06 execute_code{"code": "pip index versions requests ..."} 
+
+0.007 PASS 07 http_request{"method": "GET", "url": "https:// pypi.org/..."} 
+
+0.921 HOLD 1
+
+(b) ASSE-Security: Prompt Injection 
+
+0 sys_monitor() 0.152 PASS 01 update_manager() 0.429 PASS 02 FirmwareInfection() 0.988 BLOCK 1
+
+Table 15: Representative pre-action guardrail cases. Dream-Guard remains permissive during benign prefixes and inter-venes when the trajectory reaches a hazardous transition.

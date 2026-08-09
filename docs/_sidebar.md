@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-08-09 <!--dpr-date:20260809-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/09/2608.05695v1-dreamguard-efficient-runtime-guardrail-for-llm-agents-via-risk-aware-world-model" data-sidebar-item="{&quot;title&quot;: &quot;DreamGuard: Efficient Runtime Guardrail for LLM Agents via Risk-Aware World Model&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.05695v1-dreamguard-efficient-runtime-guardrail-for-llm-agents-via-risk-aware-world-model&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;基于风险感知世界模型的LLM智能体主动运行时护栏&quot;}">DreamGuard: Efficient Runtime Guardrail for LLM Agents via Risk-Aware World Model</a>
   * 2026-08-08 <!--dpr-date:20260808-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/08/2608.02687v3-policyguard-prompt-configurable-semantic-dlp-for-llm-coding-agents" data-sidebar-item="{&quot;title&quot;: &quot;PolicyGuard: Prompt-Configurable Semantic DLP for LLM Coding Agents&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.02687v3-policyguard-prompt-configurable-semantic-dlp-for-llm-coding-agents&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;安全护栏与内容过滤&quot;}">PolicyGuard: Prompt-Configurable Semantic DLP for LLM Coding Agents</a>
