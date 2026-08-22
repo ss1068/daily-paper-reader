@@ -1,6 +1,11 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-08-22 <!--dpr-date:20260822-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/22/2608.19729v1-safebranch-branch-pair-safety-alignment-for-embodied-agents" data-sidebar-item="{&quot;title&quot;: &quot;SafeBranch: Branch-Pair Safety Alignment for Embodied Agents&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.19729v1-safebranch-branch-pair-safety-alignment-for-embodied-agents&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;具身智能体的安全对齐与分支对构建&quot;}">SafeBranch: Branch-Pair Safety Alignment for Embodied Agents</a>
+    * 速读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/22/2608.19857v1-inadvertent-context-leakage-in-language-models" data-sidebar-item="{&quot;title&quot;: &quot;Inadvertent Context Leakage in Language Models&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.19857v1-inadvertent-context-leakage-in-language-models&quot;, &quot;score&quot;: &quot;6.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;llm&quot;}], &quot;evidence&quot;: &quot;上下文泄露及用于秘密提取的主动提示工程&quot;}">Inadvertent Context Leakage in Language Models</a>
   * 2026-08-21 <!--dpr-date:20260821-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/21/2608.19579v1-enforcing-llm-safety-through-dmd-based-classification-of-prompt-response-embedding-dynamics" data-sidebar-item="{&quot;title&quot;: &quot;Enforcing LLM Safety through DMD-based Classification of Prompt-Response Embedding Dynamics&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.19579v1-enforcing-llm-safety-through-dmd-based-classification-of-prompt-response-embedding-dynamics&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;大语言模型安全分类与护栏&quot;}">Enforcing LLM Safety through DMD-based Classification of Prompt-Response Embedding Dynamics</a>
