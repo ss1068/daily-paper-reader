@@ -6,28 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-22
-- 运行时间：2026-08-22 20:27:32 UTC
+- 最新运行日期：2026-08-23
+- 运行时间：2026-08-23 20:05:45 UTC
 - 运行状态：成功
-- 本次总论文数：2
+- 本次总论文数：1
 - 精读区：1
-- 速读区：1
+- 速读区：0
 
 ### 今日简报（AI）
-1. 今日聚焦具身智能体的安全对齐技术，并同步揭示了大模型中潜藏的上下文泄露风险。
-2. 重点推荐 SafeBranch 方案，其通过创新的分支对对齐机制，为具身机器人在复杂环境下的安全运行提供了新思路。
-3. 建议关注具身智能的安全性构建，并在与大模型交互时警惕敏感信息的无意泄露。
-- 详情：[/202608/22/README](/202608/22/README)
+今日深度解析 9.0 分前沿论文，揭示如何利用英语引导向量实现高效的多语言安全对齐。
+该研究证明了安全约束可跨语言迁移，仅需英语干预即可加固非英语环境下的模型护栏。
+建议关注这种低成本的跨语言对齐方案，以提升大模型在全球化场景中的安全防御能力。
+- 详情：[/202608/23/README](/202608/23/README)
 
 ### 精读区论文标签
-1. [SafeBranch: Branch-Pair Safety Alignment for Embodied Agents](/202608/22/2608.19729v1-safebranch-branch-pair-safety-alignment-for-embodied-agents)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：具身智能体的安全对齐与分支对构建
+1. [BabelSteering: Multilingual Safety Alignment via English Steering Vectors](/202608/23/2608.16577v1-babelsteering-multilingual-safety-alignment-via-english-steering-vectors)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：通过激活引导进行多语言安全对齐
 
 ### 速读区论文标签
-1. [Inadvertent Context Leakage in Language Models](/202608/22/2608.19857v1-inadvertent-context-leakage-in-language-models)  
-   标签：评分：6.0/10、query:llm
-   evidence：上下文泄露及用于秘密提取的主动提示工程
+- 本次无速读推荐。
 
 
 <div class="dpr-home-promo-card">

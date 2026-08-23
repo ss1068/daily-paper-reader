@@ -1,6 +1,9 @@
 * <a class="dpr-sidebar-root-link" href="#/">首页</a>
 * <a class="dpr-sidebar-root-link dpr-sidebar-noactive-link" href="javascript:void(0)" data-dpr-hash="#/tutorial/README">使用教程</a>
 * Daily Papers
+  * 2026-08-23 <!--dpr-date:20260823-->
+    * 精读区
+      * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/23/2608.16577v1-babelsteering-multilingual-safety-alignment-via-english-steering-vectors" data-sidebar-item="{&quot;title&quot;: &quot;BabelSteering: Multilingual Safety Alignment via English Steering Vectors&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.16577v1-babelsteering-multilingual-safety-alignment-via-english-steering-vectors&quot;, &quot;score&quot;: &quot;9.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;通过激活引导进行多语言安全对齐&quot;}">BabelSteering: Multilingual Safety Alignment via English Steering Vectors</a>
   * 2026-08-22 <!--dpr-date:20260822-->
     * 精读区
       * <a class="dpr-sidebar-item-link dpr-sidebar-item-structured" href="#/202608/22/2608.19729v1-safebranch-branch-pair-safety-alignment-for-embodied-agents" data-sidebar-item="{&quot;title&quot;: &quot;SafeBranch: Branch-Pair Safety Alignment for Embodied Agents&quot;, &quot;link&quot;: &quot;https://arxiv.org/abs/2608.19729v1-safebranch-branch-pair-safety-alignment-for-embodied-agents&quot;, &quot;score&quot;: &quot;8.0&quot;, &quot;tags&quot;: [{&quot;kind&quot;: &quot;query&quot;, &quot;label&quot;: &quot;jb-def&quot;}], &quot;evidence&quot;: &quot;具身智能体的安全对齐与分支对构建&quot;}">SafeBranch: Branch-Pair Safety Alignment for Embodied Agents</a>
