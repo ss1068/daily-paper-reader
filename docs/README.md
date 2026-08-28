@@ -6,35 +6,55 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-08-26
-- 运行时间：2026-08-26 21:47:51 UTC
+- 最新运行日期：2026-08-28
+- 运行时间：2026-08-28 03:22:52 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：4
-- 速读区：1
+- 本次总论文数：11
+- 精读区：6
+- 速读区：5
 
 ### 今日简报（AI）
-今日深耕大模型安全对齐，重点解析了从神经元信号重分布到步骤级护栏的 5 篇前
-- 详情：[/202608/26/README](/202608/26/README)
+今日聚焦大模型攻防前沿，深度解析了从多智能体自我进化防御到越狱攻击底层几何机理的 11 篇核心文献。
+重点推荐满分论文提出的自我进化防御框架，以及通过拒绝前缀几何特性提升模型抗攻击稳定性的新发现。
+建议开发者警惕视频生成与合并模型中的越狱新漏洞，并尝试引入多智能体协同机制加固安全防线。
+- 详情：[/202608/28/README](/202608/28/README)
 
 ### 精读区论文标签
-1. [NeuronGuard: Robust LLM Safety Alignment via Ablation-Aware Safety Signal Redistribution](/202608/26/2608.23959v1-neuronguard-robust-llm-safety-alignment-via-ablation-aware-safety-signal-redistribution)  
+1. [A Self-Evolving Multi-Agent Framework Defense against LLM Jailbreak Attacks](/202608/28/2608.26008v1-a-self-evolving-multi-agent-framework-defense-against-llm-jailbreak-attacks)  
    标签：评分：10.0/10、query:jb-def
-   evidence：通过安全信号重新分布防御越狱和神经元级攻击
-2. [StepGuard: Learning Step-Level Guardrails with Scalable Supervision and Safety-Utility Balancing](/202608/26/2608.24777v1-stepguard-learning-step-level-guardrails-with-scalable-supervision-and-safety-utility-balancing)  
+   evidence：针对越狱攻击的自我演化防御
+2. [Refusal geometry reflects refusal training: diverse refusal prefixes can raise stable rank and weaken refusal vector ablation attacks](/202608/28/2608.25390v1-refusal-geometry-reflects-refusal-training-diverse-refusal-prefixes-can-raise-stable-rank-and-weaken-refusal-vector-ablation-attacks)  
    标签：评分：9.0/10、query:jb-def
-   evidence：针对大语言模型代理的步级安全护栏
-3. [RAGSentinel: Certifiable Geometric Consensus for Robust Retrieval-Augmented Generation](/202608/26/2608.23965v1-ragsentinel-certifiable-geometric-consensus-for-robust-retrieval-augmented-generation)  
-   标签：评分：8.0/10、query:llm
-   evidence：防御RAG系统中的对抗性文档注入
-4. [What Guides the Agent? Adjudicating Unauthorized Behavior via Localizing Behavior-Guiding Instructions](/202608/26/2608.24022v1-what-guides-the-agent-adjudicating-unauthorized-behavior-via-localizing-behavior-guiding-instructions)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：注入攻击防御
+   evidence：针对越狱攻击的拒绝训练
+3. [LMSM: LLM Security Framework Inspired by Linux Security Modules](/202608/28/2608.25697v1-lmsm-llm-security-framework-inspired-by-linux-security-modules)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：大语言模型分层防御安全框架
+4. [Reassembling Distributed Risk: Trajectory-Conditioned Action Generation for Multi-Turn Agent Safety](/202608/28/2608.25711v1-reassembling-distributed-risk-trajectory-conditioned-action-generation-for-multi-turn-agent-safety)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：防御多轮分解攻击
+5. [SkillShield: Prompt-Space Security Skills for LLM Coding Agents](/202608/28/2608.25817v1-skillshield-prompt-space-security-skills-for-llm-coding-agents)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：LLM 代码智能体的系统提示词防御
+6. [NeuronFuzz: Safety Neuron Guided Fuzzing for LLM Safety Evaluation](/202608/28/2608.26222v1-neuronfuzz-safety-neuron-guided-fuzzing-for-llm-safety-evaluation)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：基于安全神经元引导的越狱鲁棒性评估模糊测试
 
 ### 速读区论文标签
-1. [Risk-Aware Reranking for Agentic Tool Retrieval](/202608/26/2608.22751v1-risk-aware-reranking-for-agentic-tool-retrieval)  
-   标签：评分：6.0/10、query:llm
-   evidence：风险感知工具检索作为LLM智能体的安全边界
+1. [MMJailBench: A Factorized Benchmark for Disentangling Multimodal Jailbreak Vulnerabilities](/202608/28/2608.25490v1-mmjailbench-a-factorized-benchmark-for-disentangling-multimodal-jailbreak-vulnerabilities)  
+   标签：评分：8.0/10、query:llm
+   evidence：多模态越狱漏洞基准测试
+2. [A Single Suffix to Break Them All: Basin-Aware Jailbreaks for Merged Model Families](/202608/28/2608.26506v1-a-single-suffix-to-break-them-all-basin-aware-jailbreaks-for-merged-model-families)  
+   标签：评分：8.0/10、query:llm
+   evidence：模型合并家族中的越狱风险
+3. [TempJail: Temporal Jailbreak Attacks against Image-to-Video Generation Models](/202608/28/2608.26971v1-tempjail-temporal-jailbreak-attacks-against-image-to-video-generation-models)  
+   标签：评分：8.0/10、query:llm
+   evidence：针对视频生成模型的越狱攻击
+4. [Groundhog Bit-Flip Attack: Seeding Infinite Generation Loops in Mixture-of-Experts LLMs through Bit Flips](/202608/28/2608.25276v1-groundhog-bit-flip-attack-seeding-infinite-generation-loops-in-mixture-of-experts-llms-through-bit-flips)  
+   标签：评分：7.0/10、query:llm
+   evidence：针对 MoE 架构 LLM 的可用性攻击
+5. [RTLGuard: A Lightweight Teacher-Student Defense for Poisoned RTL Code Generation Models](/202608/28/2608.26049v1-rtlguard-a-lightweight-teacher-student-defense-for-poisoned-rtl-code-generation-models)  
+   标签：评分：7.0/10、query:llm
+   evidence：缓解代码生成模型中的后门威胁
 
 
 <div class="dpr-home-promo-card">
