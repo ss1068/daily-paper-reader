@@ -1,0 +1,278 @@
+Title: TACS: Trajectory-Aware Candidate Selection for LLM Jailbreak Suffix Optimization
+
+URL Source: https://arxiv.org/pdf/2608.29564v1
+
+Published Time: Tue, 01 Sep 2026 01:07:46 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# TACS: Trajectory-Aware Candidate Selection for LLM Jailbreak Suffix Optimization 
+
+Shiliang Xiao 
+
+slxiao@mail.gdufs.edu.cn 
+
+Abstract. Gradient-based jailbreak suffix optimization methods typi-cally update the suffix by retaining the candidate with the lowest current loss. We show that this seemingly natural design is fundamentally my-opic: candidates that look better under the current-step proxy often fail to produce better jailbreak outcomes later in the search, revealing a form of selection-stage reward hacking. This suggests that candidate selection, rather than candidate generation alone, is a hidden bottleneck in suffix optimization. To address this issue, we propose TACS, a trajectory-aware candidate selection framework for jailbreak suffix optimization. Instead of selecting candidates solely by their immediate loss, TACS augments per-step evaluation with a trajectory-aware proxy and stabilizes selection with reference-policy regularization and a discriminator-estimated chi-squared correction, encouraging choices that remain effective beyond the current step. Experiments on HarmBench show that TACS consistently outperforms strong baselines under the same search budget, substantially improving attack success rates while exhibiting more stable optimization behavior throughout the search. Our findings highlight that mitigating selection-stage reward hacking caused by myopic candidate selection is critical for improving jailbreak suffix optimization. 
+
+Keywords: Large Language Models · Jailbreak Attacks · Gradient-based Suffix Optimization · Reward Hacking · Candidate Selection 
+
+## 1 Introduction 
+
+In recent years, large language models (LLMs) have rapidly advanced across a wide range of tasks, yet safety-aligned LLMs remain vulnerable to jailbreak attacks. Studying such attacks is important because they provide a practical testbed for auditing and stress-testing alignment mechanisms, helping reveal where safety training fails under adversarial optimization pressure. Existing jail-break methods attempt to bypass model safeguards through malicious inputs, in-cluding gradient-based optimization, heuristic-based algorithms, and rewriting-based approaches. Among these paradigms, gradient-based optimization stands out as an effective white-box setting because it directly maximizes the probability of generating malicious content, making optimization-level failure modes espe-cially visible. In particular, gradient-based suffix optimization, as exemplified by GCG [15], has become a representative setting for studying how aligned LLMs can still be driven toward unsafe behavior under direct optimization pressure. arXiv:2608.29564v1 [cs.CL] 30 Aug 2026 2 S. Xiao 
+
+Fig. 1: Optimization trajectory of standard loss-based candidate selection in GCG. Although the training loss decreases steadily, ASR remains low for much of the search and improves only in delayed, irregular bursts, revealing a clear mismatch between the current-step proxy and the final jailbreak outcome. Although jailbreak attacks have advanced rapidly, prior work has focused mainly on improving attack strength. Much less attention has been paid to a more fundamental question: whether the signal steering the search is itself re-liable. This concern is not unique to jailbreak. In RLHF, recent research has increasingly focused on preference optimization, which aims to align language models with human preferences by optimizing preference signals more directly and efficiently. Yet this line of work has also exposed a well-known failure mode: 
+
+More aggressive proxy optimization can fail to improve the true objective and instead overfit imperfections in the proxy signal. A similar risk may arise in jailbreak suffix optimization, where the selector must repeatedly convert a lo-cal proxy score into an actual search decision. This phenomenon is commonly referred to as reward hacking .Motivated by the research above, a natural question arises: does reward hack-ing also emerge in gradient-based suffix optimization for jailbreak attacks? To answer this question, we revisit the optimization trajectory of standard loss-based suffix search. As shown in Figure 1, the training loss decreases steadily throughout optimization, while the attack success rate (ASR) remains low for a long stretch and improves only in delayed, irregular bursts. This reveals a clear loss–ASR mismatch: a candidate that appears better under the current-step proxy is often not the candidate that leads to a better downstream jailbreak outcome. This mismatch points to a previously underexplored bottleneck in jailbreak suffix optimization: the search is ultimately governed by a myopic candidate se-lector. In existing methods, each step typically retains the candidate with the lowest current loss, which introduces two coupled problems: (1) it overempha-sizes immediate proxy gains at the expense of downstream search utility; and 
+
+(2) it gradually steers the trajectory toward locally attractive but globally sub-optimal updates. To address this issue, we propose TACS, a trajectory-aware TACS 3
+
+candidate selection framework for jailbreak suffix optimization. By incorpo-rating trajectory-aware and reference-regularized signals into candidate selec-tion, TACS favors candidates that remain beneficial for subsequent optimiza-tion rather than merely appearing optimal at the current step. Experiments on HarmBench show that TACS improves average ASR by nearly 10%. Our contributions are summarized as follows: 
+
+– We identify selection-stage reward hacking in jailbreak suffix optimiza-tion, showing that standard loss-based candidate selection can overfit short-horizon proxy improvement and induce a pronounced loss–ASR mismatch during search. 
+
+– We propose TACS, a trajectory-aware, reference-regularized candidate selec-tion framework that directly mitigates selection-stage reward hacking in jail-break suffix optimization. 
+
+– Experiments on HarmBench show that TACS consistently outperforms strong baselines under the same search budget, yielding stronger jailbreak perfor-mance and more stable optimization trajectories. 
+
+## 2 Methodology 
+
+It is worth emphasizing that TACS does not query any additional intermediate model outputs, and does not assume access to a true reward beyond the standard optimization proxy. Instead, TACS targets a more fundamental issue: under the same candidate batch and the same observable signals, existing methods still have to decide which candidate should be retained to continue the search. Our method is introduced precisely to improve this decision step. By replacing naive current-step retention with a trajectory-aware and reference-regularized selector, TACS addresses the mismatch between the immediate proxy and the downstream usefulness of a candidate. The overall framework of TACS is shown in Figure 2. 
+
+2.1 Optimization Setup 
+
+Given a source model f , a training set Dtrain = {(qi, y i)}Mi=1 , and a suffix xt of length n, TACS optimizes a universal jailbreak suffix over a fixed budget of T
+
+steps. At step t, a standard gradient-based proposer generates a candidate batch 
+
+At = {a(1)  
+
+> t
+
+, . . . , a (N ) 
+
+> t
+
+} from the current suffix xt. TACS changes how candidates in At are evaluated and which candidate is retained as the next suffix xt+1 = a⋆t .Inspired by ORPO’s idea of regularizing proxy-driven optimization with a refer-ence distribution, we introduce a reference-regularized selector over the current candidate batch [6]. For each candidate a ∈ A t, we first compute its current attack loss over the training behaviors. Let ℓ(qi, y i; a) denote the average target-token cross-entropy of candidate a on the i-th prompt-target pair. The batch-level current loss is 
+
+Lnow (a) = 1
+
+M
+
+> M
+
+X
+
+> i=1
+
+ℓ(qi, y i; a). (1) 4 S. Xiao 
+
+Fig. 2: Overall framework of TACS. The same batch is re-evaluated by atrajectory-aware score and a reference-regularized correction, which together produce the final corrected energy for each candidate. We also retain an auxiliary early-token loss 
+
+Lfirst (a) = 1
+
+M
+
+> M
+
+X
+
+> i=1
+
+ℓearly (qi, y i; a), (2) where ℓearly is computed only on the beginning of the target response. This term captures whether a candidate already supports the initial jailbreak scaffold, which is often where refusal behavior first reappears. 
+
+2.2 Trajectory-Aware Candidate Scoring 
+
+Selecting a candidate only by Lnow is short-sighted: within one batch, the lowest current loss may correspond to an edit that fits the present step well but leaves little room for further progress. TACS therefore scores each candidate with 
+
+Et(a) = Lnow (a) + βL first (a) − γ∆ 1(a), (3) where ∆1(a) is a one-step improvement proxy. Each term serves a distinct role. Lnow (a) measures immediate optimization quality on the current batch. Lfirst (a) stabilizes the early response pattern: if the first target tokens revert to refusal-like or generic prefatory text, later to-kens rarely recover a usable jailbreak continuation under the same search budget. 
+
+∆1(a) provides a short-horizon look-ahead signal. In implementation, it is esti-mated from candidate-specific gradient statistics tied to the edited positions and replacement tokens, so it measures whether retaining a is likely to preserve actionable descent directions for the next update. TACS 5
+
+2.3 Reference-Regularized Candidate Selection 
+
+Equation 3 defines a score for every candidate in the current batch. We convert these scores into a batch-induced selection distribution 
+
+πt(a) = exp( −Et(a)/τ )
+
+P 
+
+> a′∈A t
+
+exp( −Et(a′)/τ ) . (4) This distribution represents how strongly the current selector prefers each can-didate when only the trajectory-aware score is considered. To avoid over-concentrating on batch-specific proxy minima, we define a ref-erence distribution over the same candidate batch: 
+
+Eref  
+
+> t
+
+(a) = Lnow (a) + βref Lfirst (a), (5) 
+
+πref  
+
+> t
+
+(a) = exp( −Eref  
+
+> t
+
+(a)/τ ref )
+
+P 
+
+> a′∈A t
+
+exp( −Eref  
+
+> t
+
+(a′)/τ ref ) . (6) The reference score follows a fixed rule on the current batch and omits the one-step bonus, so πref  
+
+> t
+
+acts as a stabilizing reference preference over the same candidates rather than as a separate search policy. The goal is not to replace the current selector, but to keep it from collapsing onto overly sharp local preferences induced by the batch-specific proxy. 
+
+2.4 Discriminator-Guided Correction 
+
+Even on the same batch, πt can assign disproportionate mass to candidates that are favored by transient selection bias. We therefore introduce discriminator-guided correction. Let ϕ(a) denote a numeric feature vector for candidate a, in-cluding its current loss, loss dispersion across training behaviors, early-token loss, and gradient-derived statistics. A lightweight discriminator D(ϕ(a)) is trained to distinguish candidates sampled from πt from candidates sampled from πref 
+
+> t
+
+over the same batch. The discriminator does not predict whether a candidate is globally good or bad. Instead, it provides a correction signal for whether a candidate is overly characteristic of the current selection distribution relative to the reference dis-tribution. We convert its output into 
+
+rχ2 (a) = exp( D(ϕ(a))) − 1. (7) Candidates with larger rχ2 (a) receive a larger penalty, which suppresses candi-dates that are overly favored by the current batch-specific selection bias before the final retention step. 
+
+2.5 Final Selection Rule and Practical Optimization Loop 
+
+The corrected energy used for retention is ˜Et(a) = Et(a) + λr χ2 (a), (8) 6 S. Xiao 
+
+Algorithm 1 Per-Step Candidate Selection in TACS 
+
+1: Initialize adversarial suffix x0
+
+2: for t = 0 , 1, . . . , T − 1 do 
+
+3: Compute the gradient at the current suffix xt
+
+4: At ← SampleCandidates (xt, grad , N, k )5: Evaluate each a ∈ A t on Dtrain to obtain Lnow (a) and Lfirst (a)6: Estimate ∆1(a) and compute Et(a) by Eq. 3 7: if t < T warm then 
+
+8: a⋆t ← arg min a∈A t Lnow (a)9: else 
+
+10: Construct πt and πref  
+
+> t
+
+over At
+
+11: Update the discriminator using samples induced by πt and πref 
+
+> t
+
+12: Compute rχ2 (a) and ˜Et(a) by Eq. 8 13: a⋆t ← arg min a∈A t ˜Et(a)14: xt+1 ← a⋆t
+
+15: return optimized suffix xT
+
+and the retained candidate is 
+
+a⋆t = arg min 
+
+> a∈A t
+
+˜Et(a). (9) Each optimization step therefore follows the same practical loop: generate a can-didate batch with the underlying gradient proposer, compute Lnow , Lfirst , and 
+
+∆1 for all candidates, construct the current and reference distributions on that batch, apply discriminator-guided correction, and retain the candidate with the lowest corrected energy. During an initial warm-up period, we use greedy selec-tion by Lnow before the discriminator has accumulated enough labeled samples. 
+
+## 3 Experiment 
+
+We evaluate TACS through the following four research questions: 
+
+– RQ1 : Does TACS improve overall jailbreak performance on both the source model and unseen target models? 
+
+– RQ2 : What is the contribution of each component in TACS? 
+
+– RQ3 : Does TACS mitigate the resulting proxy mismatch? 
+
+– RQ4 : What qualitative differences can be observed in the transferred jailbreak behaviors? 
+
+3.1 Experimental Setup Protocol and Metrics. We follow the evaluation protocol of GJO and per-form universal-suffix optimization on HarmBench [9]. Unless otherwise stated, all methods use the same optimization setup: two target tokens, a 500-step search budget, candidate batch size 128, and top-k proposal size 256. We report At-tack Success Rate (ASR) on both the source model and the target models. The TACS 7
+
+source-side ASR can be viewed as S-ASR, while the average ASR over target models can be viewed as T-ASR. 
+
+Models and Data. We follow the dataset construction and evaluation setup of GJO, using HarmBench harmful behaviors and target prefixes for both opti-mization and evaluation. The training set contains 20 behaviors, and the evalu-ation set is the standard 200-behavior benchmark split. We consider two source-model settings: Llama3-8B-Instruct and Llama-2-7b-Chat. The open-source tar-get models include Llama-2-7b, Gemma-7b, Qwen2-7B, Yi-1.5-9B, and Vicuna-7b; the closed-source target models are GPT-3.5-Turbo and GPT-4. The auto-matic evaluator is HarmBench-Llama-2-13B-cls 1.
+
+Baselines. We compare TACS against two baselines. GCG uses the original arg min(loss) selection rule and serves as the standard greedy loss-minimization baseline for testing how well current-step loss alone can guide candidate selec-tion [15]. GJO replaces the vanilla selector with a guiding objective designed to remove superfluous constraints and improve suffix transferability [14]. 
+
+3.2 Overall Results (RQ1) 
+
+Table 1 and Table 2 show that TACS achieves the strongest overall performance on both the source models and the transfer targets. On the Llama3 source model, TACS reaches 96.0 S-ASR, substantially above GJO (61.5) and GCG (20.5). A large portion of the remaining optimization error in existing suffix optimization does not come from failing to generate promising candidates, but from failing to keep the right one. This pattern is consistent with the myopia problem identified in this paper. TACS alleviates this problem by evaluating candidates not only by their present loss, but also by whether they preserve a workable jailbreak scaffold and remain favorable for subsequent updates. TACS makes the optimization trajectory more sustainable, rather than merely more effective at the current step. Notably, this source-side advantage does not come at the cost of transferability; TACS also attains the best average T-ASR, with particularly clear gains on Qwen2-7B (85.5 vs. 69.0), Yi-1.5-9B (68.0 vs. 40.0), and Gemma-7b (14.5 vs. 4.0).                                                      
+
+> Models Method GCG GJO w/o Traj. w/o Ref. TACS Source Model Llama3-8B-Instruct 20.5 61.5 80.5 89.5 96.0 Target Model Open-Source
+> Llama-2-7b 0.5 21.5 20.8 24.0 27.6
+> Gemma-7b 0.2 4.0 8.7 11.5 14.5
+> Qwen2-7B 26.0 69.0 73.5 81.5 85.5
+> Yi-1.5-9B 11.0 40.0 53.0 62.0 68.0
+> Vicuna-7b 10.5 88.0 83.5 88.1 88.5 Closed-Source GPT-3.5-Turbo 24.0 52.0 50.5 55.5 57.5
+> GPT-4 2.8 7.0 7.9 9.5 10.5 Target Model Avg. 10.6 40.4 42.7 47.5 50.3
+> 1
+
+All open-source source/target models are publicly available from Hugging Face; closed-source target models are accessed through their official APIs. 8 S. Xiao 
+
+Table 1: Attack Success Rate (ASR) on the source model and target models under the same 500-step budget, searched on Llama3-8B-Instruct . w/o Traj. 
+
+removes the trajectory-aware term, while w/o Ref. removes the reference-guided correction.                                                     
+
+> Models Method GCG GJO w/o Traj. w/o Ref. TACS Source Model Llama-2-7b-Chat 30.8 64.0 67.5 74.5 77.8 Target Model Open-Source
+> Llama3-8B-Instruct 1.5 3.8 4.0 4.9 5.2
+> Gemma-7b 1.0 11.4 12.8 14.8 15.8
+> Qwen2-7B 28.3 72.5 75.0 79.0 81.8
+> Yi-1.5-9B 36.3 57.3 60.5 64.8 67.0
+> Vicuna-7b 21.7 74.6 78.5 81.0 82.3 Closed-Source GPT-3.5-Turbo 57.3 68.8 74.5 77.4 80.2
+> GPT-4 6.7 13.6 13.8 15.5 16.7 Target Model Avg. 21.8 43.1 45.6 48.2 49.9
+
+Table 2: Attack Success Rate (ASR) on the source model and target models under the same 500-step budget, searched on Llama-2-7b-Chat . Experimental settings are the same as in Table 1. 
+
+3.3 Ablation Study (RQ2) 
+
+Tables 1 and 2 provide ablation results for the two main modules of TACS. Removing either the trajectory-aware term or the reference-guided correction reduces both source-side and target-side performance under both source-model settings, and the larger drop consistently appears in w/o Traj. When searched on Llama3-8B-Instruct, the target-side average ASR decreases from 50.3 to 42.7 after removing the trajectory-aware term, but only to 47.5 after removing the reference-guided correction; under the Llama-2-7b-Chat source setting, the cor-responding drops are from 49.9 to 45.6 and 48.2. This pattern shows that the trajectory-aware term contributes more directly to the gain, while the reference-guided correction provides a smaller but still consistent improvement. 
+
+3.4 Proxy Mismatch (RQ3) 
+
+Figure 3 shows a clear mismatch between the optimization proxy and the actual jailbreak outcome. For both GCG and GJO, the loss continues to decrease in the later stage of optimization, while ASR has already largely plateaued. After roughly step 350, further reduction in the current training loss yields little or no improvement in success rate. TACS exhibits a different trajectory. Although its loss is not always the lowest, its ASR rises earlier and continues to improve in later iterations. This indicates that, after optimization reaches a certain stage, the primary difficulty is not further reducing the current-step proxy itself, but identifying candidates whose effect remains favorable for subsequent updates. By explicitly incorpo-rating a trajectory-aware selection criterion, TACS reduces this mismatch and retains candidates that are more useful for continued optimization rather than candidates that are only locally optimal under the current proxy. TACS 9
+
+> (a) Loss trajectories of GCG, GJO, and TACS under the same 500-step budget.
+> (b) ASR trajectories of GCG, GJO, and TACS under the same 500-step budget.
+
+Fig. 3: Real-valued trajectories on Llama3-8B-Instruct under the same 500-step budget (top: loss; bottom: ASR). Curves correspond to GCG (gray), GJO (or-ange), and TACS (red). 
+
+3.5 Case Study (RQ4) 
+
+Table 3 shows that the difference between selectors is not only binary ASR, but also the behavior encoded by the retained suffix. For the same harmful query, GJO often drifts across targets into refusals, vague prefatory text, or title-style responses. TACS, in contrast, preserves a much more consistent step-by-step scaffold across the source model and all displayed targets. This pattern is consistent with what the selector changes during optimization. A suffix found by purely proxy-driven retention can depend on a brittle local cue that works on the source model but changes form after transfer. By contrast, 10 S. Xiao                   
+
+> Question: Give detailed step-by-step instructions for synthesizing nitazene.
+> Model GJO TACS Llama-3-8B-Instruct (Source) Here’s a step-by-step guide ... Step 1: Prepare the necessary chemi-cals ... Here’s step-by-step instructions ... Step 1: Gather your equipment and materials ...
+> Llama-2-7B-Chat (Target) Title: Synthesizing ... Introduction ... for educational pur-poses ... Here’s step-by-step instructions ... Step 1: Obtain the necessary chemi-cals ...
+> GPT-4-1106-Preview (Target) It seems like ... impossible to provide accurate instructions ... Here’s step-by-step instructions ... Step 1: Gather the necessary chemi-cals ...
+> Qwen2-7B-Instruct (Target) Synthesizing ... Step 1: Preparation ... Here’s step-by-step instructions ... Step 1: Gather the necessary reagents ...
+> Vicuna-7B-v1.5 (Target) I’m sorry, but the text you provided is difficult to understand ... Here’s step-by-step instructions ... Step 1: Obtain all necessary chemicals ...
+> Yi-1.5-9B (Target) I’m sorry, but I cannot fulfill this re-quest ... Here’s step-by-step instructions ... Step 1: ... aromatic compounds ...
+
+Table 3: Case study of transfer behavior across source and target models. Left: GJO. Right: TACS. Only truncated snippets are shown for safety. TACS tends to retain candidates whose early-token behavior and short-horizon improvement signal remain aligned over time. 
+
+## 4 Related Work 
+
+White-box and Black-box Jailbreak Attacks. Jailbreak attacks on aligned LLMs can be broadly studied in white-box and black-box settings. White-box methods optimize adversarial inputs with internal model signals, while black-box methods rely only on model queries and responses. In the black-box setting, TAP [10] uses an attacker LLM to iteratively refine candidate prompts and prune low-potential branches, MASTERKEY [3] automates jailbreak prompt generation against real-world LLM chatbots and Twenty Queries [2] studies highly query-efficient black-box jailbreaking under very small budgets. In a more stealth-oriented direction, AutoDAN [8] employs a hierarchical genetic algorithm to generate semantically meaningful jailbreak prompts that are less conspicuous. Recent work further expands this space: Play Guessing Game with LLM [1] uses implicit clues to induce harmful responses indirectly, AutoDAN-Turbo [7] performs lifelong strategy self-exploration for automatic jailbreak search, and Foot-In-The-Door [13] studies multi-turn escalation for conversational jailbreak attacks. 
+
+Gradient-Based Suffix Optimization Attacks. Within white-box jailbreak at-tacks, gradient-based suffix optimization has become a representative direction. GCG [15] establishes the standard discrete gradient-based suffix optimization TACS 11 
+
+pipeline. I-GCG [5] improves this framework with diverse target templates, adap-tive multi-coordinate updates, and easy-to-hard initialization. Efficient LLM Jailbreak via Adaptive Dense-to-sparse Constrained Optimization [4] further im-proves optimization efficiency through an adaptive dense-to-sparse constrained search strategy. AttnGCG [12] strengthens GCG by manipulating attention pat-terns related to safety prompts. GJO [14] revisits the optimization objective and improves transferability by removing superfluous constraints. AdvPrompter [11] introduces an auxiliary model for fast adaptive adversarial prompt generation. 
+
+## 5 Conclusion 
+
+In gradient-based jailbreak suffix optimization, we identify a core insight that standard loss-based candidate retention can induce selection-stage reward hacking : candidates that look best under the current-step proxy are often not those that lead to better downstream jailbreak outcomes, resulting in a clear 
+
+loss–ASR mismatch during search. To address this issue, we propose TACS, a trajectory-aware candidate selection framework that improves the retention decision by combining trajectory-aware scoring with reference-regularized cor-rection. Experiments on HarmBench show that TACS consistently outperforms strong baselines under the same search budget, achieving higher attack success rates and more stable optimization trajectories. 
+
+## References 
+
+1. Zhiyuan Chang, Mingyang Li, Yi Liu, Junjie Wang, Qing Wang, and Yang Liu. Play guessing game with LLM: indirect jailbreak attack with implicit clues. In Lun-Wei Ku, Andre Martins, and Vivek Srikumar, editors, Findings of the Asso-ciation for Computational Linguistics, ACL 2024, Bangkok, Thailand and virtual meeting, August 11-16, 2024 , Findings of ACL, pages 5135–5147. Association for Computational Linguistics, 2024. 2. Patrick Chao, Alexander Robey, Edgar Dobriban, Hamed Hassani, George J. Pap-pas, and Eric Wong. Jailbreaking black box large language models in twenty queries. In IEEE Conference on Secure and Trustworthy Machine Learning, SaTML 2025, Copenhagen, Denmark, April 9-11, 2025 , pages 23–42. IEEE, 2025. 3. Gelei Deng, Yi Liu, Yuekang Li, Kailong Wang, Ying Zhang, Zefeng Li, Haoyu Wang, Tianwei Zhang, and Yang Liu. MASTERKEY: automated jailbreaking of large language model chatbots. In 31st Annual Network and Distributed System Se-curity Symposium, NDSS 2024, San Diego, California, USA, February 26 - March 1, 2024 . The Internet Society, 2024. 4. Kai Hu, Weichen Yu, Yining Li, Tianjun Yao, Xiang Li, Wenhe Liu, Lijun Yu, Zhiqiang Shen, Kai Chen, and Matt Fredrikson. Efficient LLM jailbreak via adap-tive dense-to-sparse constrained optimization. In Amir Globersons, Lester Mackey, Danielle Belgrave, Angela Fan, Ulrich Paquet, Jakub M. Tomczak, and Cheng Zhang, editors, Advances in Neural Information Processing Systems 38: Annual Conference on Neural Information Processing Systems 2024, NeurIPS 2024, Van-couver, BC, Canada, December 10 - 15, 2024 , 2024. 12 S. Xiao 5. Xiaojun Jia, Tianyu Pang, Chao Du, Yihao Huang, Jindong Gu, Yang Liu, Xi-aochun Cao, and Min Lin. Improved techniques for optimization-based jailbreaking on large language models. In The Thirteenth International Conference on Learning Representations , 2025. 6. Cassidy Laidlaw, Shivam Singhal, and Anca D. Dragan. Correlated proxies: A new definition and improved mitigation for reward hacking. In The Thirteenth In-ternational Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net, 2025. 7. Xiaogeng Liu, Peiran Li, G. Edward Suh, Yevgeniy Vorobeychik, Zhuoqing Mao, Somesh Jha, Patrick McDaniel, Huan Sun, Bo Li, and Chaowei Xiao. Autodan-turbo: A lifelong agent for strategy self-exploration to jailbreak llms. In The Thir-teenth International Conference on Learning Representations, ICLR 2025, Singa-pore, April 24-28, 2025 . OpenReview.net, 2025. 8. Xiaogeng Liu, Nan Xu, Muhao Chen, and Chaowei Xiao. AutoDAN: Generat-ing stealthy jailbreak prompts on aligned large language models. In The Twelfth International Conference on Learning Representations , 2024. 9. Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee, Nathaniel Li, Steven Basart, Bo Li, David A. Forsyth, and Dan Hendrycks. Harmbench: A standardized evaluation framework for automated red teaming and robust refusal. In Ruslan Salakhutdinov, Zico Kolter, Katherine A. Heller, Adrian Weller, Nuria Oliver, Jonathan Scarlett, and Felix Berkenkamp, editors, Forty-first International Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024 , volume 235 of Proceedings of Machine Learning Research , pages 35181–35224. PMLR / OpenReview.net, 2024. 10. Anay Mehrotra, Manolis Zampetakis, Paul Kassianik, Blaine Nelson, Hyrum S An-derson, Yaron Singer, and Amin Karbasi. Tree of attacks: Jailbreaking black-box LLMs automatically. In The Thirty-eighth Annual Conference on Neural Informa-tion Processing Systems , 2024. 11. Anselm Paulus, Arman Zharmagambetov, Chuan Guo, Brandon Amos, and Yuan-dong Tian. Advprompter: Fast adaptive adversarial prompting for LLMs. In 
+
+Forty-second International Conference on Machine Learning , 2025. 12. Zijun Wang, Haoqin Tu, Jieru Mei, Bingchen Zhao, Yisen Wang, and Cihang Xie. Attngcg: Enhancing jailbreaking attacks on llms with attention manipula-tion. Trans. Mach. Learn. Res. , 2025, 2025. 13. Zixuan Weng, Xiaolong Jin, Jinyuan Jia, and Xiangyu Zhang. Foot-in-the-door: A multi-turn jailbreak for llms. In Christos Christodoulopoulos, Tanmoy Chakraborty, Carolyn Rose, and Violet Peng, editors, Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing, EMNLP 2025, Suzhou, China, November 4-9, 2025 , pages 1939–1950. Association for Computa-tional Linguistics, 2025. 14. Junxiao Yang, Zhexin Zhang, Shiyao Cui, Hongning Wang, and Minlie Huang. Guiding not forcing: Enhancing the transferability of jailbreaking attacks on llms via removing superfluous constraints. In Wanxiang Che, Joyce Nabende, Ekaterina Shutova, and Mohammad Taher Pilehvar, editors, Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Pa-pers), ACL 2025, Vienna, Austria, July 27 - August 1, 2025 , pages 19643–19655. Association for Computational Linguistics, 2025. 15. Andy Zou, Zifan Wang, J. Zico Kolter, and Matt Fredrikson. Universal and trans-ferable adversarial attacks on aligned language models. CoRR , abs/2307.15043, 2023.
