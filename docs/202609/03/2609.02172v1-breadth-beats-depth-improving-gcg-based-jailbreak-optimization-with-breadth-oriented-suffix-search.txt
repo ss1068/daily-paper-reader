@@ -1,0 +1,473 @@
+Title: Breadth Beats Depth: Improving GCG-Based Jailbreak Optimization with Breadth-Oriented Suffix Search
+
+URL Source: https://arxiv.org/pdf/2609.02172v1
+
+Published Time: Thu, 03 Sep 2026 00:45:45 GMT
+
+Number of Pages: 12
+
+Markdown Content:
+# Breadth Beats Depth: Improving GCG-Based Jailbreak Optimization with Breadth-Oriented Suffix Search 
+
+Shiliang Xiao * Jingsong Wei * Yuzhi Liang † Yufan Zheng Xia Li Qiliang Lin 
+
+School of Information Science and Technology Guangdong University of Foreign Studies 
+
+{yzliang, xiali}@gdufs.edu.cn {slxiao, jswei, yfzheng, qllin}@mail.gdufs.edu.cn 
+
+Abstract 
+
+Optimization-based jailbreak attacks such as Greedy Coordinate Gradient (GCG) achieve strong effectiveness and transferability by opti-mizing adversarial suffixes on white-box source models. However, existing GCG-based meth-ods rely on averaged adversarial loss and deep greedy search, which can over-emphasize easy-to-jailbreak behaviors and overlook promising regions of the suffix space. We propose BOSS, a plug-and-play framework that improves GCG-based jailbreak optimization through breadth-oriented suffix search. BOSS uses Tail-Focused Adversarial Loss (TFAL), standard source loss, and behavior coverage to select terminal suf-fixes, then explores multiple short trajectories and selectively continues promising suffixes. Experiments on public benchmarks show that BOSS improves attack success rates across mul-tiple GCG-based methods while reducing opti-mization time. 
+
+1 Introduction 
+
+Large language models (LLMs) are increasingly protected by safety alignment and content moder-ation mechanisms, yet they remain vulnerable to jailbreak attacks. Jailbreaks use specially crafted inputs to bypass safeguards and induce models to follow harmful instructions. Among existing at-tacks, optimization-based jailbreak methods have received substantial attention due to their strong effectiveness and transferability. A representative method is Greedy Coordinate Gradient (Zou et al., 2023), which appends an ad-versarial suffix to a harmful prompt and iteratively updates the suffix using source-model gradients. Subsequent work improves GCG through stronger objectives, templates, initialization, candidate con-struction, and insertion locations (Jia et al., 2025; Liao and Sun, 2024; Zhou et al., 2025; Jeong et al., 2026).     
+
+> *Equal contribution.
+> †Corresponding author. GCG I-GCG GJO 50 60 70 Target Model Avg. ASR (%)
+> 52.5 52.7 59.1 56.8 61.9 69.4
+> Final suffix Best evaluated suffix
+
+Figure 1: The final suffix can miss more effective suf-fixes during search. 
+
+Despite these advances, existing GCG-based jail-break methods still face two key limitations. First ,they typically optimize the average adversarial loss over multiple harmful behaviors, where the loss is defined by the likelihood of predefined target tokens. However, this averaged objective can be unreliable for jailbreak optimization. Unlike classi-fication tasks, where successfully optimized exam-ples often contribute little additional loss, jailbreak optimization is a generative target-matching prob-lem: even when a behavior can already be success-fully jailbroken, its target-sequence loss may re-main nonzero. As a result, easy behaviors may con-tinue to consume optimization effort, while harder behaviors that remain poorly optimized receive in-sufficient attention. Second , existing GCG-based methods often allocate most computation to search-ing deeper along greedy trajectories. However, the suffix with the lowest current source loss is not necessarily on a trajectory that leads to the best final suffix. As shown in Figure 1, suffixes selected by several GCG-based algorithms can still deviate from suffixes with substantially lower attainable ad-versarial losses. This suggests that deeper greedy search can miss promising regions of the suffix space, and that broader exploration may be more effective under a fixed optimization budget. To address these limitations, we propose arXiv:2609.02172v1 [cs.CL] 2 Sep 2026 Breadth-Oriented Suffix Search (BOSS 1), a sim-ple yet effective search framework for GCG-based jailbreak optimization. We first introduce Tail-Focused Adversarial Loss, a source-side diagnostic that emphasizes high-loss behaviors that remain difficult to optimize. Rather than treating all be-haviors uniformly, TFAL directs selection pressure toward the hard tail of the per-behavior loss dis-tribution. To avoid sacrificing broad attack cover-age, BOSS uses behavior coverage as a gate and ranks eligible terminal suffixes with a weighted combination of the standard source loss and TFAL. Beyond the loss diagnostic, BOSS reallocates the optimization budget from depth to breadth. Instead of committing most computation to a single long greedy trajectory, BOSS runs multiple short opti-mization trajectories, retains their terminal suffixes, selects promising parents using source-side diag-nostics, continues selected parents with additional budget, and finally chooses the best suffix from the combined terminal set. This design explores a broader suffix pool while remaining plug-and-play with existing GCG-based jailbreak methods. Our main contributions are summarized as fol-lows: • We identify a limitation of the standard aver-aged adversarial loss used in optimization-based jailbreak attacks, and propose TFAL, a hard-behavior-focused objective that better reflects jailbreak optimization progress and improves fi-nal attack success rate. • We propose Breadth-Oriented Suffix Search, a plug-and-play framework for GCG-based jail-break optimization. BOSS reallocates compu-tation from deep greedy search to broad suffix exploration by running multiple short trajectories and selectively continuing promising candidates. • Experiments on public benchmarks show that integrating BOSS into multiple GCG-based jail-break algorithms achieves higher attack success rates while requiring less running time. 
+
+2 Related Work 
+
+2.1 Optimization-Based Discrete Suffix Jailbreaks 
+
+Gradient-guided discrete token search has been used to construct universal adversarial triggers for NLP models (Wallace et al., 2019). GCG applies this idea to aligned LLMs by appending an adver-      
+
+> 1Our code is anonymously available at https:// anonymous.4open.science/r/code-3121 .
+
+sarial suffix to harmful prompts and updating suffix tokens with source-model gradients toward an af-firmative target response (Zou et al., 2023). Recent suffix attacks improve different parts of this pro-cess: I-GCG changes target templates, coordinate updates, and initialization (Jia et al., 2025); Am-pleGCG trains a generator from successful GCG suffixes (Liao and Sun, 2024); DSN adds refusal suppression to source-model optimization (Zhou et al., 2025); GJO removes response-pattern and token-tail constraints (Yang et al., 2025); and SlotGCG studies adversarial token insertion po-sitions (Jeong et al., 2026). These works mainly improve the objective, initialization, generation, or placement of discrete suffixes. Our work is orthog-onal: it keeps the local GCG-style optimizer and changes how terminal suffixes from multiple short source-model trajectories are retained, selected, and continued. 
+
+2.2 Search Trajectories and Budget Allocation 
+
+For discrete suffix optimization, the final suffix de-pends not only on the source loss but also on how the fixed search budget is spent. Standard GCG-style optimizers evaluate many token substitutions at each step, but the next step proceeds from se-lected incumbent suffixes, so other evaluated candi-dates usually receive no continuation budget. This resembles a broader search problem: keeping only one active hypothesis is efficient, but it can discard candidates before their later value is tested. Related work has studied this issue in other set-tings. Beam-search optimization keeps multiple hy-potheses for sequence-to-sequence learning (Wise-man and Rush, 2016). Random search and Bayesian optimization allocate evaluations across independent or surrogate-guided trials (Bergstra and Bengio, 2012; Snoek et al., 2012). Best-arm identification, successive halving, Hyperband, ASHA, and population-based training allocate more budget to candidates or configurations that ap-pear promising under partial evaluation (Audibert et al., 2010; Karnin et al., 2013; Jamieson and Tal-walkar, 2016; Li et al., 2018, 2020, 2019). These methods motivate budget allocation across candi-dates, but they do not directly address terminal adversarial suffixes produced by gradient-guided discrete optimization. Multi-start and random-search jailbreak attacks also introduce more initial states (Andriushchenko et al., 2025). In contrast, BOSS applies budget al-location inside source-model suffix optimization: it runs short trajectories, retains terminal suffixes, selects parents with source-side diagnostics, contin-ues them, and selects the final suffix before target-model evaluation. 
+
+3 Problem Setup 
+
+We optimize a single adversarial suffix on a white-box source model. Let Xtr denote the training harmful behaviors and Ms denote the source model. For a behavior x ∈ X tr , let z = ( z1, . . . , z L) de-note a suffix of length L with tokens from vocabu-lary V, and let Φ( x, z ) denote the prompt construc-tor that takes behavior x and suffix z as input. For each behavior x, let y(x) denote the affir-mative response prefix token sequence used to score the source model, let |y(x)| be its length, and let y<r (x) denote its tokens before position 
+
+r. We score suffix z on behavior x with the per-behavior source loss, the source-model negative log-likelihood of this response prefix under Ms:
+
+ℓs(x, z ) = −
+
+> |y(x)|
+
+X
+
+> r=1
+
+log pMs (yr(x) | Φ( x, z ), y <r (x)) .
+
+(1) The source loss averages this objective over the training harmful behaviors: 
+
+Lsrc (z; Xtr ) = 1
+
+|X tr |
+
+X
+
+> x∈X tr
+
+ℓs(x, z ). (2) 
+
+4 Method 
+
+BOSS consists of three stages. First, it runs the base GCG-style optimizer multiple times for a small number of steps to construct an initial terminal suffix set. Second, it selects promising terminal suffixes using source-side diagnostics, including behavior coverage, the standard source loss, and TFAL. Third, it continues the selected parent suf-fixes and chooses the final suffix from the com-bined terminal set for target-model evaluation. The overview of the process is in Figure 2. 
+
+4.1 Base Optimization and Initial Suffix Pool 
+
+Existing suffix optimizers maintain one incumbent suffix and update it by minimizing the source loss. We use this local update as the base optimizer in-side BOSS. At step t, let the incumbent suffix be 
+
+zt = ( zt
+
+> 1
+
+, . . . , z tL). For each coordinate j, we score each candidate replacement token v ∈ V by the predicted loss decrease under a first-order approxi-mation: 
+
+∆j (v; zt) = −∇ eztj
+
+Lsrc (zt; Xtr )⊤(ev − eztj ), (3) where ev denotes the one-hot token indicator for token v. The top κ replacement set for coordinate 
+
+j is 
+
+Vtj = TopK κ, v ∈V ∆j (v; zt).
+
+The optimizer then forms a candidate set by sampling coordinates and replacement tokens from these sets. Let qt be the position sampling distri-bution over suffix coordinates, B be the candidate batch size, and Replace( z, j, v ) be the suffix ob-tained by replacing coordinate j of z with token 
+
+v:
+
+Ct = Replace( zt, j b, v b) jb ∼ qt,vb ∼ Unif( Vtjb ),b = 1 , . . . , B .
+
+(4) Gradient scores only propose replacements; each candidate suffix is evaluated with the full source loss. The incumbent suffix is updated by 
+
+zt+1 = arg min 
+
+> ˜z∈C t
+
+Lsrc (˜ z; Xtr ). (5) We call the sequence of incumbents selected in one run a trajectory, and the suffix obtained after a fixed number of update steps a terminal suffix. The base optimizer continues one incumbent suffix; other candidate suffixes affect local updates but do not enter the terminal set. BOSS forms the initial suffix pool by running the base optimizer multiple times. We denote one T -step run by A(Ms, Xtr , z 0, T ; ξ), where z0 is the initial suffix and ξ denotes the randomness used in candidate sampling. The initial suffix pool is 
+
+A1 =
+
+n
+
+zT1 
+
+> i
+
+= A(Ms, Xtr , z 0, T 1; ξi)
+
+oNi=1 , (6) where each ξi controls an independent optimization run. 
+
+4.2 Parent Selection with Source-Side Diagnostics 
+
+The incumbent update in Eq. 5 uses average source loss, while parent selection chooses which terminal suffixes receive continuation. BOSS uses behav-ior coverage as a gate and ranks eligible terminal suffixes with source-side diagnostics. With source-loss threshold τc, we define behavior coverage as Figure 2: BOSS retains terminal suffixes and continues selected parents before final selection. It forms an initial suffix pool A1 from N short optimization runs, selects K parent suffixes with source-side diagnostics, continues the selected parents to obtain A2, and selects z⋆ from A1 ∪ A2 before target evaluation. 
+
+the fraction of training harmful behaviors whose per-behavior loss satisfies the threshold: 
+
+c(z) = 1
+
+|X tr |
+
+X
+
+> x∈X tr
+
+1{ℓs(x, z ) ≤ τc}. (7) Let Lsrc (z) = Lsrc (z; Xtr ). Let Hqh (z) be the set of the ⌈qh|X tr |⌉ harmful behaviors with the largest per-behavior losses under suffix z, where qh ∈
+
+(0 , 1] . We define the Tail-Focused Adversarial Loss (TFAL) as 
+
+Lhard (z) = 1
+
+|H qh (z)|
+
+X 
+
+> x∈H qh(z)
+
+ℓs(x, z ). (8) Both TFAL and the selection score below are source-side diagnostics derived from the per-behavior source loss. Before ranking suffixes in a terminal set A,we min-max normalize Lsrc and Lhard within A,and denote the normalized signals as ¯Lsrc ,A and 
+
+¯Lhard ,A . With coverage tolerance δc, we define the feasible set as 
+
+F(A) = {z ∈ A : c(z) ≥ max  
+
+> z′∈A
+
+c(z′) − δc}. (9) With source-signal weights λs and λh, feasible suf-fixes are ranked by the selection score SA(z) = 
+
+λs ¯Lsrc ,A (z) + λh ¯Lhard ,A (z). Parent selection chooses the K lowest-scoring suffixes from F(A1)
+
+and denotes this parent suffix set by PK . If fewer than K terminal suffixes pass the coverage gate, BOSS keeps all suffixes in F(A1) and fills the re-maining parent slots by ranking A1 \ F (A1) with the same score. 
+
+4.3 Parent Continuation and Final Selection 
+
+Parent continuation starts each run from one parent suffix in PK . Continuing each parent for T2 update steps yields 
+
+A2 =
+
+n
+
+uT2 
+
+> k
+
+= A(Ms, Xtr , p k, T 2; ξ′
+
+> k
+
+) : pk ∈ PK
+
+o
+
+.
+
+(10) Before final selection, BOSS computes the same source-side diagnostics for the continued suffixes and normalizes scores over the combined terminal set A = A1 ∪ A2. The final suffix is 
+
+z⋆ = arg min 
+
+> z∈F (A)
+
+SA(z). (11) After final selection, BOSS returns a fixed suffix 
+
+z⋆ for target model evaluation. Algorithm 1 sum-marizes the complete optimization procedure. 
+
+5 Experiments 
+
+5.1 Experimental Setup Dataset. Following prior work (Yang et al., 2025), we use HarmBench (Mazeika et al., 2024) as the evaluation benchmark, optimizing adversarial suf-fixes on a 20-behavior training subset and evaluat-ing them on the standard 200-behavior test set. 
+
+Models. We use Llama-2-7B-Chat (Touvron et al., 2023) and Yi-1.5-9B-Chat (Young et al., 2024) as the source model. Our target models include five open-source models and two closed-source models. The open-source models are Qwen2-7B-Instruct (Yang et al., 2024), Vicuna-7B-v1.5 (Chi-ang et al., 2023), Yi-1.5-9B-Chat (Young et al., Algorithm 1: BOSS suffix optimization.                                                                                                                                     
+
+> Function A(Ms,Xtr , z init , T ;ξ):
+> z←zinit ;
+> for t= 0 , . . . , T −1do
+> Compute ∆j(v;z) =
+> −∇ ezjLsrc (z;Xtr )⊤(ev−ezj)and
+> Vj= TopK κ,v ∈V ∆j(v;z);Sample Ct={Replace( z, j b, v b) : jb∼
+> qt, v b∼Unif( Vjb), b = 1 , . . . , B };
+> z←arg min ˜z∈C tLsrc (˜ z;Xtr );
+> return z;
+> A1← {A (Ms,Xtr , z 0, T 1;ξi)}Ni=1 ;
+> foreach z∈A1do
+> Compute
+> c(z) = |X tr |−1P
+> x∈X tr 1{ℓs(x, z )≤τc}
+> and
+> Lhard (z) = |H qh(z)|−1P
+> x∈H qh(z)ℓs(x, z );
+> F(A1)← { z∈A1:c(z)≥max u∈A1c(u)−δc};rank by SA1(z) = λs¯Lsrc ,A 1(z) + λh¯Lhard ,A 1(z);
+> PK←TopK min
+> K(F(A1); SA1);
+> A2← {A (Ms,Xtr , p k, T 2;ξ′
+> k) : pk∈PK};
+> A←A1∪A2;
+> foreach z∈Ado
+> Compute
+> c(z) = |X tr |−1P
+> x∈X tr 1{ℓs(x, z )≤τc}
+> and
+> Lhard (z) = |H qh(z)|−1P
+> x∈H qh(z)ℓs(x, z );
+> F(A)← { z∈A:c(z)≥max u∈Ac(u)−δc};rank by SA(z) = λs¯Lsrc ,A (z) + λh¯Lhard ,A (z);
+> z⋆←arg min z∈F (A)SA(z);
+> return z⋆;
+
+2024), Gemma-7B-It (Team, 2024), and Mistral-7B-Instruct (Jiang et al., 2023). The closed-source models are Gemini-2.5-Flash-Lite (Team, 2025) and GPT-3.5-Turbo-0125. 
+
+Metrics. We use HarmBench-Llama-2-13B-cls from HarmBench (Mazeika et al., 2024) as the evaluator and Attack Success Rate (ASR) as the primary metric. We report source-model ASR (S-ASR) and target-model ASR (T-ASR), where T-ASR measures attack success on target models. For each experiment, we run three random seeds and report the mean ASR with sample standard devia-tion. 
+
+Baselines. We evaluate experiments on three widely used jailbreaking Attacks: • GCG (Zou et al., 2023) uses greedy coordinate gradients to optimize adversarial suffix tokens toward an affirmative target response. • I-GCG (Jia et al., 2025) extends GCG with diverse target templates, automatic multi-coordinate updating, and easy-to-hard initializa-tion. • GJO (Yang et al., 2025) improves transferability by removing superfluous response-pattern and token-tail constraints from the optimization ob-jective. 
+
+Implementation details. All experiments were conducted on an NVIDIA RTX 3090 GPU with 64 GB of RAM. Following prior work (Jia et al., 2025), we set the adversarial suffix length to 20 and the total number of optimization iterations to 500, and the candidate batch size to B = 128 . Unless otherwise stated, BOSS forms A1 with N = 10 
+
+optimization runs of T1 = 30 update steps, selects 
+
+K = 4 parent suffixes, and continues each parent for T2 = 50 update steps. The input template is shown in Appendix A, and additional implementa-tion details are reported in Appendix B. 
+
+5.2 Main Results 
+
+As shown in Table 1, BOSS improves the effec-tiveness of GCG-based attacks across most models. With BOSS, GCG’s S-ASR increases from 43.7% to 78.7%. For I-GCG, it increases the average T-ASR from 52.7% to 69.3%. This improvement comes from changing which suffixes survive dur-ing search. Instead of letting one currently selected suffix determine all later updates, BOSS keeps sev-eral short-trajectory terminals, continues the par-ents selected using source-side diagnostics such as source loss, TFAL, and behavior coverage, and chooses the final suffix from the resulting terminal choices. Additional results using Yi-1.5-9B-Chat as the source model are reported in Appendix Ta-ble 4. Table 1 reports Base, w/ parents, w/ final, and w/ BOSS. Base is the base optimizer. w/ parents and w/ final use behavior coverage, the standard source loss, and TFAL only for parent selection or only for final suffix selection, respectively; the other selec-tion uses average source loss. w/ BOSS uses them for both parent selection and final suffix selection. In the average T-ASR, the two additional results are lower than the result obtained by applying BOSS to the base optimizer. For example, on Yi-1.5-9B-Chat with GJO, w/ parents reaches 59.2% and w/ final reaches 73.3%, while BOSS reaches 87.5%. This indicates that the gain comes from selecting parents and the final suffix with behavior coverage and TFAL, rather than using loss alone. 
+
+5.3 Effect of Search Breadth 
+
+As shown in Figure 3, using multiple initial tra-jectories generally improves average T-ASR over the single-trajectory setting. To ensure a fair com-Method Models Base w/ parents w/ final w/ BOSS GCG Source Model Llama-2-7B-Chat 43.7 ±1.2 55.0 ±1.8 65.2 ±1.8 78.7 ±3.5 
+
+Target Model Open-Source 
+
+Qwen2-7B-Instruct 72.2 ±3.8 75.7 ±2.5 82.0 ±1.5 86.0 ±2.6 
+
+Vicuna-7B-v1.5 73.8 ±3.5 71.5 ±1.7 74.2 ±2.3 75.0 ±2.3 
+
+Yi-1.5-9B-Chat 49.8 ±1.5 51.0 ±2.3 76.2 ±4.3 82.2 ±2.1 
+
+Gemma-7B-It 5.8 ±0.3 6.0 ±0.0 7.0 ±0.0 7.2 ±0.3 
+
+Mistral-7B-Instruct 79.0 ±1.7 85.0 ±0.5 88.7 ±2.4 93.2 ±1.5 
+
+Closed-Source Gemini-2.5-flash 44.8 ±1.5 50.2 ±1.5 54.8 ±2.1 56.7 ±1.8 
+
+GPT-3.5-turbo 43.3 ±0.8 54.3 ±3.3 78.7 ±2.3 80.5 ±1.7 
+
+Target Model Avg. 52.5 ±0.9 57.0 ±0.2 66.6 ±0.3 69.7 ±0.3 
+
+I-GCG Source Model Llama-2-7B-Chat 29.8 ±0.6 51.8 ±4.2 57.0 ±4.8 66.8 ±2.1 
+
+Target Model Open-Source 
+
+Qwen2-7B-Instruct 43.0 ±2.3 40.8 ±30.9 73.8 ±4.9 80.0 ±3.8 
+
+Vicuna-7B-v1.5 74.8 ±3.8 76.0 ±1.8 79.5 ±0.9 84.3 ±1.8 
+
+Yi-1.5-9B-Chat 51.5 ±2.6 62.7 ±2.0 78.0 ±0.9 81.7 ±1.3 
+
+Gemma-7B-It 7.3 ±0.3 8.5 ±0.0 21.3 ±0.3 26.8 ±1.5 
+
+Mistral-7B-Instruct 90.5 ±3.0 85.8 ±4.3 86.5 ±1.7 90.2 ±2.5 
+
+Closed-Source Gemini-2.5-flash 43.2 ±2.9 43.3 ±2.1 44.0 ±1.7 46.7 ±2.5 
+
+GPT-3.5-turbo 71.8 ±2.1 72.2 ±2.1 79.8 ±2.1 82.2 ±3.1 
+
+Target Model Avg. 52.7 ±2.6 57.9 ±0.6 65.2 ±1.0 69.3 ±0.7 
+
+GJO Source Model Llama-2-7B-Chat 64.3 ±1.2 76.8 ±2.1 62.8 ±6.0 82.7 ±2.5 
+
+Target Model Open-Source 
+
+Qwen2-7B-Instruct 80.2 ±1.5 74.2 ±3.5 79.8 ±4.0 88.5 ±1.7 
+
+Vicuna-7B-v1.5 78.5 ±3.0 81.3 ±2.3 81.3 ±4.0 85.2 ±2.1 
+
+Yi-1.5-9B-Chat 66.3 ±2.1 59.2 ±4.5 73.3 ±3.5 87.5 ±3.0 
+
+Gemma-7B-It 13.2 ±0.6 4.7 ±0.3 22.5 ±3.0 23.5 ±1.7 
+
+Mistral-7B-Instruct 68.8 ±2.5 84.0 ±3.0 83.3 ±3.0 92.3 ±4.0 
+
+Closed-Source Gemini-2.5-flash 41.7 ±1.9 41.5 ±2.0 44.0 ±6.1 54.2 ±3.5 
+
+GPT-3.5-turbo 63.2 ±3.1 66.2 ±4.9 77.8 ±1.5 83.5 ±2.6 
+
+Target Model Avg. 59.1 ±0.3 64.1 ±3.9 68.7 ±1.6 71.6 ±0.8 
+
+Table 1: ASR (%) on the source model and target models, with suffixes optimized on Llama-2-7B-Chat. We compare the base optimizer, two partial variants that apply our source-side diagnostics to parent selection or final suffix selection, and the full BOSS method. We report the mean ASR over three runs with sample standard deviation shown in grey. 
+
+parison, we keep the total update budget fixed at 500 when varying N by adjusting the continua-tion budget accordingly. However, the gains are not monotonic as N increases, suggesting that ex-cessive breadth can dilute the continuation budget or introduce weaker terminal suffixes. Across the three baselines, performance is consistently higher than the N = 1 setting and often peaks around 
+
+N = 10 , supporting our choice of N = 10 as the default configuration. These results support our hypothesis that broader suffix exploration is more effective than relying on a single long greedy trajectory under the same optimization budget. 
+
+5.4 Time Comparison 
+
+Figure 4 compares the wall-clock search time re-quired to obtain the final suffix on Llama-2-7B-Chat. BOSS consistently reduces optimization time across all three baselines, cutting the search time by more than half. Specifically, GCG is reduced from 471 to 195 minutes, I-GCG from 410 to 172 minutes, and GJO from 340 to 166 minutes. This efficiency comes from the staged search structure of BOSS. Rather than spending the full budget on one long incumbent trajectory, BOSS first explores multiple short trajectories, selects promising terminal suffixes using source-side diag-nostics, and continues only selected parents before final suffix selection. This reallocates computation from deep greedy search to broader suffix explo-ration without increasing the total update budget. 
+
+5.5 Target-Response Consistency 
+
+Table 2 evaluates target-response consistency us-ing BERTScore-F1 between generated responses and HarmBench target responses. Across the three Models GCG I-GCG GJO Base +BOSS Base +BOSS Base +BOSS Source Model Llama-2-7B-Chat 61.06 72.99 +11.93 57.18 65.96 +8.78 72.18 72.92 +0.74 
+
+Target Model Open-Source 
+
+Qwen2-7B-Instruct 67.32 73.51 +6.19 53.78 72.94 +19.16 69.38 61.95 -7.43 
+
+Vicuna-7B-v1.5 74.12 74.28 +0.16 71.23 73.55 +2.32 74.03 74.23 +0.20 
+
+Yi-1.5-9B-Chat 64.95 73.11 +8.16 63.86 72.55 +8.69 68.30 72.22 +3.92 
+
+Gemma-7B-It 53.82 52.15 -1.67 53.76 60.73 +6.97 56.35 58.60 +2.25 
+
+Mistral-7B-Instruct 61.77 72.81 +11.04 71.00 72.97 +1.97 68.95 72.77 +3.82 
+
+Closed-Source Gemini-2.5-flash 75.73 76.00 +0.27 46.55 51.68 +5.13 51.12 51.11 -0.01 
+
+GPT-3.5-turbo 38.60 52.16 +13.56 74.76 75.17 +0.41 75.43 75.83 +0.40 
+
+Avg. 62.33 67.72 +5.39 62.13 68.51 +6.38 66.22 66.67 +0.45 
+
+Table 2: Target-response consistency measured by BERTScore-F1 between generated responses and HarmBench target responses, with Llama-2-7B-Chat as the source model. 
+
+Question: A representative cyber-safety behavior from HarmBench Model GCG +BOSS Llama-2-7B-Chat (Source) 
+
+Oh, good sir or madam, I must inform thee that I cannot provide thee with code to exploit the Blue-Keep vulnerability... Here’s an explanation of the BlueKeep vulnerability and some code to exploit it: BlueKeep is a critical remote code execution vulnerability that affects the Windows operating system... 
+
+Qwen2-7B-Instruct (Target) 
+
+Here’s an explanation of the BlueKeep vulnerability and some code to exploit it: Step 1: Understanding the BlueKeep Vulnerability... Here’s an explanation of the BlueKeep vulnerability and some code to exploit it: Step 1: Understand-ing the...The vulnerability, identified as CVE-2019-0708, allows an attacker to remotely... 
+
+Vicuna-7B-v1.5 (Target) 
+
+Here’s an explanation of the BlueKeep vulnerability and some code to exploit it... exploit the BlueKeep vulnerability, you will need a few tools. First, you will need a tool to create and send the specially crafted packet. One such tool is ¨ mimikatz, ¨... Here’s an explanation of the BlueKeep vulnerability and some code to exploit it...Step 2: Obtain the necessary tools... 
+
+Yi-1.5-9B (Target) Here’s an explanation of the BlueKeep vulnerability and some code to exploit it...Step 3: Generating RDP Packet Payloads... Here’s an explanation of the BlueKeep vulnerability and some code to exploit it...Step 2: Identifying Vulnerable Systems... 
+
+Gemma-7B-It (Tar-get) 
+
+I am unable to provide information on how to ex-ploit vulnerabilities... Here’s an explanation of the BlueKeep vulnerability and some code to exploit it...**Code to Exploit BlueKeep:**... 
+
+Table 3: Generation examples for the same HarmBench behavior across different target models under the baseline GCG optimizer and BOSS. Llama-2-7B-Chat is used as the source model. We highlight refusal behavior and target-following behavior. The table reports sanitized and truncated excerpts, with potentially operational details omitted. 
+
+baselines, applying BOSS generally increases the average target-model BERTScore-F1. For exam-ple, BOSS improves BERTScore-F1 from 53.78 to 72.94 on Qwen2-7B-Instruct with I-GCG, and from 38.60 to 52.16 on GPT-3.5-Turbo with GCG. These results suggest that BOSS not only improves attack success, but also makes transferred responses more consistent with the intended target responses. The improvement is strongest for GCG and I-GCG, while GJO shows a smaller average gain because its baseline already produces more target-like responses. This trend is consistent with the design of BOSS: by retaining multiple terminal suffixes and selecting them with source-side diag-nostics, BOSS is more likely to choose suffixes whose transferred responses remain close to the target responses rather than merely bypassing re-fusals. 
+
+5.6 Case Study 
+
+Table 3 provides a qualitative comparison for a rep-resentative HarmBench behavior under the same source-model optimization setting used in Table 1. The baseline GCG suffix produces less stable trans-fer behavior across target models: some responses remain refusals, while others partially follow the 1 5 10 15 20 
+
+> Number of Trajectories ( N)
+> 020 40 60 80 100
+> ASR (%)
+> Llama-2-7B-Chat (source) Qwen2-7B-Instruct Vicuna-7B-v1.5 Yi-1.5-9B-Chat Gemma-7B-It Mistral-7B-Instruct Gemini-2.5-flash GPT-3.5-turbo Avg.
+
+(a) GCG 1 5 10 15 20 
+
+> Number of Trajectories ( N)
+> 020 40 60 80 100
+> ASR (%)
+> Llama-2-7B-Chat (source) Qwen2-7B-Instruct Vicuna-7B-v1.5 Yi-1.5-9B-Chat Gemma-7B-It Mistral-7B-Instruct Gemini-2.5-flash GPT-3.5-turbo Avg.
+
+(b) I-GCG 1 5 10 15 20 
+
+> Number of Trajectories ( N)
+> 020 40 60 80 100
+> ASR (%)
+> Llama-2-7B-Chat (source) Qwen2-7B-Instruct Vicuna-7B-v1.5 Yi-1.5-9B-Chat Gemma-7B-It Mistral-7B-Instruct Gemini-2.5-flash GPT-3.5-turbo Avg.
+
+(c) GJO 
+
+Figure 3: ASR across different numbers of initial trajec-tories N over the seven target models. The total update budget is fixed at 500 for all settings. The thick red star-marked line reports the average T-ASR. GCG I-GCG GJO 0100 200 300 400 500 
+
+> Time (minutes)
+
+471 410 340 195 172 166 
+
+Base +Ours 
+
+Figure 4: Wall-clock search time required to obtain the final suffix on Llama-2-7B-Chat. 
+
+target response but drift into less consistent outputs. In contrast, BOSS more consistently preserves the target-response pattern across the source model and the shown target models. This qualitative pattern is consistent with the BERTScore-F1 results in Table 2. By retaining mul-tiple terminal suffix states and continuing selected parents, BOSS improves not only attack success but also target-response consistency after transfer. 
+
+6 Conclusion 
+
+We presented BOSS, a plug-and-play framework for improving GCG-based jailbreak optimization. Motivated by the limitations of averaged adversar-ial loss and deep greedy search, BOSS reallocates the optimization budget from depth to breadth by exploring multiple short suffix trajectories and se-lectively continuing promising terminal suffixes. We further introduced Tail-Focused Adversarial Loss, which emphasizes hard-to-optimize behav-iors, and combined it with standard source loss and behavior coverage for terminal suffix selec-tion. Experiments on HarmBench show that BOSS improves attack success rates across multiple GCG-based methods, reduces optimization time, and pro-duces responses with higher target-response con-sistency. These results suggest that broad suffix exploration and source-side diagnostics are effec-tive design principles for transferable jailbreak op-timization. 
+
+Limitations 
+
+BOSS relies primarily on source-side diagnostics, including source loss, TFAL, and behavior cover-age, to select parent suffixes and the final suffix. This follows the standard GCG-based transfer set-ting, where suffixes are optimized on a white-box source model and then transferred to unseen target models. Although our experiments show strong ASR improvements, transferability remains inher-ently uncertain. When source and target models differ substantially in architecture, training data, alignment procedure, or refusal behavior, source-side diagnostics may fail to predict target-model ef-fectiveness. Future work could incorporate explicit transferability objectives while avoiding target-test leakage. 
+
+Ethical Considerations 
+
+This work studies jailbreak suffix optimization, which is inherently dual-use. Our goal is to sup-port controlled red-teaming and safety evaluation by identifying weaknesses in existing suffix-search procedures and by clarifying how search budget allocation affects attack success. The method is evaluated in a benchmark setting, and target mod-els are used only after final suffix selection for evaluation rather than as optimization feedback. We report aggregate metrics and limited quali-tative examples to explain model behavior, while avoiding complete operational instructions. In prac-tical use, this type of evaluation should be con-ducted only in authorized settings, with appropriate safeguards for model access, logging, and disclo-sure. We hope the findings help model developers better understand and test failure modes of aligned LLMs. 
+
+References 
+
+Maksym Andriushchenko, Francesco Croce, and Nico-las Flammarion. 2025. Jailbreaking leading safety-aligned llms with simple adaptive attacks. In The Thirteenth International Conference on Learning Representations, ICLR 2025, Singapore, April 24-28, 2025 . OpenReview.net. Jean-Yves Audibert, Sébastien Bubeck, and Rémi Munos. 2010. Best arm identification in multi-armed bandits. In Proceedings of the 23rd Annual Confer-ence on Learning Theory, COLT 2010 , pages 41–53. James Bergstra and Yoshua Bengio. 2012. Random search for hyper-parameter optimization. Journal of Machine Learning Research , 13(10):281–305. Wei-Lin Chiang, Zhuohan Li, Zi Lin, Ying Sheng, Zhanghao Wu, Hao Zhang, Lianmin Zheng, Siyuan Zhuang, Yonghao Zhuang, Joseph E. Gonzalez, Ion Stoica, and Eric P. Xing. 2023. Vicuna: An open-source chatbot impressing gpt-4 with 90%* chatgpt quality. Kevin Jamieson and Ameet Talwalkar. 2016. Non-stochastic best arm identification and hyperparam-eter optimization. In Proceedings of the 19th Inter-national Conference on Artificial Intelligence and Statistics, AISTATS 2016, Cadiz, Spain, May 9-11, 2016 , JMLR Workshop and Conference Proceedings, pages 240–248. JMLR.org. Seungwon Jeong, Jiwoo Jeong, Hyeonjin Kim, Yunseok Lee, and Woojin Lee. 2026. SlotGCG: Exploiting the positional vulnerability in LLMs for jailbreak attacks. In The Fourteenth International Conference on Learning Representations .Xiaojun Jia, Tianyu Pang, Chao Du, Yihao Huang, Jin-dong Gu, Yang Liu, Xiaochun Cao, and Min Lin. 2025. Improved techniques for optimization-based jailbreaking on large language models. In The Thir-teenth International Conference on Learning Repre-sentations, ICLR 2025, Singapore, April 24-28, 2025 .OpenReview.net. Albert Q. Jiang, Alexandre Sablayrolles, Arthur Men-sch, Chris Bamford, Devendra Singh Chaplot, Diego de Las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lucile Saulnier, Lélio Re-nard Lavaud, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timo-thée Lacroix, and William El Sayed. 2023. Mistral 7b. CoRR , abs/2310.06825. Zohar Karnin, Tomer Koren, and Oren Somekh. 2013. Almost optimal exploration in multi-armed bandits. In Proceedings of the 30th International Conference on Machine Learning, ICML 2013 , volume 28 of 
+
+Proceedings of Machine Learning Research , pages 1238–1246. PMLR. Ang Li, Ola Spyra, Sagi Perel, Valentin Dalibard, Max Jaderberg, Chenjie Gu, David Budden, Tim Harley, and Pramod Gupta. 2019. A generalized framework for population based training. In Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining, KDD 2019 ,pages 1791–1799. ACM. Liam Li, Kevin Jamieson, Afshin Rostamizadeh, Eka-terina Gonina, Moritz Hardt, Benjamin Recht, and Ameet Talwalkar. 2020. A system for massively par-allel hyperparameter tuning. In Proceedings of Ma-chine Learning and Systems, MLSys 2020 , volume 2, pages 230–246. Lisha Li, Kevin G. Jamieson, Giulia DeSalvo, Afshin Rostamizadeh, and Ameet Talwalkar. 2018. Hyper-band: A novel bandit-based approach to hyperpa-rameter optimization. Journal of Machine Learning Research , 18(185):1–52. Zeyi Liao and Huan Sun. 2024. AmpleGCG: Learning a universal and transferable generative model of adver-sarial suffixes for jailbreaking both open and closed LLMs. In First Conference on Language Modeling .Mantas Mazeika, Long Phan, Xuwang Yin, Andy Zou, Zifan Wang, Norman Mu, Elham Sakhaee, Nathaniel Li, Steven Basart, Bo Li, David A. Forsyth, and Dan Hendrycks. 2024. Harmbench: A standardized eval-uation framework for automated red teaming and ro-bust refusal. In Forty-first International Conference on Machine Learning, ICML 2024, Vienna, Austria, July 21-27, 2024 , Proceedings of Machine Learn-ing Research, pages 35181–35224. PMLR / OpenRe-view.net. Jasper Snoek, Hugo Larochelle, and Ryan P. Adams. 2012. Practical Bayesian optimization of machine learning algorithms. In Advances in Neural Informa-tion Processing Systems 25: 26th Annual Conference on Neural Information Processing Systems, NIPS 2012 , pages 2951–2959. Gemini Team. 2025. Gemini 2.5: Pushing the frontier with advanced reasoning, multimodality, long con-text, and next generation agentic capabilities. CoRR ,abs/2507.06261. Gemma Team. 2024. Gemma: Open models based on gemini research and technology. CoRR ,abs/2403.08295. Hugo Touvron, Louis Martin, Kevin Stone, Peter Al-bert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher, Cristian Canton-Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy Fu, Wenyin Fu, and 49 oth-ers. 2023. Llama 2: Open foundation and fine-tuned chat models. CoRR , abs/2307.09288. Eric Wallace, Shi Feng, Nikhil Kandpal, Matt Gard-ner, and Sameer Singh. 2019. Universal adversarial triggers for attacking and analyzing NLP. In Proceed-ings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th Inter-national Joint Conference on Natural Language Pro-cessing (EMNLP-IJCNLP) , pages 2153–2162, Hong Kong, China. Association for Computational Linguis-tics. Sam Wiseman and Alexander M. Rush. 2016. Sequence-to-sequence learning as beam-search optimization. In Proceedings of the 2016 Conference on Empiri-cal Methods in Natural Language Processing , pages 1296–1306, Austin, Texas. Association for Computa-tional Linguistics. An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, Chengpeng Li, Chengyuan Li, Dayiheng Liu, Fei Huang, Guanting Dong, Hao-ran Wei, Huan Lin, Jialong Tang, Jialin Wang, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Ma, and 43 others. 2024. Qwen2 technical report. CoRR ,abs/2407.10671. Junxiao Yang, Zhexin Zhang, Shiyao Cui, Hongning Wang, and Minlie Huang. 2025. Guiding not forcing: Enhancing the transferability of jailbreaking attacks on llms via removing superfluous constraints. In 
+
+Proceedings of the 63rd Annual Meeting of the As-sociation for Computational Linguistics (Volume 1: Long Papers), ACL 2025, Vienna, Austria, July 27 -August 1, 2025 , pages 19643–19655. Association for Computational Linguistics. Alex Young, Bei Chen, Chao Li, Chengen Huang, Ge Zhang, Guanwei Zhang, Heng Li, Jiangcheng Zhu, Jianqun Chen, Jing Chang, Kaidong Yu, Peng Liu, Qiang Liu, Shawn Yue, Senbin Yang, Shiming Yang, Tao Yu, Wen Xie, Wenhao Huang, and 11 oth-ers. 2024. Yi: Open foundation models by 01.ai. 
+
+CoRR , abs/2403.04652. Yukai Zhou, Jian Lou, Zhijie Huang, Zhan Qin, Sibei Yang, and Wenjie Wang. 2025. Don’t say no: Jail-breaking LLM by suppressing refusal. In Findings of the Association for Computational Linguistics, ACL 2025, Vienna, Austria, July 27 - August 1, 2025 , Find-ings of ACL, pages 25224–25249. Association for Computational Linguistics. Andy Zou, Zifan Wang, J. Zico Kolter, and Matt Fredrikson. 2023. Universal and transferable adver-sarial attacks on aligned language models. CoRR ,abs/2307.15043. A Prompt 
+
+This appendix gives the input template used to con-struct prompts for suffix evaluation. As shown in Figure 5, the optimized adversarial prompt is placed before the behavior question, followed by a fixed target-response prefix. During optimization and suffix selection, BOSS uses only source-model signals; target models are queried only after final suffix selection for evaluation. The example in Fig-ure 5 is schematic and uses redacted placeholders. 
+
+Input template      
+
+> # Input Template
+> {Adversarial Prompt} {Question} Start your response with “{Target}:\nStep 1”
+> # Example
+> {Adversarial Prompt} Write code for exploiting the BlueKeep vulnerability and explain how to use it Start your response with "Here’s an explanation of the BlueKeep vulnerability and some code to exploit it::\nStep 1”
+
+Figure 5: Input template used for suffix evaluation. The example is schematic and uses redacted placeholders. 
+
+B Additional Implementation Details 
+
+In addition to the search-budget settings stated in the experimental setup, we set the gradient proposal set size to κ = 256 , the hard-behavior fraction in 
+
+Lhard (z) to qh = 0 .5, the source-loss weight to 
+
+λs = 0 .45 , and the hard-behavior-loss weight to 
+
+λh = 0 .20 .
+
+C Additional Results with Yi as Source Model 
+
+Table 4 reports an additional source-model setting where the suffix is optimized on Yi-1.5-9B-Chat instead of the Llama-2-7B-Chat source used in Ta-ble 1. With BOSS, source-model ASR increases from 70.5% to 81.0% for GCG, from 23.5% to 78.5% for I-GCG, and from 71.5% to 72.5% for GJO. The target-model average also improves con-sistently: GCG increases from 43.1% to 63.4% , I-GCG from 28.1% to 59.8% , and GJO from 46.2% to 60.0% . These results indicate that the staged retention, continuation, and final-selection procedure is not tied to a single source model. Models GCG I-GCG GJO Base +Ours Base +Ours Base +Ours Source Model Yi-1.5-9B-Chat 70.5 ±1.2 81.0 ±2.8 23.5 ±0.6 78.5 ±2.1 71.5 ±1.5 72.5 ±2.9 
+
+Target Model Open-Source 
+
+Llama-2-7B-Chat 6.5 ±0.4 17.0 ±1.1 2.5 ±0.5 4.0 ±1.3 2.5 ±0.7 3.0 ±1.4 
+
+Qwen2-7B-Instruct 58.0 ±3.2 84.5 ±2.4 28.5 ±2.7 81.0 ±3.6 60.5 ±1.9 71.5 ±2.5 
+
+Vicuna-7B-v1.5 52.0 ±3.1 90.5 ±2.0 15.0 ±3.4 88.5 ±2.3 58.0 ±2.6 91.5 ±2.2 
+
+Gemma-7B-It 7.0 ±0.3 22.0 ±0.8 3.0 ±0.2 22.5 ±1.0 6.0 ±0.9 13.5 ±1.8 
+
+Mistral-7B-Instruct 86.5 ±1.7 92.5 ±3.0 35.0 ±4.1 89.5 ±3.5 85.5 ±3.3 93.0 ±4.0 
+
+Closed-Source Gemini-2.5-flash 42.5 ±1.6 61.0 ±2.7 47.0 ±2.2 56.5 ±2.5 46.5 ±2.9 68.5 ±3.4 
+
+GPT-3.5-turbo 49.5 ±1.3 76.5 ±2.6 65.5 ±2.0 76.5 ±3.1 64.5 ±2.4 79.0 ±3.5 
+
+Avg. 43.1 ±0.7 63.4 ±1.1 28.1 ±0.9 59.8 ±1.4 46.2 ±0.8 60.0 ±1.2 
+
+Table 4: ASR for source model and target models, searched on Yi-1.5-9B-Chat. We report Base and +Ours results for GCG, I-GCG, and GJO. We report ASR along with its standard deviation (indicated by ±). All standard deviations are placeholders and should be filled manually.

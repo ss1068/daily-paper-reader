@@ -6,52 +6,51 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-02
-- 运行时间：2026-09-02 21:49:06 UTC
+- 最新运行日期：2026-09-03
+- 运行时间：2026-09-03 21:37:34 UTC
 - 运行状态：成功
 - 本次总论文数：10
-- 精读区：6
-- 速读区：4
+- 精读区：4
+- 速读区：6
 
 ### 今日简报（AI）
-今日深度复盘大模型安全攻防前沿，涵盖越狱后缀优化、电路引导防御及扩散语言模型对齐等 10 项研究。
-核心结论指出，轨迹感知候选选择能显著提升攻击效率，而电路级权重缩放则为构建更稳健的拒绝机制提供了新路径。
-建议开发者警惕针对推理型代码模型的隐蔽后门，并尝试将防御能力转化为智能体的动态运行时技能。
-- 详情：[/202609/02/README](/202609/02/README)
+context alignment:
+        *   Paper 1: SEAL (Shared Expert ALignment for Mixture-of-Experts
+- 详情：[/202609/03/README](/202609/03/README)
 
 ### 精读区论文标签
-1. [TACS: Trajectory-Aware Candidate Selection for LLM Jailbreak Suffix Optimization](/202609/02/2608.29564v2-tacs-trajectory-aware-candidate-selection-for-llm-jailbreak-suffix-optimization)  
-   标签：评分：9.0/10、query:llm
-   evidence：大语言模型越狱后缀优化
-2. [From Detection to Refusal: Safer LLMs via Circuit-Guided Weight Scaling](/202609/02/2609.00051v1-from-detection-to-refusal-safer-llms-via-circuit-guided-weight-scaling)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：安全对齐和拒绝行为的机械可解释性研究
-3. [RePolicy: Reinforcement Learning for Safety-Policy Invocation in Agent Safeguards](/202609/02/2608.24275v2-repolicy-reinforcement-learning-for-safety-policy-invocation-in-agent-safeguards)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：利用强化学习实现智能体护栏中的安全策略调用
-4. [SafeAtlas-VL: Beyond Binary Multimodal Safety with Large-Scale Data and Guard Models](/202609/02/2608.29098v1-safeatlas-vl-beyond-binary-multimodal-safety-with-large-scale-data-and-guard-models)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：多模态安全护栏模型和大规模数据集
-5. [TRIS: A Tri-Layer Retrieval Integrity Sieve Against Knowledge Poisoning](/202609/02/2609.00470v1-tris-a-tri-layer-retrieval-integrity-sieve-against-knowledge-poisoning)  
+1. [SEAL: Reinforcing Global Safety in Mixture-of-Experts through Shared Expert ALignment](/202609/03/2609.02293v1-seal-reinforcing-global-safety-in-mixture-of-experts-through-shared-expert-alignment)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：增强MoE架构在越狱提示下的全局安全性
+2. [SafeEvolve: Harness-Policy Co-Evolution from Agent Experience for Safety Alignment](/202609/03/2609.02786v1-safeevolve-harness-policy-co-evolution-from-agent-experience-for-safety-alignment)  
+   标签：评分：10.0/10、query:jb-def
+   evidence：基于经验驱动的大语言模型智能体安全对齐自进化框架
+3. [SoK: When Safe Agents Fail Together: The Security of Multi Agent LLM Systems](/202609/03/2609.00595v1-sok-when-safe-agents-fail-together-the-security-of-multi-agent-llm-systems)  
    标签：评分：8.0/10、query:llm
-   evidence：防御 RAG 系统中的知识投毒攻击
-6. [Jailbreaking Text-to-Image Models Through Cracks: Navigating Heterogeneous Safety Filters via Multi-Agent Debate](/202609/02/2609.01168v1-jailbreaking-text-to-image-models-through-cracks-navigating-heterogeneous-safety-filters-via-multi-agent-debate)  
+   evidence：多智能体大语言模型系统的安全与防御
+4. [Breadth Beats Depth: Improving GCG-Based Jailbreak Optimization with Breadth-Oriented Suffix Search](/202609/03/2609.02172v1-breadth-beats-depth-improving-gcg-based-jailbreak-optimization-with-breadth-oriented-suffix-search)  
    标签：评分：8.0/10、query:llm
-   evidence：针对文本生成图像模型安全过滤器的越狱攻击
+   evidence：改进基于GCG的越狱优化攻击
 
 ### 速读区论文标签
-1. [Beyond Token Positions: Safety Alignment Across Denoising Steps in Diffusion Language Models](/202609/02/2609.00495v1-beyond-token-positions-safety-alignment-across-denoising-steps-in-diffusion-language-models)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：扩散语言模型中的安全对齐
-2. [Defense-as-Skill: Evolving Runtime Guard Skill for Skill-Augmented Agents](/202609/02/2609.01487v1-defense-as-skill-evolving-runtime-guard-skill-for-skill-augmented-agents)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：针对技能增强型智能体的运行时安全护栏
-3. [AKRASIA: Stealthy Backdoor Attack on Reasoning-based Code LLMs](/202609/02/2609.01023v1-akrasia-stealthy-backdoor-attack-on-reasoning-based-code-llms)  
+1. [EvoHarmBench: Breaking Content Moderation with Iterative Human-Like Evasion](/202609/03/2608.27844v1-evoharmbench-breaking-content-moderation-with-iterative-human-like-evasion)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：内容审查系统的动态对抗性评估
+2. [Not Safe for All: Auditing the Dialect Penalty in Text-to-Image Safety Pipelines](/202609/03/2608.29589v1-not-safe-for-all-auditing-the-dialect-penalty-in-text-to-image-safety-pipelines)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：审计安全护栏和过滤器在方言处理上的偏差
+3. [Guardrail-Agnostic Societal Bias Evaluation in Large Vision-Language Models](/202609/03/2608.29590v1-guardrail-agnostic-societal-bias-evaluation-in-large-vision-language-models)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：强安全护栏下的模型评估
+4. [Jailbreaking Text-to-Image Models Through Cracks: Navigating Heterogeneous Safety Filters via Multi-Agent Debate](/202609/03/2609.01168v2-jailbreaking-text-to-image-models-through-cracks-navigating-heterogeneous-safety-filters-via-multi-agent-debate)  
    标签：评分：7.0/10、query:llm
-   evidence：针对推理型大语言模型的后门攻击
-4. [Adversarial Training Without Input Gradients via Low-Rank Householder Expansions](/202609/02/2608.26963v1-adversarial-training-without-input-gradients-via-low-rank-householder-expansions)  
+   evidence：针对文生图模型的越狱攻击与安全过滤器研究
+5. [Counter-GEO-Bench: Evaluating Defenses Against Information-Distorting Generative Engine Optimization](/202609/03/2609.02316v1-counter-geo-bench-evaluating-defenses-against-information-distorting-generative-engine-optimization)  
+   标签：评分：7.0/10、query:llm
+   evidence：评估针对信息扭曲生成引擎优化的防御措施
+6. [RL-FAT: Reinforcement Learning for Fair Adversarial Training](/202609/03/2608.29247v1-rl-fat-reinforcement-learning-for-fair-adversarial-training)  
    标签：评分：6.0/10、query:jb-def
-   evidence：针对小范数对抗样本的对抗训练
+   evidence：用于提高鲁棒性的对抗训练
 
 
 <div class="dpr-home-promo-card">
