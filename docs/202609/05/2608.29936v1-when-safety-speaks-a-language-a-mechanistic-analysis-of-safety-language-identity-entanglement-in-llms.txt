@@ -1,0 +1,1782 @@
+When Safety Speaks a Language: A Mechanistic Analysis of
+Safety-Language Identity Entanglement in LLMs
+Apoorva Upadhyaya and Sandipan Sikdar
+L3S Research Center, Leibniz Universität Hannover, Germany
+Abstract
+Safety alignment of large language models
+(LLMs) degrades across languages, yet the in-
+ternal mechanism driving this asymmetry re-
+mains poorly understood. Our work, there-
+fore, presents a systematic mechanistic anal-
+ysis of multilingual safety using sparse autoen-
+coder (SAE) features—sparse interpretable di-
+rections in the residual stream associated with
+harmful and harmless model behavior—across
+three instruction-tuned LLMs, eight languages,
+and all model layers. We observe that safety-
+relevant features are architecture-dependent in
+terms of where they are located and how they
+are distributed across layers. Additionally, they
+are geometrically entangled with language iden-
+tity and exhibit cross-lingual sharing patterns,
+i.e., languages share safety features to vary-
+ing degrees across model depths and architec-
+tures. This safety-language entanglement has
+direct consequences such that ablating safety
+features impacts not only harmful response
+rates but also target language, with the degree
+of intervention predicted by the relationship be-
+tween safety and language features. Our find-
+ings qualify the language-universality of safety
+alignment as architecture-dependent and offer
+a mechanistic account of multilingual safety
+interventions.
+1
+Introduction
+Safety alignment of large language models (LLMs)
+does not transfer uniformly across languages: mod-
+els that reliably refuse harmful requests in English
+produce substantially more harmful responses in
+other languages (Deng et al., 2023; Shen et al.,
+2024; Yong et al., 2025).
+A growing body of
+work addresses this gap through multilingual safety
+benchmarks (Ning et al., 2025), training-time con-
+sistency losses and reward-based transfer (Li et al.,
+2025; Zhao et al., 2025; Bu et al., 2026), and
+weight-editing approaches that localize and trans-
+fer safety representations across languages (Liang
+et al., 2026; Zhang et al., 2026). Yet the internal
+mechanism behind this asymmetry remains poorly
+understood.
+Recently, mechanistic methods Wang et al.
+(2026); Zhang et al. (2026); Liang et al. (2026) that
+investigate these two threads: safety and language
+identity. For example, Wang et al. (2026) extract
+a refusal direction from English and show that it
+generalizes to other languages while Zhang et al.
+(2026) identify a small set of shared safety neu-
+rons that mediate cross-lingual transfer. However,
+such analyses do not expose how safety features
+relate geometrically to language identity, nor do
+they explain whether the safety interventions will
+cleanly transfer to model architectures or a partic-
+ular target language. We argue that understanding
+this interaction between safety and language at a
+more granular level is critical in designing robust
+safety mechanisms.
+Sparse autoencoders (SAEs) have recently
+emerged as a powerful tool for mechanistic in-
+terpretability, decomposing residual stream acti-
+vations into sparse, monosemantic directions (Cun-
+ningham et al., 2023). Prior work has applied SAEs
+to safety steering (Goyal et al., 2025) and to disen-
+tangling language-specific representations (Deng
+et al., 2025), demonstrating their effectiveness
+at capturing both safety-relevant and language-
+specific features independently. However, it re-
+mains largely unclear how these two features inter-
+act when generating responses.
+In this work, we address these gaps through a
+systematic mechanistic analysis of safety-relevant
+SAE features across three instruction-tuned LLMs
+(Llama-3.1-8B-Instruct, Qwen2.5-7B-Instruct, and
+Gemma-2-9B-IT) over all layers and eight typolog-
+ically diverse languages (EN, ZH, DE, AR, VI, ID,
+RU, HI). We focus on two types of safety-relevant
+features: harm features, whose activations are pre-
+dictive of harmful model responses, and harmless
+features, whose activations are predictive of safe
+arXiv:2608.29936v1  [cs.CL]  30 Aug 2026
+
+
+or refusal responses, alongside language identity
+features, whose activations are predictive of the lan-
+guage in which a prompt is written (Sections 2 and
+3). Unlike single directions or neuron sets, SAE
+features are layer-resolved and monosemantic (Fer-
+eidouni et al., 2026), enabling us to characterize not
+only where safety is encoded, but how safety and
+language identity are jointly organized in the resid-
+ual stream. Additionally, it allows us to investigate
+how such organization varies across architectures
+and whether it predicts the cost of cross-lingual
+safety interventions. The detailed related work is
+in Appendix A.
+We organize our analysis through the follow-
+ing research questions. RQ1: Is safety alignment
+universal or language-specific inside multilingual
+instruction-tuned LLMs? We observe that safety
+signals concentrate in late layers universally, but
+the ordering of safety harm and harmless features
+is architecture-dependent with language-specific
+patterns (Section 4.1). RQ2: Are safety features
+entangled with language identity within languages
+and across language pairs? We find that safety and
+language identity features are geometrically entan-
+gled in the residual stream beyond feature ID-level
+sharing and that this entanglement peaks in late lay-
+ers for Llama and Qwen precisely where safety sig-
+nals are strongest. In Gemma, they remain largely
+disentangled throughout, a fundamental difference
+in safety organization not visible at the direction or
+neuron level (Section 4.2.1). Cross-lingual safety
+feature sharing peaks in middle layers, decoupled
+from where safety signals are strongest, and En-
+glish is consistently the most geometrically iso-
+lated language of the eight studied despite being the
+dominant source for cross-lingual safety transfer
+in prior work (Section 4.2.2). RQ3: Does safety-
+language entanglement predict the cost of mono-
+and cross-lingual safety interventions? Across tar-
+geted feature interventions, safety-language entan-
+glement scores predict not only harmful response
+rates but also language identity degradation and flu-
+ency cost across experiments, including a complete
+output language shift under high cross-lingual sim-
+ilarity, demonstrating that geometric entanglement
+is not merely descriptive but causally consequential
+(Section 4.3).
+Taken together, our findings show that safety-
+language entanglement is architecture-dependent,
+varies in strength and depth across models, and pre-
+dicts the cost of safety interventions; thus offering
+the community a mechanistic account of how safety
+and language identity interact inside multilingual
+LLMs and a practical basis for anticipating when
+cross-lingual safety transfer will succeed.
+2
+Methods
+2.1
+Sparse Autoencoders (SAEs)
+SAEs are designed to decompose language model
+activations into a sparse linear combination of
+learned feature directions (Cunningham et al.,
+2023). Given a language model activation x ∈
+Rdhidden from a particular layer, the SAE encodes
+it into a higher-dimensional feature representation
+h ∈RdSAE, where dSAE ≫dhidden, and reconstructs
+the input activation as ˆx.
+h(x) = ReLU(Wencx + benc),
+(1)
+ˆx(h) = Wdech + bdec.
+(2)
+The columns of the decoder matrix Wdec repre-
+sent learned feature directions, which we refer to
+as SAE "features".
+2.2
+Prompt Design and Input Representation
+Our pipeline begins with a set of textual prompts
+used as inputs to the target LLMs. The prompts are
+drawn from safety benchmarks containing harm-
+ful queries across multiple languages L (Section
+3.3). For each prompt, the model generates a re-
+sponse that is automatically labeled as harmful or
+harmless using an LLM-based evaluation (Section
+3.3). Each prompt additionally carries a language
+identity label ℓ∈L indicating the language in
+which it is written. The resulting prompt–label
+pairs, annotated with both safety labels y ∈{0, 1}
+and language labels ℓ∈L, are subsequently used
+to extract model activations and analyze latent rep-
+resentations associated with safety behavior and
+language identity.
+2.3
+Activation Extraction and SAE Encoding
+For each prompt in language ℓ∈L, we construct
+the final input using a standard chat template and
+pass it through the target LLM. From a selected
+transformer layer l, we extract the residual stream
+activation corresponding to the final token of the
+prompt. In autoregressive models, this representa-
+tion summarizes the preceding context and directly
+conditions the next-token prediction (Meng et al.,
+2022). Subsequently, for a tokenized prompt p(ℓ)
+of length N, the extracted activation for layer l is
+z(l,ℓ)
+N
+= ResidualStream(l)(p(ℓ))
+
+last token,
+z(l,ℓ)
+N
+∈Rdhidden
+(3)
+
+
+Encoding with Sparse Autoencoders (SAEs)
+We encode the extracted residual activations us-
+ing layer-wise SAEs. For each language ℓ∈L
+and layer l, the last-token activation z(l,ℓ)
+N
+(Eq. 3)
+is projected into the SAE feature space using
+the encoder parameters W(l)
+enc ∈RdSAE×dhidden and
+b(l)
+enc ∈RdSAE. The resulting sparse feature rep-
+resentation s(l,ℓ) ∈RdSAE is computed as below,
+yielding a set of active SAE features that capture
+the most influential directions in the residual repre-
+sentation.
+s(l,ℓ) = W(l)
+encz(l,ℓ)
+N
++ b(l)
+enc
+(4)
+2.4
+Identification of Safety and Language
+Features
+Safety features.
+Given the SAE feature encod-
+ings s(l,ℓ), we identify dimensions that are most in-
+formative for distinguishing harmful and harmless
+responses. Let y ∈{0, 1} denote the response la-
+bel (harmless = 0, harmful = 1). For each feature
+dimension i, we compute the mutual information
+with the label (Ross, 2014):
+MI(s(l,ℓ)
+i
+, y) =
+X
+s(l,ℓ)
+i
+X
+y
+p(s(l,ℓ)
+i
+, y) log p(s(l,ℓ)
+i
+, y)
+p(s(l,ℓ)
+i
+)p(y)
+.
+(5)
+To determine the direction of association, we com-
+pute the difference in class-conditional mean acti-
+vations:
+∆i = E[s(l,ℓ)
+i
+| y = 1] −E[s(l,ℓ)
+i
+| y = 0].
+(6)
+We then define a signed relevance score:
+Score(s(l,ℓ)
+i
+) = MI(s(l,ℓ)
+i
+, y) · sign(∆i).
+(7)
+A positive Score indicates association with harmful
+responses; a negative Score indicates association
+with harmless responses. The top-k features by
+descending score form the harmful- and harmless-
+associated feature sets S(l,ℓ)
+harm and S(l,ℓ)
+harmless.
+Language identity features.
+To identify features
+specifically encoding each language ℓ, we compute
+a per-language binary mutual information score
+using a one-vs-rest scheme. For each language
+ℓ∈L, we pool activations across all languages and
+define a binary label y(ℓ) = ⊮[˜ℓ= ℓ], indicating
+whether a prompt belongs to language ℓor not. The
+binary MI for feature i is:
+MIℓ(s(l)
+i ) = MI
+
+s(l)
+i , ⊮[˜ℓ= ℓ]
+
+(8)
+To determine the direction of association, we com-
+pute the difference in mean activation between
+prompts in ℓand all others:
+∆(ℓ)
+i
+= E[s(l)
+i
+| ˜ℓ= ℓ] −E[s(l)
+i
+| ˜ℓ̸ = ℓ]
+(9)
+and define the signed language score as:
+Score(ℓ)
+lang(s(l)
+i ) = MIℓ(s(l)
+i ) · sign(∆(ℓ)
+i )
+(10)
+The top-k features by descending score form S(l,ℓ)
+lang ,
+features most specifically associated with language
+ℓat layer l.
+2.5
+Intervention Strategies
+To evaluate the causal role of the selected SAE
+features, we perform controlled interventions in the
+residual stream during generation. Let z(l,ℓ)
+t
+denote
+the residual activation at layer l and language ℓfor
+generated token t. We then obtain the sparse feature
+representation s(l,ℓ)
+t
+(Eq 4) for the generated token
+t. Interventions are applied to the first T generated
+tokens (t ≤T) to test whether minimal, early-stage
+manipulations of safety features can steer model
+safety behavior, and whether such manipulations
+produce collateral effects on language identity and
+fluency.
+Masking
+(Ablation).
+To
+suppress
+safety-
+associated directions, we zero out the correspond-
+ing SAE features at layer l:
+s(l,ℓ)′
+t,i
+= 0,
+i ∈S(l)
+harm or i ∈S(l)
+harmless
+(11)
+Amplification (Steering).
+To strengthen safety-
+associated directions, we increase their activations
+by the maximum observed activation:
+s(l,ℓ)′
+t,i
+= s(l,ℓ)
+t,i
++ A(l)
+i ,
+i ∈S(l)
+harm or i ∈S(l)
+harmless
+(12)
+where A(l)
+i
+is the maximum observed activation
+of feature i at layer l. The modified latent vector
+s(l,ℓ)′
+t
+is decoded using the SAE decoder (Eq. 2),
+producing the intervened residual activation ˆz(l,ℓ)′
+t
+that replaces the original activation (z(l,ℓ)
+t
+) during
+the forward pass for autoregressive generation.
+3
+Experiments
+3.1
+Models
+We experiment with three open-weight instruc-
+tion tuned LLMs: Llama-3.1-8B-Instruct(32 lay-
+ers), aligned via supervised fine-tuning (SFT)
+
+
+and reinforcement learning with human feedback
+(RLHF) for helpfulness and safety; Qwen2.5-7B-
+Instruct(28 layers) underwent two-stage reinforce-
+ment learning for helpfulness and harmlessness;
+Gemma-2-9B-IT(42 layers) additionally incorpo-
+rates knowledge distillation and model merging
+across training phases. For phase-aggregated anal-
+ysis, we partition each model’s layers into early,
+middle, and late phases following the proportional
+thirds convention (Tong et al., 2025) with integer
+rounding: Llama (L0–L10, L11–L21, L22–L31),
+Qwen (L0–L9, L10–L18, L19–L27), and Gemma
+(L0–L13, L14–L27, L28–L41).
+3.2
+Sparse Autoencoders.
+We train BatchTopK SAEs (Bussmann et al., 2024)
+on the residual stream (resid_post) of every layer
+of Llama (32 SAEs) and Qwen (28 SAEs), follow-
+ing the training configuration of Arditi (2024a,b).
+For Gemma-2-9B-IT, we use the publicly released
+Gemma Scope SAEs (Lieberum et al., 2024) cov-
+ering all 42 layers. Full training and evaluation
+details of our SAEs are in Appendix B.
+3.3
+Datasets
+Primary Dataset: TechHazardQA (Banerjee et al.,
+2025) contains 7,745 potentially harmful or unethi-
+cal questions spanning multiple technology-related
+domains. We use this dataset as our primary source
+for feature discovery (Sections 2.3 and 2.4). Un-
+like many existing safety benchmarks that contain
+explicit malicious instructions , TechHazardQA
+focuses on more indirect or ethically ambiguous
+queries. We reserve a held-out set of 1,500 samples
+for the intervention experiments.
+Language Selection and Translation: Since Tech-
+HazardQA is available only in English, we con-
+struct a multilingual version to analyze safety be-
+havior across languages (see Appendix C.1 for
+translation). We select a set of languages that differ
+in linguistic families and writing scripts, follow-
+ing prior multilingual work (Longpre et al., 2025).
+The selected languages include English (en), Chi-
+nese (zh), German (de), Arabic (ar), Vietnamese
+(vi), Indonesian (id), Russian (ru), and Hindi (hi),
+covering diverse language families and scripts.
+Additional Safety Benchmark (Transferability):
+To evaluate whether the discovered SAE features
+generalize beyond the primary dataset, we con-
+duct additional experiments on Multi-Jail (Deng
+et al., 2023), which consists of multilingual jail-
+break prompts designed to test the robustness of
+LLM safety mechanisms (ar, en, vi, zh).
+Dataset Annotation Each dataset prompt is pro-
+vided to the target LLM, and the generated re-
+sponse is evaluated for harmfulness. Following
+prior work (Zheng et al., 2023; Banerjee et al.,
+2025), we use LLM-based automatic evaluation
+acting as a judge (based on majority voting), using
+the evaluation prompt from (Banerjee et al., 2025)
+with minor clarity improvements after careful anal-
+ysis. The judge LLM outputs a binary decision:
+YES: harmless, NO: harmful (refer Appendix C.2).
+3.4
+Evaluation Metrics
+We aim to investigate safety-language entangle-
+ment via identity-level feature overlap and geomet-
+ric alignment in the residual stream, and evaluate
+interventions by harmful response rate, language
+identity preservation, and fluency.
+3.4.1
+Entanglement Metrics
+We quantify feature entanglement using two com-
+plementary metrics over top-k (k=5) features se-
+lected by MI score (Section 2.4). Both metrics are
+computed per layer and aggregated by averaging
+across 3 processing phases: early, middle, and late
+(Section 3.1). To contextualize whether reported
+values are high or low relative to each model’s
+own distribution, we report phase-relative z-scores
+(Abdi, 2007) alongside metric values (z-score de-
+scribes the distance of a data point from the mean
+in units of the standard deviation; Appendix D, E).
+Jaccard Overlap measures ID-level sharing be-
+tween two feature sets A and B: J(A, B) =
+|A ∩B|/|A ∪B|. For within-language entangle-
+ment, A and B are the top-5 safety and language
+identity features of the same language; for cross-
+lingual sharing, they are top-5 safety features of
+two different languages.
+Decoder Cosine Similarity. The SAE decoder ma-
+trix Wdec ∈RdSAE×dmodel has rows wi ∈Rdmodel,
+where each row represents the residual stream di-
+rection that feature i writes into upon activation.
+Given two sets of top-k features A = {a1, ..., ak}
+and B = {b1, ..., bk}, we first retrieve their de-
+coder vectors {wai} and {wbj}, normalize them
+to unit length, then compute all k × k pairwise co-
+sine similarities. For each feature in A, we take its
+maximum cosine similarity with any feature in B
+(nearest neighbor), and average across all features
+in A:
+DecCos(A, B) = 1
+|A|
+X
+i∈A
+max
+j∈B
+w⊤
+i wj
+∥wi∥∥wj∥(13)
+
+
+High DecCos with low Jaccard overlap indicates
+that two feature sets use different IDs but write into
+geometrically similar residual stream directions,
+i.e., functionally similar but mechanistically dis-
+tinct. Figures 4 and 5 illustrate for a low-similarity
+pair (EN–HI, DecCos = 0.021, Jaccard = 0.000).
+3.4.2
+Interventions
+Harmful Responses (%) We evaluate the effect
+of interventions by measuring the proportion of
+harmful responses before and after applying the
+proposed interventions.
+Language Identity Preservation To measure lan-
+guage consistency after intervention, we perform
+line-level language detection following Marchisio
+et al. (2024) and Wang et al. (2025): each gener-
+ated response is split by newline characters and
+the language of each line is identified using fast-
+Text (Joulin et al., 2017). Predictions with con-
+fidence below 0.5 are labeled unknown, as these
+typically correspond to mixed, symbolic, or linguis-
+tically ambiguous content. We aggregate detected
+languages across all lines to obtain a per-response
+language distribution and report the target language
+ratio, the proportion of lines in the expected tar-
+get language as the primary metric, where a drop
+indicates language identity degradation following
+intervention.
+Fluency Degradation Following Goyal et al.
+(2025), we assess fluency of post-intervention re-
+sponses using an LLM-as-judge approach with a 4-
+class scale (Figure 6): Class 0 (completely broken),
+Class 1 (poor), Class 2 (moderate), and Class 3
+(high fluency). We use the same three LLM judges
+employed for dataset annotation (Section 3.3), with
+majority vote labels verified on 50 responses per
+language and report the proportion of non-Class 3
+responses as the primary fluency metric.
+4
+Results and Analysis
+4.1
+RQ1: Is safety alignment universal or
+language-specific inside multilingual
+instruction-tuned LLMs?
+We analyze layer-wise MI scores for top-5 harm
+and harmless features across all layers of Llama
+(32), Qwen (28), and Gemma (42) for 8 languages,
+identifying peak layers per signal and characteriz-
+ing harm-harmless ordering as a measure of safety
+alignment universality (Table 1).
+Early layers show universal signal absence.
+Across all three models and 8 languages, early lay-
+ers show near-zero MI for both harm and harmless
+features (Figures 1, 7, and 8), confirming safety
+computation does not begin during surface-level
+feature extraction in early layers, regardless of ar-
+chitecture or depth.
+Middle layers diverge across architectures.
+Llama shows isolated middle-layer peaks in three
+languages (EN harm L19, DE harmless L18, VI
+harmless L14), the earliest safety signals observed
+across all models (Figure 1, Table 1). Qwen and
+Gemma show complete absence of middle-layer
+peaks across all 8 languages, deferring safety com-
+putation entirely to late layers (Figures 7 and 8).
+Late layers concentrate safety signals, but harm-
+harmless ordering is model-specific. Both sig-
+nals peak in late layers across all models, with
+increasing exclusivity: Llama shows 5/8 languages
+with both signals in late layers, while Qwen and
+Gemma show 8/8 (Table 1). Within late layers,
+harm precedes harmless in Llama (5/8 languages)
+and Qwen (6/8 languages), suggesting a harm-
+then-harmless sequential ordering in these models.
+Gemma shows the opposite: 5/8 languages exhibit
+harmless-before-harm ordering (DE, EN, HI, ID,
+VI), with harm-first retained in only 3/8 (AR, RU,
+ZH). This cross-model reversal indicates that harm-
+harmless ordering reflects model-specific align-
+ment rather than a universal architectural property.
+Vietnamese is the only language showing consis-
+tent harmless-first ordering across all three mod-
+els. VI shows harmless peaks before harm peaks
+in Llama (L14 vs L27), Qwen (L23 vs L26), and
+Gemma (L34 vs L39), the only language exhibit-
+ing this pattern cross-model, suggesting language-
+specific properties of Vietnamese safety alignment
+independent of architecture.
+These findings establish that while late-layer con-
+centration of safety signals is universal, their in-
+ternal ordering and organization is model-specific
+rather than universal, motivating whether harm and
+harmless safety features are further entangled with
+language identity or across language pairs in these
+same late layers (RQ2).
+4.2
+RQ2: Are safety features entangled with
+language identity within languages and
+across language pairs?
+We measure safety-language entanglement using
+Jaccard overlap and decoder cosine similarity be-
+tween top-5 safety and language identity features,
+applied within each language and across all lan-
+guage pairs, aggregated over three processing
+
+
+Figure 1: Harm (red, solid) and harmless (blue, dashed) MI signal strength across layers and phases for Llama.
+Llama (32L)
+Qwen (28L)
+Gemma (42L)
+Lang
+Harm
+Harmless
+Harm
+Harmless
+Harm
+Harmless
+AR
+L27
+L30
+L24
+L21†
+L34
+L35
+DE
+L28
+L18†
+L23
+L24
+L39
+L38†
+EN
+L19
+L23
+L21
+L25
+L40
+L38†
+HI
+L26
+L31
+L21
+L27
+L39
+L38†
+ID
+L26
+L30
+L24
+L27
+L39
+L37†
+RU
+L29
+L30
+L24
+L27
+L30
+L37
+VI
+L27
+L14†
+L26
+L23†
+L39
+L34†
+ZH
+L31
+L31
+L24
+L25
+L28
+L33
+Table 1: Peak layers for harm-associated and harmless-
+associated SAE features per language and model. Bold
+= middle-layer peak † = harmless-first ordering.
+phases (Section 3.4). Across all models and phases,
+we notice that Jaccard and decoder cosine do not
+consistently correlate: Gemma shows Jaccard =
+0.000 yet non-zero decoder cosine (0.077–0.129),
+and HI in Qwen shows low Jaccard (0.090) with
+high decoder cosine (0.570), confirming that entan-
+glement operates beyond individual feature identi-
+ties to the level of residual stream directions and
+capturing complementary aspects of this coupling
+(Appendix D).
+4.2.1
+Within-language entanglement
+Early layers: geometric pre-conditioning be-
+fore functional safety computation. Despite near-
+zero Jaccard (harm: ≤0.089, harmless: ≤0.071
+across models), early layers show non-trivial de-
+coder cosine (Llama: 0.152–0.271; Qwen: 0.124–
+0.274; Gemma:
+0.090–0.220), indicating that
+safety feature directions are already coupled to lan-
+guage identity before any meaningful safety signal
+emerges (RQ1) (Figures 2(a) and 9). Relative to
+each model’s layer distribution, early harm decoder
+entanglement is below model average in Llama
+(harm mean z = −0.53) and Qwen (z = −0.59),
+while Gemma shows above-average entanglement
+already in early layers (harm z = +0.23, harmless
+z = +0.53), indicating architecture-specific con-
+trast among LLMs (Appendix D for per-language
+heatmaps).
+Middle layers: harm-language entanglement
+rises while harmless largely disentangles. Harm-
+language decoder cosine rises toward or above
+model average in Llama (mean z: −0.531→−
+0.011) and Qwen (−0.590→+ 0.120), while
+harmless-language decoder falls below average
+in Llama (+0.323→−0.219) and Gemma
+(+0.528→−0.380), indicating harm-detection be-
+comes progressively language-conditioned while
+harmless features decouple (Figures 2(a) and 9).
+Notably, DE in Llama shows the only complete
+zero harm-language Jaccard window (0.0, z= −
+0.295, L11–L21) yet decoder cosine still rises
+(0.224, z = −0.142), confirming geometric entan-
+glement persists without shared feature IDs (Fig-
+ures 10 and 13). Gemma shows the sparsest mid-
+dle entanglement across all models with harmless
+already well below model average while harm re-
+mains elevated (z = +0.315) (Figures 2(a), 9, Ap-
+pendix D for per language details).
+Late layers:
+entanglement peaks in Llama
+and Qwen but collapses in Gemma.
+Harm-
+language decoder cosine reaches well above model
+average in Llama (mean 0.2962, z= + 0.596)
+and Qwen (mean 0.3446, z= + 0.535), peak-
+ing precisely where safety signals are strongest
+(RQ1), confirming that harm-detection is maxi-
+mally language-conditioned near output. In Qwen,
+HI reaches the highest entanglement of the entire
+study (decoder 0.570, z= + 1.123); five languages
+(AR,ID,RU,VI,ZH) show dual entanglement where
+both harm and harmless decoder rise above or com-
+
+
+parable to model average, while EN is uniquely the
+least entangled language (harm z= −0.658; harm-
+less z= −0.757), the most negative values across
+all languages and phases (Figure 11). In Gemma,
+both metrics collapse below model average (harm
+decoder mean z = −0.545) with 6/8 languages
+showing Jaccard 0.000, yet decoder remains non-
+zero (0.077–0.129). This reveals a fundamental di-
+vergence: Llama and Qwen couple harm-detection
+to language identity in late layers where safety is
+strongest, while Gemma decouples safety signal
+strength from language entanglement entirely (Fig-
+ures 2 (a), 9, and Appendix D).
+4.2.2
+Cross-lingual safety feature sharing
+Safety features are language-specific early but
+converge in middle layers, decoupled from
+where safety peaks.
+Early layers show near-
+zero cross-lingual sharing across all models (Jac-
+card ≤0.096, decoder ≤0.191), confirming
+language-specificity before safety computation be-
+gins. Sharing rises sharply in middle layers across
+all models, with harmless features converging more
+strongly than harm (Figure 16): cross-lingual shar-
+ing peaks in middle layers (specifically for Llama
+and Gemma) while safety signals peak in late layers
+(RQ1), meaning the layers most useful for cross-
+lingual transfer are not where safety is strongest.
+Gemma shows the highest harmless cross-lingual
+alignment of all models and phases in middle lay-
+ers (DE-ZH: Jaccard 0.429, z= + 0.96; decoder
+0.616, z= + 0.99; Figures 32 and 34).
+Late-layer sharing diverges across architectures;
+Qwen reaches maximum; EN remains isolated
+throughout.
+Llama late-layer harm sharing is
+modest (Jaccard ≤0.081) while harmless retains
+above-average cross-lingual sharing (HI-ID: de-
+coder 0.275, z= + 0.10), confirming harmless
+mechanisms are more cross-lingually universal
+than harm near output. Qwen reaches the highest
+cross-lingual sharing among LLMs: harm AR-RU
+(Jaccard 0.515, decoder 0.684) and harmless ID-VI
+(Jaccard 0.598; decoder 0.752), with a consistently
+high-sharing cluster of AR, ID, RU, VI, ZH lan-
+guages (Figure 21 and 22). Gemma shows a late-
+layer reversal -where harm sharing exceeds harm-
+less, the opposite pattern from Llama and Qwen
+(Figure 16). Across all three models, EN main-
+tains the lowest cross-lingual overlap in late layers
+(Llama: Jaccard ≤0.033, decoder ≤0.091; Qwen:
+Jaccard ≤0.125, decoder ≤0.248; Gemma: Jac-
+card ≤0.042, decoder ≤0.101), confirming EN
+safety features remain geometrically isolated from
+cross-lingual sharing regardless of LLM (Appendix
+E).
+4.3
+RQ3: Does safety-language entanglement
+predict the cost of mono- and cross lingual
+safety interventions?
+We validate the entanglement measured in RQ2
+through targeted SAE feature interventions to the
+first T = 100 tokens during generation, measuring
+safety change, language identity preservation, and
+fluency degradation (% non-Class-3 responses).
+Exp 1: Harm ablation (HI, all models). Ablating
+top-5 harm features at peak harm layers (Llama
+L26, Qwen L21, Gemma L39) reduces harmful
+responses across all models (Table 4). Language
+identity degradation follows the harm-language de-
+coder cosine ordering from RQ2 (Llama: 0.518,
+Qwen: 0.541, Gemma: 0.041): target language ra-
+tio drops substantially in Llama and Qwen while
+remaining preserved in Gemma, with fluency track-
+ing the same ordering (Class 3: 76.1%, 79.3%,
+95.4%) (Figure 35). This directly confirms that de-
+coder cosine entanglement predicts language iden-
+tity cost and ablation does not completely break
+generation coherence (Figures 2(b) and 36).
+Exp 2a: Harmless amplification (DE, Llama
+L18). Amplifying harmless features at Llama’s
+clean zero-overlap window (L18) reduces harmful
+responses by −12.14 pp with minimal language
+cost (∆= −0.057) and high fluency preservation
+(Class 3: 92%, no Class 0/1), consistent with low
+harmless safety language entanglement at this layer
+(decoder cosine 0.093, Jaccard=0.000), confirming
+that low-entanglement layers identified from RQ2
+geometry support targeted safety steering with min-
+imal collateral cost (Figure 2(b)).
+Exp 2b:
+Harm amplification control (AR,
+Gemma L34). Amplifying harm features increases
+harmful responses (+4.08 pp) with near-zero lan-
+guage cost (∆= −0.034), confirming causal direc-
+tionality and Gemma’s low entanglement (decoder
+cosine 0.160, Jaccard=0.000) (Figure 2(b)).
+Exp 3: Cross-lingual transfer (VI→ZH). Ablat-
+ing VI harmless features and replacing VI harm
+features with ZH harm features at random layer
+19 tests entanglement as a predictor of transfer
+cost across models with substantially different VI-
+ZH geometric similarity: Llama (Jaccard=0.000,
+DecCos=0.028), Gemma (0.111,0.223), Qwen
+(0.428,0.809). In Qwen, the high cross-lingual sim-
+ilarity is compounded by strong within-language
+
+
+Figure 2: Harm↔Language entanglement across LLMs (Jaccard: solid; decoder cosine: dashed). (b) Decoder
+cosine entanglement predicts language identity cost (target language ratio drop ↓) across intervention experiments.
+entanglement at the same layer (VI harmless ↔VI
+lang: DecCos=0.451; ZH harm ↔ZH lang: 0.466),
+meaning both the ablated and injected features are
+geometrically coupled to their respective language
+identities. All three show modest safety improve-
+ments (−6.31, −1.85, −4.00 pp), with language
+identity follows the decoder cosine ordering pre-
+cisely: Llama preserves Vietnamese near-perfectly
+(∆= −0.004), Gemma shows a moderate drop
+(∆= −0.051), and Qwen undergoes a complete
+output language shift (∆= −0.613), with fluency
+degrading accordingly (Class 3: 98%, 90%, 64%)
+(Figure 35). We further verify in Appendix F that
+using safety features orthogonal to language iden-
+tity preserves VI output (∆≈0.01) at the cost
+of weaker safety improvement (12.4% vs. 20.4%
+relative reduction). Note that L19 is not the peak
+safety layer for LLMs (RQ1).
+The cross-dataset transferability interventions
+are presented in Appendix G. Across all experi-
+ments, decoder cosine entanglement predicts both
+language identity and fluency cost independently
+of intervention type, confirming that safety inter-
+ventions operate on the entangled safety-language
+geometry rather than on safety features in isolation.
+4.4
+Implications for Multilingual Safety
+Research
+Entanglement as a pre-deployment audit. De-
+coder cosine entanglement is computable from
+SAE weights without generation and predicts lan-
+guage identity cost of safety interventions across
+architectures. This provides a principled diagnos-
+tic for whether a safety patch will transfer cleanly
+or degrade language identity before deployment.
+Layer selection matters for cross-lingual trans-
+fer. Safety signals peak late but cross-lingual fea-
+ture sharing peaks in middle layers. Safety trans-
+fer methods that intervene at fixed or heuristically
+chosen layersmay benefit from layer selection in-
+formed by this decoupling. Internal geometry
+complements benchmark evaluation for model
+selection. Safety-language entanglement varies
+substantially across architectures independently of
+safety performance. Internal geometry, not only
+downstream scores, is a relevant criterion when se-
+lecting models for multilingual deployment where
+safety editing is anticipated. English transfer may
+not be geometrically grounded. English shows
+the lowest cross-lingual feature similarity. This
+raises questions about robustness for typologically
+distant languages where training dominance effects
+are weaker. Harm and harmless mechanisms
+warrant separate treatment. Harmless features
+are more language-conditioned than harm features
+in Llama and Qwen, making refusal harder to trans-
+fer cross-lingually than harm-detection. Alignment
+approaches that treat safety as monolithic risk un-
+derestimate the cross-lingual cost of refusal transfer
+specifically.
+5
+Conclusion
+We present a mechanistic analysis of safety-
+language interaction in multilingual instruction-
+tuned LLMs using sparse autoencoder features
+across three architectures and eight languages.
+We find that safety-language entanglement is
+architecture-dependent, and that cross-lingual fea-
+ture sharing is decoupled from safety signal depth.
+Critically, entanglement predicts the language iden-
+tity and fluency cost of safety interventions before
+generation. Our findings inform the design of more
+robust multilingual safety mechanisms and moti-
+vate geometry-aware evaluation of cross-lingual
+safety transfer.
+
+
+6
+Limitations
+Our work takes a step toward mechanistic under-
+standing of multilingual safety in instruction-tuned
+LLMs; however, we note some limitations that fu-
+ture work should address. Our analysis covers three
+model families and eight languages; while these
+span diverse architectures and language families,
+findings may not generalize to other model sizes,
+alignment procedures, or other resource languages
+absent from our evaluation. Our top-k (k=5) MI-
+based feature selection is a coarse approximation
+of the full safety-relevant feature set, and entangle-
+ment patterns may vary under larger k or alternative
+selection criteria. While our intervention experi-
+ments validate entanglement as a predictor of in-
+tervention cost, we cannot establish why entangle-
+ment differs across architectures, whether driven by
+pre-training data distribution, alignment procedure,
+or architectural design choices remains an open
+question for future mechanistic work. Finally, our
+interventions target top-5 features at a single peak
+layer per experiment; multi-layer or larger-scale in-
+terventions may reveal richer safety-language trade-
+off profiles than those observed here.
+References
+Hervé Abdi. 2007. Z-scores. Encyclopedia of measure-
+ment and statistics, 3:1055–1058.
+Lyzander Marciano Andrylie, Inaya Rahmanisa, Ma-
+hardika Krisna Ihsani, Alfan Farizki Wicaksono,
+Haryo Akbarianto Wibowo, and Alham Fikri Aji.
+2025. Sparse autoencoders can capture language-
+specific concepts across diverse languages. arXiv
+preprint arXiv:2507.11230.
+Andy Arditi. 2024a. SAEs for Llama-3.1-8B-Instruct.
+Hugging Face.
+Andy Arditi. 2024b. SAEs for Qwen2.5-7B-Instruct.
+Hugging Face.
+Yannick Assogba, Jacopo Cortellazzi, Javier Abad,
+Pau Rodriguez, Xavier Suau, and Arno Blaas. 2026.
+Sparse autoencoders are capable llm jailbreak mitiga-
+tors. arXiv preprint arXiv:2602.12418.
+Somnath Banerjee, Sayan Layek, Rima Hazra, and
+Animesh Mukherjee. 2025. How (un) ethical are
+instruction-centric responses of llms? unveiling the
+vulnerabilities of safety guardrails to harmful queries.
+In Proceedings of the International AAAI Conference
+on Web and Social Media, volume 19, pages 193–
+205.
+Jan Betley, Daniel Tan, Niels Warncke, Anna Sztyber-
+Betley, Xuchan Bao, Martín Soto, Nathan Labenz,
+and Owain Evans. 2025. Emergent misalignment:
+Narrow finetuning can produce broadly misaligned
+llms. arXiv preprint arXiv:2502.17424.
+Yuyan Bu, Xiaohao Liu, ZhaoXing Ren, Yaodong Yang,
+and Juntao Dai. 2026. Align once, benefit multilin-
+gually: Enforcing multilingual consistency for llm
+safety alignment. arXiv preprint arXiv:2602.16660.
+Bart Bussmann, Patrick Leask, and Neel Nanda. 2024.
+Batchtopk sparse autoencoders.
+arXiv preprint
+arXiv:2412.06410.
+Hoagy Cunningham, Aidan Ewart, Logan Riggs, Robert
+Huben, and Lee Sharkey. 2023. Sparse autoencoders
+find highly interpretable features in language models.
+arXiv preprint arXiv:2309.08600.
+Boyi Deng, Yu Wan, Baosong Yang, Yidan Zhang, and
+Fuli Feng. 2025. Unveiling language-specific fea-
+tures in large language models via sparse autoen-
+coders. In Proceedings of the 63rd Annual Meeting
+of the Association for Computational Linguistics (Vol-
+ume 1: Long Papers), pages 4563–4608.
+Yue Deng, Wenxuan Zhang, Sinno Jialin Pan, and
+Lidong Bing. 2023.
+Multilingual jailbreak chal-
+lenges in large language models.
+arXiv preprint
+arXiv:2310.06474.
+Moghis
+Fereidouni,
+Muhammad
+Umair
+Haider,
+Peizhong Ju, and AB Siddique. 2026. Evaluating
+sparse autoencoders for monosemantic representa-
+tion. In Findings of the Association for Computa-
+tional Linguistics: EACL 2026, pages 5969–5984.
+Andrey Galichin, Alexey Dontsov, Polina Druzhinina,
+Anton Razzhigaev, Oleg Y Rogov, Elena Tutubalina,
+and Ivan Oseledets. 2025. I have covered all the
+bases here: Interpreting reasoning features in large
+language models via sparse autoencoders.
+arXiv
+preprint arXiv:2503.18878.
+Leo Gao, Stella Biderman, Sid Black, Laurence Gold-
+ing, Travis Hoppe, Charles Foster, Jason Phang, Ho-
+race He, Anish Thite, Noa Nabeshima, et al. 2020.
+The pile: An 800gb dataset of diverse text for lan-
+guage modeling. arXiv preprint arXiv:2101.00027.
+Agam Goyal, Vedant Rathi, William Yeh, Yian Wang,
+Yuen Chen, and Hari Sundaram. 2025. Breaking bad
+tokens: Detoxification of LLMs using sparse autoen-
+coders. In Proceedings of the 2025 Conference on
+Empirical Methods in Natural Language Processing,
+pages 12702–12720, Suzhou, China. Association for
+Computational Linguistics.
+Tatsuro Inaba, Go Kamoda, Kentaro Inui, Masaru Ison-
+uma, Yusuke Miyao, Yohei Oseki, Yu Takagi, and
+Benjamin Heinzerling. 2025. How a bilingual lm
+becomes bilingual: Tracing internal representations
+with sparse autoencoders. Findings of the Associa-
+tion for Computational Linguistics: EMNLP 2025,
+pages 13458–13470.
+
+
+Armand Joulin, Edouard Grave, Piotr Bojanowski, and
+Tomáš Mikolov. 2017. Bag of tricks for efficient text
+classification. In Proceedings of the 15th conference
+of the European chapter of the association for com-
+putational linguistics: volume 2, short papers, pages
+427–431.
+Connor Kissane, Robert Krzyzanowski, Arthur Conmy,
+and Neel Nanda. 2024. SAEs (usually) transfer be-
+tween base and chat models. AI Alignment Forum.
+Anton Korznikov, Andrey Galichin, Alexey Dontsov,
+Oleg Y Rogov, Ivan Oseledets, and Elena Tutubalina.
+2025. The rogue scalpel: Activation steering compro-
+mises llm safety. arXiv preprint arXiv:2509.22067.
+Sihang Li, Wei Shi, Ziyuan Xie, Tao Liang, Guojun
+Ma, and Xiang Wang. 2025. Safer: Probing safety
+in reward models with sparse autoencoder. arXiv
+preprint arXiv:2507.00665.
+Jiaming Liang, Zhaoxin Wang, and Handing Wang.
+2026.
+Multilingual safety alignment via sparse
+weight editing. arXiv preprint arXiv:2602.22554.
+Tom Lieberum, Senthooran Rajamanoharan, Arthur
+Conmy, Lewis Smith, Nicolas Sonnerat, Vikrant
+Varma, János Kramár, Anca Dragan, Rohin Shah,
+and Neel Nanda. 2024. Gemma scope: Open sparse
+autoencoders everywhere all at once on gemma 2.
+In Proceedings of the 7th BlackboxNLP Workshop:
+Analyzing and Interpreting Neural Networks for NLP,
+pages 278–300.
+Shayne Longpre, Sneha Kudugunta, Niklas Muen-
+nighoff, I Hsu, Isaac Caswell, Alex Pentland, Sercan
+Arik, Chen-Yu Lee, Sayna Ebrahimi, et al. 2025. At-
+las: Adaptive transfer scaling laws for multilingual
+pretraining, finetuning, and decoding the curse of
+multilinguality. arXiv preprint arXiv:2510.22037.
+Kelly Marchisio, Wei-Yin Ko, Alexandre Bérard, Théo
+Dehaze, and Sebastian Ruder. 2024. Understanding
+and mitigating language confusion in llms. In Pro-
+ceedings of the 2024 Conference on Empirical Meth-
+ods in Natural Language Processing, pages 6653–
+6677.
+Samuel Marks, Adam Karvonen, and Aaron Mueller.
+2024. dictionary_learning. https://github.com/
+saprmarks/dictionary_learning.
+Kevin Meng, David Bau, Alex Andonian, and Yonatan
+Belinkov. 2022. Locating and editing factual associa-
+tions in gpt. Advances in neural information process-
+ing systems, 35:17359–17372.
+Stephen Merity, Caiming Xiong, James Bradbury, and
+Richard Socher. 2017. Pointer sentinel mixture mod-
+els. In 5th International Conference on Learning
+Representations, ICLR 2017, Toulon, France, April
+24-26, 2017, Conference Track Proceedings. Open-
+Review.net.
+Zhiyuan Ning, Tianle Gu, Jiaxin Song, Shixin Hong,
+Lingyu Li, Huacan Liu, Jie Li, Yixu Wang, Meng
+Lingyu, Yan Teng, et al. 2025. Linguasafe: A com-
+prehensive multilingual safety benchmark for large
+language models. arXiv preprint arXiv:2508.12733.
+Nirmalendu Prakash, Yeo Wei Jie, Amir Abdullah, Ran-
+jan Satapathy, Erik Cambria, and Roy Ka-Wei Lee.
+2026. Beyond i’m sorry, i can’t: Dissecting large-
+language-model refusal. In Proceedings of the AAAI
+Conference on Artificial Intelligence, volume 40,
+pages 37830–37838.
+Senthooran Rajamanoharan, Tom Lieberum, Nicolas
+Sonnerat, Arthur Conmy, Vikrant Varma, János
+Kramár, and Neel Nanda. 2024. Jumping ahead: Im-
+proving reconstruction fidelity with jumprelu sparse
+autoencoders. arXiv preprint arXiv:2407.14435.
+Brian C Ross. 2014.
+Mutual information between
+discrete and continuous data sets.
+PloS one,
+9(2):e87357.
+Lingfeng Shen, Weiting Tan, Sihao Chen, Yunmo Chen,
+Jingyu Zhang, Haoran Xu, Boyuan Zheng, Philipp
+Koehn, and Daniel Khashabi. 2024. The language
+barrier: Dissecting safety challenges of llms in multi-
+lingual contexts. In Findings of the Association for
+Computational Linguistics: ACL 2024, pages 2668–
+2680.
+Chaodong Tong, Qi Zhang, Jiayang Gao, Lei Jiang,
+Yanbing Liu, and Nannan Sun. 2025. Halunet: Multi-
+granular uncertainty modeling for efficient halluci-
+nation detection in llm question answering. arXiv
+preprint arXiv:2512.24562.
+Mingyang Wang, Lukas Lange, Heike Adel, Yunpu Ma,
+Jannik Strötgen, and Hinrich Schütze. 2025. Lan-
+guage mixing in reasoning language models: Pat-
+terns, impact, and internal causes. In Proceedings
+of the 2025 Conference on Empirical Methods in
+Natural Language Processing, pages 2637–2665.
+Xinpeng Wang, Mingyang Wang, Yihong Liu, Hinrich
+Schütze, and Barbara Plank. 2026. Refusal direc-
+tion is universal across safety-aligned languages. Ad-
+vances in Neural Information Processing Systems,
+38:32380–32423.
+Jiaqi Weng, Han Zheng, Hanyu Zhang, Ej Zhou, Qinqin
+He, Jialing Tao, Hui Xue, Zhixuan Chu, and Xiting
+Wang. 2026. Safe-sail: Towards a fine-grained safety
+landscape of large language models via sparse au-
+toencoder interpretation framework. In Findings of
+the Association for Computational Linguistics: ACL
+2026, pages 18916–18935.
+Richmond Sin Jing Xuan, Jalil Huseynov, and Yang
+Zhang. 2025. Uncovering cross-linguistic disparities
+in llms using sparse autoencoders. arXiv preprint
+arXiv:2507.18918.
+Jehyeok Yeon, Federico Cinus, Yifan Wu, and Luca
+Luceri. Graph-regularized sparse autoencoders for
+llm safety steering.
+In Trustworthy AI for Good
+(AI4GOOD) Workshop@ ICML 2026.
+
+
+Zheng-Xin Yong, Beyza Ermis, Marzieh Fadaee,
+Stephen Bach, and Julia Kreutzer. 2025. The state of
+multilingual llm safety research: From measuring the
+language gap to mitigating it. In Proceedings of the
+2025 Conference on Empirical Methods in Natural
+Language Processing, pages 15856–15871.
+Max Zhang, Derek Liu, Kai Zhang, Joshua Franco,
+and Haihao Liu. 2025.
+Response-based knowl-
+edge distillation for multilingual jailbreak preven-
+tion unwittingly compromises safety. arXiv preprint
+arXiv:2602.11157.
+Xianhui Zhang, Chengyu Xie, Linxia Zhu, Yonghui
+Yang, Weixiang Zhao, Zifeng Cheng, Cong Wang,
+Fei Shen, and Tat-Seng Chua. 2026. Who transfers
+safety? identifying and targeting cross-lingual shared
+safety neurons. arXiv preprint arXiv:2602.01283.
+Weixiang Zhao, Yulin Hu, Yang Deng, Tongtong Wu,
+Wenxuan Zhang, Jiahe Guo, An Zhang, Yanyan Zhao,
+Bing Qin, Tat-Seng Chua, et al. 2025. Mpo: Multi-
+lingual safety alignment via reward gap optimization.
+In Proceedings of the 63rd Annual Meeting of the
+Association for Computational Linguistics (Volume
+1: Long Papers), pages 23564–23587.
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Tianle
+Li, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zhuohan Li, Zi Lin, Eric Xing, et al. 2024. Lmsys-
+chat-1m: A large-scale real-world llm conversation
+dataset. In International Conference on Learning
+Representations, volume 2024, pages 22225–22257.
+Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan
+Zhuang, Zhanghao Wu, Yonghao Zhuang, Zi Lin,
+Zhuohan Li, Dacheng Li, Eric Xing, et al. 2023.
+Judging llm-as-a-judge with mt-bench and chatbot
+arena. Advances in neural information processing
+systems, 36:46595–46623.
+Ethical Considerations
+Our study finds specific internal features whose
+manipulation can increase harmful outputs for ad-
+versaries, introducing potential misuse risks. All
+interventions are, therefore, conducted in a con-
+trolled, research-focused setting, and we do not
+release steering vectors or feature IDs to prevent
+misuse.
+A
+Related Work
+Multilingual LLM Safety.
+Safety alignment de-
+grades in non-English languages (Deng et al., 2023;
+Shen et al., 2024; Yong et al., 2025; Ning et al.,
+2025), with proposed mitigations including consis-
+tency losses (Bu et al., 2026), reward-based trans-
+fer (Zhao et al., 2025), and response-based distilla-
+tion (Zhang et al., 2025). These approaches operate
+behaviorally and share an implicit assumption that
+safety representations are separable from language
+identity; an assumption our work directly examines
+and qualifies.
+Multilingual Representations via SAEs.
+Re-
+cent work applies SAEs to multilingual representa-
+tion analysis, showing that language identity is re-
+liably captured at the SAE feature level: language-
+specific features control output language (Andrylie
+et al., 2025), monolinguality scores enable se-
+lective language suppression (Deng et al., 2025),
+medium/low-resource languages activate SAE fea-
+tures less strongly than English (Xuan et al., 2025),
+and SAE interpretability is used to characterize
+the developmental trajectory of multilingual rep-
+resentations (Inaba et al., 2025). None of these
+works examines how language-specific features
+interact with safety-specific features; one of the
+central questions of our study (RQ2).
+SAE-Based Safety Interpretability.
+SAEs have
+been applied to safety in monolingual settings for
+output steering (Goyal et al., 2025), jailbreak de-
+fense (Yeon et al.; Assogba et al., 2026), safety neu-
+ron auditing (Weng et al., 2026), and refusal circuit
+analysis (Prakash et al., 2026), with Korznikov et al.
+(2025) showing that SAE-based steering can itself
+degrade alignment. We extend this line of work
+to the multilingual setting, jointly characterizing
+harm and harmless safety representations across all
+layers and three architectures.
+Mechanistic Accounts of Multilingual Safety.
+Wang et al. (2026) extract a single refusal direc-
+tion from English residual activations and show
+it transfers across 14 languages with near-parallel
+geometry, arguing that refusal is largely language-
+agnostic. Zhang et al. (2026) identify a small inter-
+section of safety neurons shared across high- and
+low-resource languages (<0.3% of all neurons) and
+show these mediate cross-lingual safety transfer.
+Liang et al. (2026) exploit sparse weight structure
+in MLP layers to transfer English safety represen-
+tations to other languages without retraining. Our
+findings qualify each of these results at finer gran-
+ularity. Language-universality of refusal holds in
+architectures with low safety-language entangle-
+ment, but breaks down where harmless features are
+more language-conditioned than harm at the SAE
+feature level. Cross-lingual safety sharing peaks
+in middle layers, decoupled from where safety sig-
+nals are strongest, a depth-dependence invisible to
+fixed-layer neuron analyses. And the separability
+
+
+assumption underlying sparse weight editing holds
+only where safety-language entanglement is low;
+where entanglement is high, editing safety-relevant
+weights incurs language identity costs.
+B
+SAE Training and Evaluation Details
+B.1
+Llama-3.1-8B and Qwen2.5-7B
+We train one BatchTopK SAE (Bussmann et al.,
+2024) per transformer layer on the post-block resid-
+ual stream (resid_post), using the saprmarks/dic-
+tionary_learning library (Marks et al., 2024). We
+strictly follow the training configuration released
+by Arditi (2024a,b), including data blend fractions,
+optimiser settings, and context length. Table 2 sum-
+marizes the full configuration.
+Hyperparameter
+Llama-3.1-8B
+Qwen2.5-7B
+Architecture
+BatchTopK
+BatchTopK
+Hook point
+resid_post
+resid_post
+Layers covered
+0–31 (32 total)
+0–27 (28 total)
+Input dimension d
+4,096
+3,584
+Expansion factor
+8×
+32×
+Sparsity k
+64
+64
+Learning rate
+2 × 10−4
+1 × 10−4
+LR warmup steps
+1,000
+1,000
+LR decay start
+80% of training
+80% of training
+Training tokens
+500M
+500M
+SAE batch size
+2,048
+2,048
+LLM batch size
+16
+16
+LLM context length
+1,024 tokens
+1,024 tokens
+Training data blend
+LMSYS-CHAT-1M (Zheng et al., 2024)
+35%
+35%
+PILE-UNCOPYRIGHTED (Gao et al., 2020)
+64%
+64%
+Emergent-misalignment (Betley et al., 2025)
+1%
+1%
+Table 2: SAE training configuration.
+B.2
+Gemma Scope SAEs
+For Gemma-2-9B-IT we use the publicly released
+Gemma Scope PT SAEs (Lieberum et al., 2024)
+(google/gemma-scope-9b-pt-res), covering all 42
+residual-stream layers with a dictionary size of
+16,384 features per layer under the JumpReLU ar-
+chitecture (Rajamanoharan et al., 2024). Kissane
+et al. (2024) demonstrate that base SAEs transfer
+faithfully to instruction-tuned variants, a finding
+explicitly confirmed for Gemma 2 9B by Lieberum
+et al. (2024) (Section 4.4 of the Gemma Scope tech-
+nical report). We therefore apply these pre-trained
+SAEs directly to Gemma-2-9B-IT activations.
+B.3
+SAE Quality Evaluation
+We evaluate SAE reconstruction quality under two
+settings: out-of-distribution (OOD), using 500
+documents from the WikiText-103 test split (Mer-
+ity et al., 2017), which is different from the training
+blend; and in-distribution (IND), using 200 held-
+out samples drawn from the same training blend
+(35% lmsys-chat-1m, 64% pile-uncopyrighted, 1%
+Model
+Eval
+L0
+Var. Exp. (%)
+Loss Rec. (%)
+Llama-3.1-8B
+IND
+68.9 ± 2.9
+77.6 ± 5.4
+98.3 ± 1.1
+OOD
+70.5 ± 2.5
+75.9 ± 5.5
+97.5 ± 2.1
+Qwen2.5-7B
+IND
+64.6 ± 0.5
+86.8 ± 3.5
+99.1 ± 0.8
+OOD
+69.4 ± 2.9
+87.4 ± 4.6
+98.2 ± 1.8
+Table 3: SAE quality metrics averaged across all layers
+(mean ± std).
+emergent-misalignment), mirroring the original
+evaluation setup of the reference SAE configura-
+tions. Following prior work (Marks et al., 2024;
+Galichin et al., 2025), we report three metrics: L0,
+variance explained, and loss recovered, with values
+close to 1.0 indicating near-lossless reconstruction.
+Results are reported as the mean ± standard devia-
+tion across all layers in Table 3.
+Both models achieve high loss recovery under
+both settings, confirming that SAE reconstructions
+preserve the model’s predictive behavior across all
+layers.
+C
+Dataset
+Please note that, as the tasks of translation and
+verification of LLM responses involve reviewing
+potentially harmful or sensitive content, human an-
+notators were informed in advance that the material
+may contain unsafe or harmful content. They were
+asked to review the content strictly for the purposes
+of translation verification and response labeling.
+C.1
+Language Translation
+To obtain multilingual prompts for the TechHaz-
+ardQA dataset (Banerjee et al., 2025), we translate
+the original English questions using Google Trans-
+late1. To assess translation quality, 100 randomly
+sampled prompts were reviewed and proofread by
+the human annotator for all languages. The trans-
+lations achieved an average agreement rate of ap-
+proximately 97%, confirming the reliability of the
+translations.
+C.2
+Dataset Annotation
+We provide the prompt in Figure 3 to the judge
+LLM to annotate the response as harmful or harm-
+less. To further minimize bias from any single
+model, we use three independent LLMs (Llama-
+1https://translate.google.com/
+
+
+Figure 3: Prompt for Judge LLM for evaluating the
+safety of LLM-generated responses.
+Figure 4: Unit-normalized SAE decoder directions for
+EN and HI top-5 harm features at Llama L25 (decoder
+cosine = 0.021, Jaccard = 0.000), projected to 2D
+via PCA. Each arrow represents the residual stream
+direction a feature writes into upon activation.
+3.3-70B2, Gemma-3-27B3, Qwen3-30B4) as eval-
+uators and adopt a majority-voting scheme to de-
+termine the final harmful/harmless label for each
+response. To validate the use of judge LLMs for
+annotating harmful and harmless labels to the LLM
+responses across languages, we randomly sampled
+100 harmful and 100 harmless responses from each
+language and compared the final majority-vote
+judge LLM labels with human annotations, obtain-
+ing an average of approximately 94% agreement,
+supporting the reliability of LLM-based evaluation.
+This validated setup is then used to label responses
+across all datasets and languages.
+2https://huggingface.co/meta-llama/Llama-3.3-70B-
+Instruct
+3https://huggingface.co/google/gemma-3-27b-it
+4https://huggingface.co/Qwen/Qwen3-30B-A3B-Instruct-
+2507
+Figure 5: PCA projection of top-5 EN and HI harm
+feature decoder vectors (Llama L25). Dashed lines
+connect EN–HI feature pairs and reflect decoder cosine
+similarity. Red lines indicate the most geometrically
+similar HI feature for each EN feature.
+Figure 6: LLM-as-judge prompt for fluency evaluation
+of post-intervention responses.
+D
+Per-Language Safety-Language
+Entanglement
+Figures 10–15 report phase-aggregated safety-
+language entanglement for all 8 languages per
+model. Each row is a language; columns are early,
+middle, and late processing phases. Left panel of
+each figure shows harm features; right panel shows
+harmless features. Each cell reports the raw value
+with its phase-relative z-score: z = (v −¯v)/σ
+where ¯v and σ are computed across all layers of
+that model for that language-metric pair. z > 0
+indicates above the model’s own layer average;
+z < 0 indicates below. The black border marks the
+highest-value cell.
+
+
+Figure 7: Harm (red, solid) and harmless (blue, dashed) MI signal strength across layers for all languages (AR, EN,
+HI, VI) across Qwen. Dotted vertical lines mark phase boundaries (E=early, M=middle, L=late). Filled markers
+indicate peak layers; shaded region shows the gap between harm and harmless peaks.
+Figure 8: Harm (red, solid) and harmless (blue, dashed) MI signal strength across layers for all languages (AR, EN,
+HI, VI) across Gemma. Dotted vertical lines mark phase boundaries (E=early, M=middle, L=late). Filled markers
+indicate peak layers; shaded region shows the gap between harm and harmless peaks.
+Figure 9: Harmless↔Language entanglement across processing phases for all 8 languages across Llama, Qwen,
+and Gemma. Solid lines show Jaccard overlap; dashed lines show decoder cosine similarity; shaded area highlights
+the gap.
+
+
+Figure 10: Decoder cosine similarity between safety and language identity features per language per phase in Llama.
+Harm (left): all 8 languages show rising entanglement with depth, peaking in late layers (mean z= + 0.60), with
+DE (z= + 0.92), ID (z= + 0.95), and ZH (z= + 0.92) showing the strongest late-layer elevation. Harmless (right):
+above model average in early layers (mean z= + 0.32), declining through middle (z= −0.22) and remaining below
+average late (z= −0.11); EN uniquely maintains harmless > harm across all phases.
+Exp.
+language
+LLM
+Strategy
+Layer
+Before
+After
+1a
+HI
+Llama
+abl. harm
+L26
+27.16%
+8.21%
+1b
+HI
+Qwen
+abl. harm
+L21
+50.93%
+19.64%
+1c
+HI
+Gemma
+abl. harm
+L39
+10.86%
+7.54%
+2a
+DE
+Llama
+amp harml
+L18
+28.29%
+16.15%
+2b
+AR
+Gemma
+amp harm
+L34
+4.71%
+8.79%
+3a
+VI→ZH
+Llama
+rep harm
+L19
+26.45%
+20.14%
+3b
+VI→ZH
+Qwen
+rep harm
+L19
+19.64%
+15.64%
+3c
+VI→ZH
+Gemma
+rep harm
+L19
+9.71%
+7.86%
+Table 4: Harmful response rates before and after inter-
+vention across experiments. [abl: ablate; amp: amplify;
+harml: harmless; rep: replace].
+E
+Cross-Lingual Safety Feature Sharing
+Heatmaps
+Figures 23–34 show phase-aggregated cross-
+lingual similarity matrices for all language pairs,
+one figure per model per signal per metric. Each
+cell reports the raw pairwise similarity with its
+phase-relative z-score: z = (v −¯v)/σ where ¯v and
+σ are computed across all layers for that language
+pair. Columns are early, middle, and late phases.
+The diagonal (self-similarity) is masked. EN row
+and column are consistently the lightest across all
+figures, confirming EN’s geometric isolation from
+all other languages. In addition, plots 17 –22 vi-
+sualize both Jaccard and decode cosine similarity
+measures for cross-lingual harm and harmless fea-
+tures across LLMs across phases.
+F
+Orthogonal Feature Control
+Experiment
+We repeat the VI→ZH transfer in Qwen at L19 us-
+ing five VI harmless and ZH harm features selected
+for minimal decoder cosine to their respective lan-
+guage identity features (VI harmless→VI lang:
+0.029; ZH harm→ZH lang: 0.038; vs. entangled:
+0.451 and 0.466), with ZH harm features addition-
+ally constrained to have no ID overlap with VI
+harm features. With orthogonal features, language
+identity is largely preserved (∆lang ≈0.01) with
+a modest safety improvement (19.64%→17.21%,
+−2.43 pp, 12.4% relative reduction), compared to
+the complete language collapse under entangled
+features (∆= −0.613, −4.00 pp, 20.4% relative
+reduction). This illustrates a controllable trade-off
+between safety improvement and language identity
+preservation.
+G
+Cross-Dataset Feature Transferability
+To test whether harm features identified on Tech-
+HazardQA generalize causally to another safety
+benchmark, we ablate the same top-5 harm features
+identified and characterized in RQ2 during gener-
+ation on Multi-Jail (Deng et al., 2023) prompts
+for four languages in Llama, without any feature
+re-identification on the target dataset. Decoder co-
+sine values are those reported in RQ2 for TechHaz-
+
+
+Figure 11: Decoder cosine similarity between safety and language identity features per language per phase in Qwen.
+Harm (left): rises sharply from early (mean z= −0.59) to late (mean z= + 0.54), with HI reaching the highest
+late-layer entanglement of the entire study (0.570, z= + 1.12). Harmless (right): also rises with depth (late mean
+z= + 0.33), with five languages (AR, ID, RU, VI, ZH) showing dual entanglement above model average in late
+layers.
+ardQA.
+Ablation reduces harmful responses consistently
+across all four languages (−6.80 to −7.23 pp), con-
+firming that TechHazardQA harm features causally
+suppress harmful generation on Multi-Jail prompts
+without any re-identification. Language identity
+shift and fluency degradation follow the decoder
+cosine ordering: EN, with the lowest decoder co-
+sine (0.182), shows minimal language shift (0.039)
+and highest fluency (92.60%), while VI (0.470)
+and ZH (0.414) show substantially higher language
+shift (0.195, 0.225) and lower fluency (80.01%,
+80.35%). This cross-dataset consistency confirms
+that the harm features identified in our analysis
+are not dataset-specific artifacts, and that decoder
+cosine entanglement computed entirely from Tech-
+HazardQA remains a reliable predictor of interven-
+tion cost across harmful content distributions, sug-
+gesting that safety-relevant SAE features identified
+through mutual information are transferable across
+datasets and can be reused for safety interventions
+without dataset-specific re-identification.
+
+
+Figure 12: Decoder cosine similarity between safety and language identity features per language per phase in
+Gemma. Harm (left): above model average in early and middle layers (mean z= + 0.23, +0.32) but collapses
+below average in late layers (mean z= −0.55), the opposite trajectory from Llama and Qwen. Harmless (right):
+already above average in early layers (mean z= + 0.53), drops sharply in middle (z= −0.38) and remains below
+average late (z= −0.15), indicating early and rapid decoupling of harmless features from language identity.
+Lang
+Harm. Resp. (Before)
+Harm. Resp. (After)
+∆(Before-After)
+Class 3 Fluency Scores %
+Dec.Cos
+Lang.Shift
+EN
+12.22%
+5.12%
+−7.10
+92.60
+0.182
+0.039
+AR
+20.87%
+13.64%
+−7.23
+88.24
+0.325
+0.105
+VI
+26.45%
+19.55%
+−6.90
+80.01
+0.470
+0.195
+ZH
+28.52%
+21.72%
+−6.80
+80.35
+0.414
+0.225
+Table 5: Cross-dataset harm ablation (Llama): top-5 harm features from TechHazardQA applied to Multi-Jail
+prompts.
+Figure 13: Jaccard overlap between safety and language identity features per language per phase in Llama. Values
+are consistently lower than decoder cosine (Figure 10), confirming geometric entanglement substantially exceeds
+ID-level sharing. Harm (left): DE shows zero Jaccard across all middle layers (z= −0.30), the only complete
+ID-level separation window across all models and languages, yet decoder cosine still rises (Figure 10). Harmless
+(right): ID shows the highest early harmless Jaccard (0.071, z= + 0.89), consistent with Llama’s harmless-first
+early entanglement in 5/8 languages (DE, EN, ID, RU, ZH).
+
+
+Figure 14: Jaccard overlap between safety and language identity features per language per phase in Qwen. Harm
+(left): peaks strongly in late layers, with RU (0.127, z= + 0.87), ID (0.102, z= + 0.41), and HI (0.090, z= + 0.76)
+the highest. Harmless (right): near-zero in middle and late layers for most languages.
+Figure 15: Jaccard overlap between safety and language identity features per language per phase in Gemma. Both
+harm (left) and harmless (right) collapse to near-zero Jaccard in late layers (6/8 languages: 0.000), yet decoder
+cosine remains non-zero (Figure 12), directly illustrating geometric entanglement without feature-ID sharing.
+Harmless Jaccard is near-zero from middle layers onward across almost all languages, confirming earlier and sharper
+harmless decoupling in Gemma relative to Llama and Qwen.
+
+
+Figure 16: Mean cross-lingual safety feature similarity across processing phases, averaged over language pairs for
+Llama, Qwen, and Gemma.
+Figure 17: Cross-lingual harm feature similarity for all language pairs in early layers with mean Jaccard and decoder
+cosine metrics across LLMs.
+Figure 18: Cross-lingual harmless feature similarity for all language pairs in early layers with mean Jaccard and
+decoder cosine metrics across LLMs.
+
+
+Figure 19: Cross-lingual harm feature similarity for all language pairs in middle layers with mean Jaccard and
+decoder cosine metrics across LLMs.
+Figure 20: Cross-lingual harmless feature similarity for all language pairs in middle layers with mean Jaccard and
+decoder cosine metrics across LLMs.
+Figure 21: Cross-lingual harm feature similarity for all language pairs in late layers with mean Jaccard and decoder
+cosine metrics across LLMs.
+
+
+Figure 22: Cross-lingual harmless feature similarity for all language pairs in late layers with mean Jaccard and
+decoder cosine metrics across LLMs.
+Figure 23: Decoder cosine similarity between harm features across all language pairs in Llama, per phase (early /
+middle / late). Sharing peaks in middle layers for most pairs; late-layer harm sharing is modest (max ≤0.166). EN
+pairs are uniformly below average across all phases.
+Figure 24: Decoder cosine similarity between harmless features across all language pairs in Llama. Harmless
+sharing exceeds harm sharing in late layers (HI-ID: 0.275; HI-VI: 0.271; AR-ID: 0.257), confirming harmless
+mechanisms retain more cross-lingual universality than harm near output.
+
+
+Figure 25: Jaccard overlap between harm features across all language pairs in Llama, per phase. Values are
+substantially lower than decoder cosine (Figure 23), with most pairs showing near-zero early-layer Jaccard. Late-
+layer Jaccard is modest (max ≤0.081).
+Figure 26: Jaccard overlap between harmless features across all language pairs in Llama. Late-layer harmless
+Jaccard is higher than harm Jaccard for most pairs (e.g. HI-ID: 0.144, HI-VI: 0.144), consistent with harmless
+features being more cross-lingually universal than harm features near output.
+Figure 27: Decoder cosine similarity between harm features across all language pairs in Qwen. Qwen reaches
+the highest harm cross-lingual sharing of the entire study in late layers (AR-RU: 0.684, z= + 1.12; ID-VI: 0.644,
+z= + 0.93; RU-VI: 0.632, z= + 0.91), with a consistent high-sharing cluster of AR, ID, RU, VI, ZH visible as the
+darkest region in the late phase heatmap.
+
+
+Figure 28: Decoder cosine similarity between harmless features across all language pairs in Qwen. Late-layer
+harmless sharing reaches the maximum of the entire study (ID-VI: 0.752, z= + 0.88; VI-ZH: 0.749, z= + 0.99;
+AR-ID: 0.702, z= + 0.84), with the AR-ID-RU-VI-ZH cluster dominating the late phase heatmap. EN pairs are the
+least similar in every phase.
+Figure 29: Jaccard overlap between harm features across all language pairs in Qwen, per phase. Late-layer Jaccard
+confirms the cross-lingual coupling observed in decoder cosine, with AR-RU reaching the highest value (AR-RU:
+0.515; ID-VI: 0.483; RU-VI: 0.478).
+Figure 30: Jaccard overlap between harmless features across all language pairs in Qwen. Late-layer harmless
+Jaccard is the highest of the entire study (ID-VI: 0.598; VI-ZH: 0.561), directly corroborating the decoder cosine
+findings (Figure 28) and confirming that late-layer cross-lingual sharing in Qwen operates at both ID and geometric
+levels.
+
+
+Figure 31: Decoder cosine similarity between harm features across all language pairs in Gemma. Middle layers
+show the strongest harm convergence among all three models (DE-RU: 0.494, z=+0.76; VI-ID: 0.478, z=+0.57).
+Late-layer harm sharing is moderate (ID-ZH: 0.452, z= + 0.58; ID-VI: 0.481, z= + 0.58) and exceeds late-layer
+harmless sharing; the harm-harmless reversal unique to Gemma.
+Figure 32: Decoder cosine similarity between harmless features across all language pairs in Gemma. Gemma shows
+the highest harmless alignment of all models and phases in middle layers (DE-ZH: 0.616, z= + 0.99; DE-VI: 0.605,
+z= + 1.02; RU-VI: 0.557, z= + 0.85). Late-layer harmless sharing is lower than harm sharing, the reversal from
+Llama and Qwen where harmless consistently exceeds harm, visible by comparing this figure with Figure 31.
+Figure 33: Jaccard overlap between harm features across all language pairs in Gemma, per phase. Middle layers
+show the highest harm Jaccard in Gemma (DE-RU: 0.314; VI-ID: 0.301). Late-layer Jaccard is sparse but non-zero
+for several pairs (ID-ZH: 0.299; AR-ID: 0.260), consistent with the moderate late-layer harm decoder cosine
+(Figure 31).
+
+
+Figure 34: Jaccard overlap between harmless features across all language pairs in Gemma. Harmless Jaccard
+collapses in late layers for most pairs (near-zero), while harm Jaccard remains moderate (Figure 33). This ID-level
+harmless collapse combined with moderate late-layer harm Jaccard directly supports the harmless-harm reversal
+finding unique to Gemma at both ID and geometric levels.
+Figure 35: Fluency class distribution after intervention across all experiments. Class 3 (high fluency, red) forms the
+base; Class 2 (moderate, orange), Class 1 (poor, yellow), and Class 0 (broken, green) stack above.
+
+
+Figure 36: Decoder cosine entanglement (x-axis) vs
+fluency degradation (y-axis), measured as percentage of
+non-Class-3 responses after intervention.
+
+
+Figure 37: Example response from Llama on a German harmful prompt before and after amplifying harmless
+features at L18.
+
+
+Figure 38: Example response from Gemma on an Arabic harmful prompt before and after amplifying harm features
+at L34.
+
+
+Figure 39: Example response from Qwen on a Vietnamese harmful prompt before and after cross-lingual feature
+transfer (VI→ZH) at L19, ablating VI harmless features and replacing VI harm features with ZH harm features.
