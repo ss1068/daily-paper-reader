@@ -6,34 +6,31 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-06
-- 运行时间：2026-09-06 21:22:14 UTC
+- 最新运行日期：2026-09-07
+- 运行时间：2026-09-07 22:26:30 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：1
-- 速读区：3
+- 本次总论文数：3
+- 精读区：2
+- 速读区：1
 
 ### 今日简报（AI）
-今日精选 4 篇 AI 与 Web 安全前沿论文，深度剖析大模型黑盒攻击优化与可信交互安全机制。
-最值得关注的是高分论文 OASIS 针对硬标签黑盒文本攻击的序列优化突破，以及大模型时代 Web 安全从“注入”向“交互”的视角重构。
-建议优先精读 OASIS 掌握最新的文本对抗攻击范式，同步关注大模型在对话上下文与远程工具调用中的安全防护演进。
-- 详情：[/202609/06/README](/202609/06/README)
+今日精选 3 篇大模型安全前沿论文，重点探索多语言越狱与隐蔽威胁评估。
+最值得关注多语言劝诱越狱基准 IndicSafeEval 与隐性威胁评估工具 TIER，揭示了模型在复杂隐秘攻击下的安全脆弱性。
+建议优先研读两篇 8.0 分的精读论文，快速掌握大模型越狱防御与安全边界评估的最新进展。
+- 详情：[/202609/07/README](/202609/07/README)
 
 ### 精读区论文标签
-1. [OASIS: Optimizing Attacker Sequences for Hard-Label Black-Box Text Attacks](/202609/06/2608.29568v1-oasis-optimizing-attacker-sequences-for-hard-label-black-box-text-attacks)  
+1. [IndicSafeEval: Safety Robustness of Large Language Models under Multilingual Persuasive Jailbreak Attacks](/202609/07/2609.03781v2-indicsafeeval-safety-robustness-of-large-language-models-under-multilingual-persuasive-jailbreak-attacks)  
    标签：评分：8.0/10、query:llm
-   evidence：针对大模型的硬标签黑盒文本攻击
+   evidence：多语言说服性越狱攻击下的安全鲁棒性评估
+2. [TIER: Threat Implicitness Benchmark for Evaluating LLM Safety Behaviors](/202609/07/2609.05117v1-tier-threat-implicitness-benchmark-for-evaluating-llm-safety-behaviors)  
+   标签：评分：8.0/10、query:llm
+   evidence：评估大语言模型针对复杂越狱攻击安全行为的基准
 
 ### 速读区论文标签
-1. [Same Request, Different Boundary: Evaluating Cybersecurity Assistance across Conversational Contexts](/202609/06/2609.00578v1-same-request-different-boundary-evaluating-cybersecurity-assistance-across-conversational-contexts)  
-   标签：评分：7.0/10、query:jb-def
-   evidence：评估网络安全领域的拒绝机制
-2. [Shifting from Injection to Interaction: Rethinking Web Security in the Age of LLMs and Beyond](/202609/06/2609.03999v1-shifting-from-injection-to-interaction-rethinking-web-security-in-the-age-of-llms-and-beyond)  
+1. [Rethinking Indirect Prompt Injection as a Test-Time Search Problem](/202609/07/2609.04495v1-rethinking-indirect-prompt-injection-as-a-test-time-search-problem)  
    标签：评分：7.0/10、query:llm
-   evidence：Web系统中的大模型特定漏洞如提示注入
-3. [ACLE-MCP: Attested Capability Leases for Execution-Time Trust in Remote LLM Tool Use](/202609/06/2609.02690v1-acle-mcp-attested-capability-leases-for-execution-time-trust-in-remote-llm-tool-use)  
-   标签：评分：6.0/10、query:llm
-   evidence：远程大模型工具使用的安全措施
+   evidence：将间接提示注入视为搜索问题
 
 
 <div class="dpr-home-promo-card">
