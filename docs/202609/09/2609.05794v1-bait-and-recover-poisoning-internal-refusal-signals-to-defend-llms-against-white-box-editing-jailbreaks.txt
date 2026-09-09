@@ -1,0 +1,601 @@
+Title: Bait-and-Recover: Poisoning Internal Refusal Signals to Defend LLMs against White-Box Editing Jailbreaks
+
+URL Source: https://arxiv.org/pdf/2609.05794v1
+
+Published Time: Wed, 09 Sep 2026 00:21:05 GMT
+
+Number of Pages: 13
+
+Markdown Content:
+# Bait-and-Recover: Poisoning Internal Refusal Signals to Defend LLMs against White-Box Editing Jailbreaks 
+
+Tian Gao 1 Zhipeng Xie 1 Yuhao Wu 1 Junhua Liu 1 Xin Fang 2
+
+> 1
+
+Anhui Laboratory for Safe Artificial Intelligence in the Yangtze River Delta 
+
+> 2
+
+iFlytek Research 
+
+tiangao5@iflytek.com Code: github.com/SparkShieldLab/bait-and-recover 
+
+Abstract 
+
+Open-weight large language models face a low-cost white-box threat from representation engi-neering attacks. Attackers can estimate refusal directions and search for projection-matrix ed-its that suppress safety alignment while pre-serving general capabilities, within minutes on a single GPU and without gradient-based train-ing. We propose Bait-and-Recover , a weight-level defense that places a bait adapter where attackers read activations and a paired recov-ery adapter at the subsequent layer. Trained via gradient routing, this decouples the obser-vation path from the behavior path. By actively poisoning the residual signal used for measure-ment, Bait-and-Recover disrupts the attacker’s edit search, while the recovery layer restores clean downstream computation. Across four open-weight models, our defense raises the minimum refusal rate against white-box edit searches from 16.25% to 71.75% under a strict behavior-preservation budget ( KL ≤ 0.10 ), with negligible impact on general benchmarks. By invalidating the core measurement assump-tion of these attacks, observation-path poison-ing offers a practical complement to behavior-level safety training. 
+
+1 Introduction 
+
+The public release of large language models (LLMs) (Yang et al., 2025; Gemma Team, 2025) provides direct transparency into safety alignment, but simultaneously exposes these models to adver-sarial weight editing (Meng et al., 2022, 2023). A recent family of white-box jailbreaks, exemplified by Heretic (Weidmann, 2025), treats safety-aligned refusal as a representation-engineering target (Zou et al., 2023a; Arditi et al., 2024): estimate the resid-ual direction that separates harmful and harmless prompts, then search for weight edits that suppress that direction while preserving the model’s general capabilities. Unlike prompt-level jailbreaks (Zou et al., 2023b; Ren et al., 2025), this white-box at-tack requires no crafted suffix: the attacker reads the model’s internal computation, edits projection matrices in place, and keeps the best edit found within a strict behavior-preservation budget. This targeted editing method is a low-cost, broadly applicable threat to open-weight releases. Full-parameter or LoRA-based (Hu et al., 2022) fine-tuning attacks against safety alignment require substantially more compute and often degrade gen-eral capabilities if not carefully controlled. By con-trast, a Heretic-style edit search executes in min-utes on a single GPU and yields an edited check-point that suppresses refusal while retaining normal behavior on benign prompts. Once redistributed, such checkpoints are difficult for the original de-fender to recall or patch. The practical defense point therefore shifts to the released weights them-selves: protection must be embedded directly in the checkpoint before distribution. This attack also exposes a gap in existing safety mechanisms. Safety fine-tuning, preference opti-mization, runtime filters, and activation-level de-fenses (Ouyang et al., 2022; Rafailov et al., 2023; Zou et al., 2024) constrain the model’s output be-havior, but leave the internal refusal representa-tions unprotected against measurement and editing. A white-box edit attack succeeds only when two conditions are met: the attacker must be able to 
+
+observe an internal signal correlated with refusal, and editing against that signal must predictably alter the output behavior . Decoupling these two components is therefore a natural defense target: actively poison the internal signal to blind the at-tacker’s measurement, while preserving the clean downstream computation and outputs. We formalize this idea as observation–behavior path decoupling and implement it via Bait-and-Recover . Let ℓ denote a selected bait layer, and index residual streams so that layer ℓ writes to rℓ+1 .Our defense places a bait adapter inside layer ℓ,making the poisoned signal visible at the attacker’s 1arXiv:2609.05794v1 [cs.CR] 5 Sep 2026 readout rℓ+1 , and a paired recovery adapter inside the following layer ℓ + 1 , repairing the downstream residual rℓ+2 . The intended state is deliberately asymmetric: the attacker’s search uses a corrupted readout, while generation continues from a near-clean downstream residual. 
+
+Contributions. By invalidating the core measure-ment assumption of representation engineering at-tacks, our work offers a weight-level complement to behavior-level safety training. Concretely: 1. We formulate observation–behavior path de-coupling as an explicit defense objective for white-box jailbreaks, shifting the focus from constraining outputs to poisoning the attacker’s internal measurement step. 2. We propose a cross-layer bait/recovery design with a gradient-routing rule that successfully decouples the two paths during training, pre-venting recovery pressure from erasing the bait. 3. Across four open-weight models, the de-fense raises the mean minimum refusal rate against Heretic searches spanning both global and per-layer direction scopes under a strict behavior-preservation budget ( KL ≤ 0.10 )from 16.25% to 71.75%, with negligible im-pact on general capability benchmarks. 
+
+2 Related Work 
+
+Representation-engineering jailbreaks. 
+
+Heretic (Weidmann, 2025) is the direct at-tack we evaluate against. Although released as an open-source tool rather than a peer-reviewed paper, it is a representative practical implementation of automatic abliteration: the public repository reports broad uptake, 1 and its technical design builds on the observation that refusal behavior can often be captured by a low-dimensional direction in residual space (Arditi et al., 2024). Heretic packages this line of work into an automated attack by combining directional ablation with parameter search, drawing on prior abliteration systems and refinements (Labonne, 2024c; Lai, 2025b,a). More broadly, representation engineering studies how steering vectors and internal activations can 
+
+> 1The Heretic repository listed over 21k stars and 2.2k forks, and its README reported over 3000 community-created Heretic models, when accessed on May 23, 2026:
+> https://github.com/p-e-w/heretic .
+
+monitor or control model behavior (Zou et al., 2023a). Recent empirical work characterizes how abliteration erodes diverse safety-pretraining components across open-weight checkpoints (Agnihotri et al., 2025), motivating defenses that specifically resist this attack family. We share the white-box access assumption of this line of work but invert its defensive target: rather than improving post-edit behavior, we attack the reliability of the attacker’s representation estimate itself. 
+
+Activation-space defenses. Circuit-breaker-style defenses modify internal activations to improve alignment and robustness against adversarial in-puts (Zou et al., 2024). Representation Noising (Rosati et al., 2024) is closer to our setting in that it also intervenes on internal representations under an open-weight threat model, but its objective is to remove or destabilize the harmful-representation information itself, so that harmful behavior cannot be recovered through subsequent fine-tuning. Bait-and-Recover targets a different stage of the attack: we assume a fine-tuning-free white-box edit search that estimates a refusal direction from model acti-vations and then edits projection matrices in place. Rather than removing the underlying refusal or harmful representations, we leave them intact and inject a localized poison signal at the attacker’s ob-servation layer, paired with a recovery adapter at the next layer that restores the downstream com-putation. This asymmetry preserves the model’s normal safety behavior while making the attacker’s inferred edit direction unreliable. These defenses therefore cover different parts of the safety prob-lem: behavior under adversarial inputs, resistance to harmful fine-tuning, and the reliability of the attacker’s internal measurement. 
+
+Model editing and LoRA defenses. ROME, MEMIT, and related editing methods show that localized weight changes can rewrite model be-havior (Meng et al., 2022, 2023), and recent anal-yses show that pruning and low-rank modifica-tions can directly compromise safety alignment (Wei et al., 2024). Safety-aware fine-tuning and robust safeguards investigate how to preserve or strengthen safety behavior under subsequent mod-ification (Hsu et al., 2024; Tamirisa et al., 2025). Our work is complementary: it targets the estima-tor that a white-box edit attack relies on, not only the post-edit behavior. 2Layer-Prior Analysis Pass A Training Merge A Pass B Training Heretic Evaluation        
+
+> Clean-Model Layer Prior Alternating-Pass Bait/Recovery Training White-Box Evaluation
+> Residual collection
+> Fisher layer score
+> SVD geometry
+> Layer prior
+> important layers and directions
+> coverage window: L14 ... L34
+> L14 L15 L16 L17 L33 L34
+
+...      
+
+> Pass A: L15, L17, ..., L33
+> ...
+> Pass B: L14, L16, ..., L34
+> ...
+> alternate half layers per pass
+> Cross-layer pair: bait@L -> recovery@(L+1)
+> Intra-pass layer-joint
+> Recovery constraint
+> residual L bait down_proj
+> residual L+1 (poisoned) recovery@(L+1) residual L+2 (restored)
+> Baseline model
+> Defended model
+> Heretic search direction_scope= {global & per-layer} trials=200
+> Metrics
+> min refusals within KL budget
+> global / per-layer scopes
+> best trial: KL, refusals, scope
+> general capability retention +
+> Bait poisons the attacker's readout residual; recovery restores the downstream behavior path.
+> Refusal direction: bad - good
+
+Figure 1: Overview of the alternating-pass Bait-and-Recover pipeline. A clean-model layer-prior analysis determines the bait band before training; Training Pass A covers one layer parity, Training Pass B starts from the merged Pass A checkpoint and covers the complementary parity, and the final checkpoint is evaluated against the same white-box Heretic search used for the baseline. The layer-joint box denotes local tuning inside a pass over neighboring trained pairs, not a joint optimization between Pass A and Pass B. 
+
+3 Background and Problem Formulation 
+
+Heretic-style attack. Given harmful prompts 
+
+Pharmful and harmless prompts Pharmless , the at-tacker reads residual stream ℓ+1 and estimates the refusal direction by the difference of means, 
+
+ˆrℓ+1 = Ex∼P harmful [rℓ+1 (x)] 
+
+− Ex∼P harmless [rℓ+1 (x)] . (1) Heretic (Weidmann, 2025) then performs an Op-tuna (Akiba et al., 2019) search over target lay-ers, direction scope (global or per-layer), edited modules, sign, and edit scale, optimizing for the lowest harmful-prompt refusal count under a KL budget. We evaluate the default configuration: 200 trials, with o_proj and down_proj as the primary editable modules, and report the minimum refusal count among trials inside each budget. 
+
+Problem formulation. We assume a white-box attacker with the released checkpoint, full access to intermediate activations, and enough compute to execute Heretic with its default mean-direction estimator under both global and per-layer scopes. The defense is embedded in the released weights and evaluated as a single merged checkpoint. Let 
+
+M be the clean model, fM the defended model, and 
+
+ˆr(·) the attacker’s estimator (Eq. 1). The post-edit attack success rate ASR is the fraction of harmful prompts for which the edited model does not refuse, equivalently ASR = 1 −refusal rate. The defender minimizes ASR subject to a general-prompt KL budget: 
+
+min 
+
+θbait ,θ rec 
+
+ASR 
+
+
+
+Edit( fM, ˆr( fM)) 
+
+
+
+(2) s.t. KL( fM∥M ) ≤ εKL .
+
+4 Method 
+
+Bait-and-Recover has four stages: (i) build a layer prior from harmful and harmless prompts on the clean model; (ii) train two complementary parities of bait/recovery pairs across the selected band; (iii) within each pass, perform a short local layer-joint step over neighboring trained pairs to absorb cross-layer coupling; and (iv) evaluate the merged check-point with the same Heretic search used for the baseline. Figure 1 summarizes this full pipeline. 
+
+4.1 Layer-band Selection 
+
+We select the defended layer band using clean-model statistics. Let L be the number of trans-former layers and let ℓ denote a bait layer. Because layer ℓ writes into rℓ+1 and the paired recovery layer ℓ + 1 writes into rℓ+2 , the last admissible bait layer is ℓ ≤ L−2.3We first define the default clean-model prior win-dow 
+
+Wprior = [ ⌊0.4( L−1) ⌋, L −2] , (3) which targets middle-to-deep layers while stopping at L−2, so every bait layer still has a following recovery layer. The layer prior uses the separability between harmful and harmless prompts in the clean-model residual stream. For a candidate bait layer ℓ and class c ∈ {harmful , harmless }, let Rc,ℓ +1 =
+
+{rℓ+1 (x) : x ∈ P c} be the final-token residuals used by the Heretic direction estimator. We esti-mate 
+
+μc,ℓ +1 = 1
+
+|Rc,ℓ +1 |
+
+X
+
+> r∈Rc,ℓ +1
+
+r, 
+
+Σc,ℓ +1 = Cov( Rc,ℓ +1 ),
+
+(4) and score the harmful/harmless separability at that residual by a trace-form Fisher ratio, 2
+
+Fℓ+1 = ∥μharmful ,ℓ +1 − μharmless ,ℓ +1 ∥22
+
+tr(Σ harmful ,ℓ +1 ) + tr(Σ harmless ,ℓ +1 ) + ϵ ,
+
+(5) where larger Fℓ+1 means the clean refusal signal is easier for Heretic to measure. Let Npair denote the number of available bait/recovery pairs. Since each pair covers one bait layer, if the prior window contains at most Npair layers, we use the whole window. If it is larger, we choose the contiguous sub-band with the highest cumulative Fisher score: 
+
+S⋆ = arg max 
+
+> S=[ a,a +Npair −1] ⊆W prior
+
+X
+
+> ℓ∈S
+
+Fℓ+1 . (6) 
+
+4.2 Cross-layer Defense Unit 
+
+Each defense unit spans two adjacent transformer layers. To intercept the attacker’s search space, we place a bait adapter on the down_proj module in layer ℓ. The paired recovery uses adapters on the o_proj and down_proj modules in layer ℓ +1, repairing the computation before it reaches the generation head. A gradient-routing rule decouples the updates within each unit: recovery gradients do not update bait parameters, and visibility gradients do not update recovery parameters.     
+
+> 2We use a trace-form simplification rather than the full Fisher discriminant tr(Σ −1
+> WΣB)to avoid ill-conditioned co-variance inversion at high dimensions.
+
+4.3 Bait Adapter 
+
+The bait adapter is a low-rank (Hu et al., 2022) residual perturbation attached to down_proj :
+
+δℓ(h) = exp( γℓ)BℓAℓh, Aℓ ∈ Rr×din , Bℓ ∈ Rdmodel ×r. (7) Here h is the input to layer ℓ’s down_proj , and γℓ is a trainable gate initialized small and later calibrated to the target bait visibility. The initialization reuses the clean-model means from Section 4.1. For a bait layer ℓ, the residual-space refusal direction is 
+
+ˆdℓ+1 = μharmful ,ℓ +1 − μharmless ,ℓ +1 
+
+∥μharmful ,ℓ +1 − μharmless ,ℓ +1 ∥2
+
+. (8) We also compute an input detector direction at the 
+
+down_proj input. Let ¯hc,ℓ be the class mean of the final-token down_proj inputs hℓ(x) for x ∈ P c;then 
+
+ˆqℓ = ¯hharmful ,ℓ − ¯hharmless ,ℓ 
+
+∥¯hharmful ,ℓ − ¯hharmless ,ℓ ∥2
+
+. (9) Finally, we decompose the down-projection weights, 
+
+W down  
+
+> ℓ
+
+= Uℓ diag( σℓ)V ⊤ 
+
+> ℓ
+
+. (10) The right singular vectors Vℓ provide additional input-side detector directions, while the left singu-lar vectors Uℓ provide residual-space output direc-tions. The first bait channel is the refusal-cancel chan-nel. Its detector reads the input-side refusal direc-tion ˆqℓ, and its output writes against the residual-stream refusal direction ˆdℓ+1 :
+
+Aℓ[0 , :] = ˆ q⊤ 
+
+> ℓ
+
+, Bℓ[: , 0] = − ˆdℓ+1 . (11) A second tag channel carries a side signal for the recovery layer while avoiding the clean refusal axis. Let vℓ,j be the j-th right singular vector in Vℓ. We choose the vector whose projection away from ˆqℓ
+
+has the largest norm, 
+
+j⋆ = arg max  
+
+> j
+
+(I − ˆqℓ ˆq⊤ 
+
+> ℓ
+
+)vℓ,j 2 . (12) The tag output ˆtℓ+1 is initialized to a reproducible pseudo-random unit vector in the orthogonal com-plement of ˆdℓ+1 . We construct the tag’s detector 
+
+˜vℓ by orthogonalizing and normalizing the selected singular vector: 
+
+˜vℓ = (I − ˆqℓ ˆq⊤ 
+
+> ℓ
+
+)vℓ,j ⋆
+
+(I − ˆqℓ ˆq⊤ 
+
+> ℓ
+
+)vℓ,j ⋆ 2
+
+, (13) 4and initialize the channel as Aℓ[1 , :] = ˜ v⊤ 
+
+> ℓ
+
+and 
+
+Bℓ[: , 1] = ˆ tℓ+1 . Thus the tag detector is separated from ˆqℓ, and the tag output is orthogonal to ˆdℓ+1 .If the adapter rank exceeds two, each additional channel is initialized from the leading unused SVD directions: its detector uses a right singular vector from Vℓ, and its output uses the corresponding left singular vector from Uℓ, ordered by σℓ. To ensure training stability, we keep Aℓ fixed and update only 
+
+Bℓ and γℓ during training. This keeps the bait’s input-side detectors anchored to the clean refusal boundary, while its residual-space outputs adapt. 
+
+4.4 Recovery Adapter 
+
+After the bait has changed rℓ+1 , the next layer can propagate this perturbation through both residual-writing paths: the attention output projection and the MLP down-projection. For each bait at layer 
+
+ℓ, we therefore attach recovery adapters to o_proj 
+
+and down_proj of layer ℓ+1 . For a recovery site 
+
+m ∈ { o_proj , down_proj } with input zm, the adapter is 
+
+ρℓ,m (zm) = Oℓ,m Dℓ,m zm. (14) Here Dℓ,m ∈ Rr×din ,m detects recovery-layer fea-tures, and Oℓ,m ∈ Rdmodel ×r writes a corrective update into the residual stream. For initialization, we compute the SVD of the recovery-site base projection, 
+
+Wℓ+1 ,m = U rec  
+
+> ℓ,m
+
+diag( σrec 
+
+> ℓ,m
+
+)( V rec 
+
+> ℓ,m
+
+)⊤. (15) Let vrec  
+
+> ℓ,m,i
+
+be the i-th right singular vector, ordered by decreasing σrec 
+
+> ℓ,m
+
+. The detector reads these high-energy input directions, while the output is initial-ized to the anti-bait output basis: 
+
+Dℓ,m [i, :] = ( vrec 
+
+> ℓ,m,i
+
+)⊤, (16) 
+
+Oℓ,m [: , i ] = −Bℓ[: , i ], i = 0 , . . . , r − 1. (17) Training then refines these anti-bait directions to account for the intermediate layer transformations. 
+
+4.5 Training Objective and Schedule 
+
+Training combines two main objectives with a lightweight visibility floor: 
+
+L = λfisher Lfisher + λrec Lrec + λvis Lvis . (18) 
+
+Lfisher is the trace-form Fisher ratio from Sec-tion 4.1, recomputed on defended bait residuals: 
+
+Lfisher = 1
+
+|S|
+
+X
+
+> ℓ∈S
+
+F def 
+
+> ℓ+1
+
+. (19) This attack-facing term directly lowers the harm-ful/harmless separability visible to the attacker’s direction estimator. Lrec aligns the clean and de-fended residual states after each paired recovery layer, 
+
+Lrec = 1
+
+|S|
+
+X
+
+> ℓ∈S
+
+Ex
+
+" ∥rdef 
+
+> ℓ+2
+
+(x) − rclean  
+
+> ℓ+2
+
+(x)∥22
+
+∥rclean  
+
+> ℓ+2
+
+(x)∥22 + ϵ
+
+#
+
+.
+
+(20) Finally, Lvis is an auxiliary hinge that keeps the bait measurable at the attacker-visible residual: 
+
+Lvis = 1
+
+|S|
+
+X
+
+> ℓ∈S
+
+Ex
+
+"
+
+τvis − ∥∆rℓ+1 (x)∥2
+
+∥rclean  
+
+> ℓ+1
+
+(x)∥2 + ϵ
+
+#2+
+
+,
+
+(21) where ∆rℓ+1 (x) = rdef 
+
+> ℓ+1
+
+(x) − rclean  
+
+> ℓ+1
+
+(x) and 
+
+[u]+ = max( u, 0) .Gradients are routed by role: recovery align-ment updates only recovery adapters, while Fisher-readout and visibility losses update only bait adapters. For multi-layer coverage, the selected band is split into two alternating parities trained in Pass A and Pass B. KL is monitored on general prompts during training, with a final KL budget. 
+
+5 Experimental Setup 
+
+Data. Bait-and-Recover uses defense-training data that is separate from Heretic’s attack and eval-uation data. For the defense side, harmless prompts and unlabeled general prompts come from Alpaca-GPT4 instruction prompts (Peng et al., 2023), while harmful prompts come from SafeMTData 
+
+Attack_600 (Ren et al., 2025). We extract the harmful prompt field and retain direct harmful re-quests using a deterministic filter over procedural markers (e.g., how-to, steps, build) and explicit abuse terms (e.g., malware, phishing, weapon, at-tack). Because this filtered harmful pool is smaller than the broad instruction corpus used for harmless prompts, the labeled defense split uses 128 harm-less and 64 harmful prompts for refusal direction estimation and the Fisher-readout loss. We also reserve 256 unlabeled general prompts for resid-ual recovery, the label-free visibility floor, and KL monitoring, plus a non-overlapping validation split of 64 harmless and 32 harmful prompts. For attack evaluation, we leave Heretic’s prompt sources unchanged: mlabonne/harmless_alpaca 
+
+and mlabonne/harmful_behaviors (Labonne, 2024b,a). Heretic uses the first 400 training ex-amples from each source to estimate the attack 5Table 1: Evaluated models and defense configurations. The bait band is chosen by the clean-model layer-prior rule; Pass A/B list the alternating bait-layer ranges used by the two-stage schedule, and r is the realized LoRA rank range after applying the rank-selection rule.                          
+
+> Model LBand Pass A Pass B r
+> Qwen3-4B-Instruct 36 14–34 odd 15–33 even 14–34 4–16 Qwen3-8B 36 14–34 odd 15–33 even 14–34 7–16 Gemma-3-1B-IT 26 10–24 odd 11–23 even 10–24 4Gemma-3-12B-IT 48 18–38 odd 19–37 even 18–38 4–16
+
+direction, and evaluates each attack trial on 100 held-out harmless prompts and 100 held-out harm-ful prompts for attack KL and harmful-refusal mea-surement. All Heretic searches use 200 trials. 
+
+Models and configuration. We evaluate four open-weight instruction models from the Qwen3 and Gemma 3 families (Yang et al., 2025; Gemma Team, 2025). Table 1 reports the layer count, defended bait band, alternating pass split, and LoRA rank range for each model. Layer bands follow the rule in Section 4.1. We fix the pair budget at Npair = 21 across all models: this value is inherited from our initial Qwen3-4B-Instruct experiment, where the default prior win-dow [⌊0.4( L−1) ⌋, L −2] at L = 36 contains ex-actly 21 admissible bait layers and was used in full. We then reuse this same 21-pair budget for all subsequent models so that defense capacity stays comparable rather than scaling with model depth. Under this fixed budget, both Qwen models use their default 21-layer window in full; Gemma-3-1B-IT has only 15 admissible bait layers in its default window, so we use all of them; and for Gemma-3-12B-IT the default window [18 , 46] is larger than Npair , so the Fisher-based contiguous-band selection in Section 4.1 picks the highest-scoring 21-layer sub-band, [18 , 38] (Appendix A). LoRA ranks are selected per layer by first choosing the smallest rank whose clean-model cumulative squared singular-value energy reaches 40%, then clipping to the allowed range and enforcing the minimum rank required by the refusal-cancel and tag-channel basis. The recovery adapter uses the same rank as its paired bait adapter. Table 1 reports the realized ranks; the Gemma-3-1B layers all hap-pen to hit the minimum rank, so its realized range collapses to the single value 4. 
+
+Training hyperparameters. We use an identi-cal hyperparameter configuration across all eval-uated models. All experiments use a shared op-timizer recipe: AdamW (Loshchilov and Hutter, 2019) with weight decay 0, gradient clipping at 1.0, and learning rate 2×10 −4. We fix λrec =0 .5,
+
+λvis =4 , λfisher =2 , τvis =0 .20 . In each pass, every bait/recovery pair is first trained in isolation for two epochs; after these single-pair stages, neighboring two-pair blocks receive one epoch of intra-pass layer-joint tuning. Detailed reproducibility config-urations are provided in Appendix D. 
+
+Evaluation metrics. The main attack metric is the minimum refusal rate (out of 100 harmful prompts) found by a 200-trial Heretic search at each reported evaluation KL threshold; higher val-ues mean stronger defense. We also track held-out general-prompt KL after each defense pass as a behavior-preservation diagnostic. To mea-sure changes on general capability benchmarks, we run paired EvalScope evaluations (ModelScope Community, 2024) with the same vLLM backend (Kwon et al., 2023), chat template, output cap, and postprocessing for each clean/defended pair, report-ing MMLU-Redux accuracy (Gema et al., 2025; Hendrycks et al., 2021) and IFEval prompt-level strict accuracy (Zhou et al., 2023; Biderman et al., 2024). 
+
+6 Results 
+
+6.1 Fisher Suppression and Behavior Preservation 
+
+Figure 2 validates the training task directly. Across both passes, the residuals exposed to the attacker show lower Fisher separability after bait training, while the following recovery residuals stay close to the previous reference model. This is the intended asymmetry of the defense: the observation path becomes less useful for estimating a refusal direc-tion, but the behavior path is pulled back toward the clean computation. Appendix C reports the corresponding raw Fisher values. Alongside this Fisher diagnostic, we monitor validation KL on general prompts to check that the defense has not moved normal behavior too far. All four configurations completed under the shared training schedule. The Pass B general-prompt KL remains below 0.20 for every model, though the amount of movement differs by architec-ture (Table 2). Qwen3-8B is the most conservative case, while Gemma-3-12B has the largest general-prompt movement among the four models. 6L15 L17 L19 L21 L23 L25 L27 L29 L31 L33                                             
+
+> bait layer ℓ
+> 0.4 0.6 0.8 1.0 1.2
+> Fisher retention (after / before)
+> mean 0.64 mean 0.88
+> reference = clean model
+> Pass A: clean -> after Pass A
+> 0.60 0.58 0.63 0.59 0.64 0.68 0.69 0.67 0.69 0.64 0.93 0.92 0.91 0.90 0.89 0.88 0.86 0.86 0.84 0.86
+> L14 L16 L18 L20 L22 L24 L26 L28 L30 L32 L34
+> bait layer ℓ
+> mean 0.66 mean 0.94
+> reference = Pass-A model
+> Pass B: Pass A -> after Pass B
+> 0.54 0.58 0.66 0.63 0.68 0.67 0.74 0.70 0.74 0.71 0.61 0.95 0.97 0.94 0.95 0.95 0.95 0.94 0.94 0.92 0.93 0.93
+> bait residual (r ℓ+ 1 )recovery residual (r ℓ+ 2 )visual reference band reference (retention = 1)
+
+Figure 2: Layer-wise Fisher retention during Qwen3-4B-Instruct training. Retention is after-pass Fisher divided by the before-pass reference (clean model for Pass A; Pass A model for Pass B). The shaded band is a visual reference around unchanged retention. Table 2: Behavior-preservation diagnostics and general capability retention after defense. KL is measured on held-out general prompts after Pass A and Pass B; Pass B is the final defended checkpoint. MMLU reports MMLU-Redux accuracy, IFEval reports prompt-level strict accuracy, and ∆ is defended minus baseline. 
+
+General-prompt KL MMLU-Redux IFEval Model Pass A Pass B Base Def. ∆ Base Def. ∆
+
+Qwen3-4B-Instruct 0.016 0.020 0.7549 0.7538 -0.0011 0.8244 0.8373 +0.0129 Qwen3-8B 0.007 0.010 0.7782 0.7761 -0.0021 0.8373 0.8373 +0.0000 Gemma-3-1B-IT 0.066 0.079 0.4180 0.4193 +0.0013 0.5730 0.5342 -0.0388 Gemma-3-12B-IT 0.049 0.085 0.7528 0.7506 -0.0022 0.8059 0.8096 +0.0037 Mean 0.035 0.049 0.6760 0.6750 -0.0010 0.7602 0.7546 -0.0055 
+
+6.2 General Capability Retention 
+
+Because KL alone does not establish general capa-bility preservation, we also run paired benchmark evaluations for each clean/defended checkpoint. Ta-ble 2 reports both the validation KL diagnostics and the paired capability evaluation. MMLU-Redux ac-curacy is largely unchanged across the four check-points: the defended-minus-baseline deltas range from −0.0022 to +0 .0013 , with a mean change of 
+
+−0.0010 . IFEval prompt-strict accuracy is also sta-ble in aggregate, with a mean change of −0.0055 .Thus the paired benchmarks support broad capabil-ity retention. 
+
+6.3 Heretic Attack Evaluation 
+
+Heretic is the central white-box attack evaluation because it directly tests the failure mode targeted by Bait-and-Recover: the attacker estimates an inter-nal refusal direction, searches projection edits, and keeps the best edit whose behavior KL remains within a budget. We therefore report the mini-mum refusal rate over the pooled global and per-layer direction scopes at each KL threshold; higher rates mean fewer successful harmful responses and stronger defense. We use KL ≤ 0.10 as the primary evalu-ation budget because it matches the behavior-preservation scale of the defended checkpoints themselves: after Pass B, the held-out general-prompt KL values in Table 2 are all below 0.10, and the paired MMLU-Redux/IFEval evaluations show little aggregate capability movement. Thus, if Heretic can substantially reduce refusals while stay-ing within the same KL scale, the edited checkpoint is not just degraded; it is a behavior-preserving jail-break. At this primary evaluation budget, Bait-and-Recover raises the mean minimum refusal rate from 16.25% to 71.75% ( +55 .50 ; 4.4 ×), with gains on all four models (Table 3; see Appendix B for full re-sults across all KL budgets). The defense remains effective at the looser KL ≤ 0.20 budget, where the mean defended minimum refusals is 65.25, only 6.5 refusals below the KL ≤ 0.10 value and still 
+
++55 .25 above the baseline mean of 10.00. Robust-ness extends to the very loose KL ≤ 1.0 budget as well: the mean defended score remains at 54.00 (+50 .25 over baseline; Table 3, KL ≤ 1.0 col-umn), with Gemma-3-12B-IT keeping its per-layer defended score at 82 across all KL budgets, while 7Table 3: Main Heretic attack result across four KL budgets. Each cell reports the minimum refusal rate (%, out of 100 harmful prompts; higher is better); bold marks the KL ≤ 0.10 primary evaluation budget.                                                                                    
+
+> KL ≤0.05 KL ≤0.10 KL ≤0.20 KL ≤1.0
+> Model Base Def. ∆Base Def. ∆Base Def. ∆Base Def. ∆
+> Qwen3-4B-Instruct 97 78 −19 46 78 +32 24 65 +41 560 +55
+> Qwen3-8B 36 67 +31 11 60 +49 11 50 +39 833 +25
+> Gemma-3-1B-IT 17 84 +67 567 +62 364 +61 264 +62
+> Gemma-3-12B-IT 12 82 +70 382 +79 282 +80 059 +59
+> Mean 40.50 77.75 +37 .25 16.25 71.75 +55 .50 10.00 65.25 +55 .25 3.75 54.00 +50 .25
+
+Table 4: Heretic minimum refusals at the KL ≤ 0.10 
+
+primary evaluation budget, split by attacker direction scope. Each entry reports base/defended/ ∆.            
+
+> Model Global Per-layer Qwen3-4B-Instruct 46/ 78 /+32 94/81/ −13
+> Qwen3-8B 11/ 60 /+49 99/88/ −11
+> Gemma-3-1B-IT 5/ 67 /+62 22/82/ +60
+> Gemma-3-12B-IT 26/ 83 /+57 3/82/ +79
+> Mean 22.00/ 72.00 /+50 .00 54.50/83.25/ +28 .75
+
+its global defended score falls from 83 to 59 only at 
+
+KL ≤ 1.0. This is consistent with the broader trend at the primary KL ≤ 0.10 budget, where global search is the most effective attack scope against every defended model. 
+
+Global vs. per-layer scope. The scope decom-position shows where the defended models remain most vulnerable. Before defense, the most effec-tive attack scope differs by model: global search sets the pooled minimum for Qwen3-4B-Instruct, Qwen3-8B, and Gemma-3-1B-IT, while per-layer search is the most effective attack on Gemma-3-12B-IT. After defense, global search remains the most effective attack scope against the three smaller models, while for Gemma-3-12B-IT the global and per-layer defended scores are nearly tied at 
+
+KL ≤ 0.10 (83 vs. 82). Across models (Table 4), defended global scores are 78/60/67/83 and per-layer scores are 81/88/82/82. The mean across models reflects this trend, with a 72.00% refusal rate under global search compared to 83.25% under per-layer search at KL ≤ 0.10 . Thus the defense substantially raises the attacker’s best available re-fusal floor, but the remaining attack surface is con-centrated in global direction estimates rather than individual layer directions, which is the main re-maining weakness of the defense. 
+
+7 Conclusion 
+
+We introduced Bait-and-Recover, a weight-level defense that protects open-weight models against white-box editing jailbreaks by invalidating their core measurement assumption. Rather than only hardening the output behavior, Bait-and-Recover places a bait adapter at the attacker’s observation layer and a paired recovery adapter at the next layer. Trained under a gradient-routing rule, this mecha-nism decouples the observation path from the be-havior path: it actively poisons the residual signal used to estimate the refusal direction, making the attacker’s edit search unreliable, while the recovery layer restores the clean downstream computation. Across four open-weight models from the Qwen3 and Gemma-3 families, the defense raises the mean minimum refusal rate against Heretic searches from 16.25% to 71.75% at a strict KL ≤ 0.10 bud-get, with negligible impact on general capability benchmarks. Because the defense ships as a single merged checkpoint loadable with standard causal-LM inference, observation-path poisoning is a prac-tical weight-level complement to behavior-level safety training. The remaining attack surface con-centrates in global direction estimates. Future work includes more adaptive estimators and broader ca-pability evaluation. 
+
+Limitations 
+
+Adaptive estimators. We evaluate against Heretic’s default difference-of-means estimator. While the bait is designed to distort this estimator’s observed refusal direction, we do not evaluate robust or multivariate alternatives such as geomet-ric medians, PCA, or LDA. Estimator-agnostic robustness therefore remains an open question. 
+
+High-KL budgets. Our defense targets the strict behavior-preservation setting ( KL ≤ 0.10 ). At looser budgets (e.g., KL ≥ 0.20 ), greater permitted 8deviation allows attackers to discover bypass edits. Our conclusions should therefore be interpreted as applying to low-distortion edit searches rather than arbitrary model changes. 
+
+Behavior-level fine-tuning. Supervised fine-tuning (SFT) can still overwrite safety behaviors, as a small number of adversarial examples suffices to undo alignment (Qi et al., 2024). We do not claim protection against attackers willing to collect harm-ful training data and run additional fine-tuning. 
+
+Comparison with prior weight-level defenses. 
+
+We do not run direct comparisons with prior weight-level or representation-level safety defenses such as Circuit Breakers (Zou et al., 2024), Representation Noising (Rosati et al., 2024), or Tamper-Resistant Safeguards (Tamirisa et al., 2025). These defenses are evaluated under behavior-level attacks, harm-ful fine-tuning, or safeguard tampering, whereas our experiments isolate Heretic-style edit searches. We therefore leave cross-defense evaluations and combination studies to future work. 
+
+Ethics Statement 
+
+This work studies a dual-use white-box jailbreak setting to improve defenses. To mitigate risks, we report only aggregate statistics, omit harmful gen-erations, and explicitly avoid releasing jailbroken checkpoints. Because our defense modifies model weights, practical deployment should be paired with capability evaluations to verify that benign utility is preserved. 
+
+References 
+
+Shashank Agnihotri, Jonas Jakubassa, Priyam Dey, Sachin Goyal, Bernt Schiele, Venkatesh Babu Rad-hakrishnan, and Margret Keuper. 2025. A granu-lar study of safety pretraining under model ablitera-tion. arXiv preprint arXiv:2510.02768 . Accepted at NeurIPS 2025 Workshop on Lock-LLM. Takuya Akiba, Shotaro Sano, Toshihiko Yanase, Takeru Ohta, and Masanori Koyama. 2019. Optuna: A next-generation hyperparameter optimization framework. In Proceedings of the 25th ACM SIGKDD Interna-tional Conference on Knowledge Discovery and Data Mining , pages 2623–2631. ACM. Andy Arditi, Oscar Balcells Obeso, Aaquib Syed, Daniel Paleka, Nina Panickssery, Wes Gurnee, and Neel Nanda. 2024. Refusal in language models is me-diated by a single direction. In Advances in Neural Information Processing Systems , volume 37. Stella Biderman, Hailey Schoelkopf, Lintang Sutawika, Leo Gao, Jonathan Tow, Baber Abbasi, Alham Fikri Aji, Pawan Sasanka Ammanamanchi, Sidney Black, Jordan Clive, Anthony DiPofi, Julen Etxaniz, Ben-jamin Fattori, Jessica Zosa Forde, Charles Foster, Jef-frey Hsu, Mimansa Jaiswal, Wilson Y. Lee, Haonan Li, and 11 others. 2024. Lessons from the trenches on reproducible evaluation of language models. arXiv preprint arXiv:2405.14782 .Aryo Pradipta Gema, Joshua Ong Jun Leang, Giwon Hong, Alessio Devoto, Alberto Carlo Maria Man-cino, Rohit Saxena, Xuanli He, Yu Zhao, Xiaotang Du, Mohammad Reza Ghasemi Madani, Claire Bar-ale, Robert McHardy, Joshua Harris, Jean Kaddour, Emile Van Krieken, and Pasquale Minervini. 2025. Are we done with MMLU? In Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Lin-guistics: Human Language Technologies (Volume 1: Long Papers) , pages 5069–5096, Albuquerque, New Mexico. Association for Computational Linguistics. Gemma Team. 2025. Gemma 3 technical report. arXiv preprint arXiv:2503.19786 .Dan Hendrycks, Collin Burns, Steven Basart, Andy Zou, Mantas Mazeika, Dawn Song, and Jacob Steinhardt. 2021. Measuring massive multitask language under-standing. In International Conference on Learning Representations .Chia-Yi Hsu, Yu-Lin Tsai, Chih-Hsun Lin, Pin-Yu Chen, Chia-Mu Yu, and Chun-Ying Huang. 2024. Safe LoRA: The silver lining of reducing safety risks when finetuning large language models. In Advances in Neural Information Processing Systems , volume 37. Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean Wang, Lu Wang, and Weizhu Chen. 2022. LoRA: Low-rank adaptation of large language models. In International Conference on Learning Representations .Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E. Gon-zalez, Hao Zhang, and Ion Stoica. 2023. Efficient memory management for large language model serv-ing with PagedAttention. In Proceedings of the 29th Symposium on Operating Systems Principles , pages 611–626. Association for Computing Machinery. Maxime Labonne. 2024a. harmful_behaviors [dataset]. Hugging Face dataset, https://huggingface.co/ datasets/mlabonne/harmful_behaviors . Ac-cessed: 2026-05-23. Maxime Labonne. 2024b. harmless_alpaca [dataset]. Hugging Face dataset, https://huggingface. co/datasets/mlabonne/harmless_alpaca . Ac-cessed: 2026-05-23. Maxime Labonne. 2024c. Uncensor any LLM with abliteration [blog post]. Hugging Face blog, https://huggingface.co/blog/mlabonne/ abliteration . Accessed: 2026-05-23. 
+
+9Jim Lai. 2025a. Norm-preserving biprojected abliteration [blog post]. Hugging Face community article, https://huggingface.co/blog/grimjim/ norm-preserving-biprojected-abliteration .Accessed: 2026-05-23. Jim Lai. 2025b. Projected abliteration [blog post]. Hugging Face community article, 
+
+https://huggingface.co/blog/grimjim/ projected-abliteration . Accessed: 2026-05-23. Ilya Loshchilov and Frank Hutter. 2019. Decoupled weight decay regularization. In International Confer-ence on Learning Representations .Kevin Meng, David Bau, Alex Andonian, and Yonatan Belinkov. 2022. Locating and editing factual associ-ations in GPT. In Advances in Neural Information Processing Systems , volume 35. Kevin Meng, Arnab Sen Sharma, Alex Andonian, Yonatan Belinkov, and David Bau. 2023. Mass-editing memory in a transformer. In International Conference on Learning Representations .ModelScope Community. 2024. EvalScope: A stream-lined and customizable framework for efficient large model evaluation and benchmarking [soft-ware]. GitHub repository, https://github.com/ modelscope/evalscope . Accessed: 2026-05-23. Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Car-roll L. Wainwright, Pamela Mishkin, Chong Zhang, Sandhini Agarwal, Katarina Slama, Alex Ray, John Schulman, Jacob Hilton, Fraser Kelton, Luke Miller, Maddie Simens, Amanda Askell, Peter Welinder, Paul Christiano, Jan Leike, and Ryan Lowe. 2022. Training language models to follow instructions with human feedback. In Advances in Neural Information Processing Systems , volume 35, pages 27730–27744. Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, Alban Desmaison, Andreas Kopf, Edward Yang, Zachary DeVito, Martin Raison, Alykhan Te-jani, Sasank Chilamkurthy, Benoit Steiner, Lu Fang, and 2 others. 2019. PyTorch: An imperative style, high-performance deep learning library. In Ad-vances in Neural Information Processing Systems ,volume 32. Baolin Peng, Chunyuan Li, Pengcheng He, Michel Gal-ley, and Jianfeng Gao. 2023. Instruction tuning with GPT-4. arXiv preprint arXiv:2304.03277 .Xiangyu Qi, Yi Zeng, Tinghao Xie, Pin-Yu Chen, Ruoxi Jia, Prateek Mittal, and Peter Henderson. 2024. Fine-tuning aligned language models compromises safety, even when users do not intend to! In International Conference on Learning Representations .Rafael Rafailov, Archit Sharma, Eric Mitchell, Christo-pher D. Manning, Stefano Ermon, and Chelsea Finn. 2023. Direct preference optimization: Your language model is secretly a reward model. In Advances in Neural Information Processing Systems , volume 36. Qibing Ren, Hao Li, Dongrui Liu, Zhanxu Xie, Xiaoya Lu, Yu Qiao, Lei Sha, Junchi Yan, Lizhuang Ma, and Jing Shao. 2025. LLMs know their vulnerabili-ties: Uncover safety gaps through natural distribution shifts. In Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Vol-ume 1: Long Papers) , pages 24763–24785, Vienna, Austria. Association for Computational Linguistics. Domenic Rosati, Jan Wehner, Kai Williams, Łukasz Bartoszcze, David Atanasov, Robie Gonzales, Sub-habrata Majumdar, Carsten Maple, Hassan Sajjad, and Frank Rudzicz. 2024. Representation noising: A defence mechanism against harmful finetuning. In 
+
+Advances in Neural Information Processing Systems ,volume 37. Rishub Tamirisa, Bhrugu Bharathi, Long Phan, Andy Zhou, Alice Gatti, Tarun Suresh, Maxwell Lin, Justin Wang, Rowan Wang, Ron Arel, Andy Zou, Dawn Song, Bo Li, Dan Hendrycks, and Mantas Mazeika. 2025. Tamper-resistant safeguards for open-weight LLMs. In International Conference on Learning Representations .Boyi Wei, Kaixuan Huang, Yangsibo Huang, Tinghao Xie, Xiangyu Qi, Mengzhou Xia, Prateek Mittal, Mengdi Wang, and Peter Henderson. 2024. Assess-ing the brittleness of safety alignment via pruning and low-rank modifications. In Proceedings of the 41st International Conference on Machine Learning ,volume 235 of Proceedings of Machine Learning Research , pages 52588–52610. PMLR. Philipp Emanuel Weidmann. 2025. Heretic: Fully auto-matic censorship removal for language models [soft-ware]. GitHub repository, https://github.com/ p-e-w/heretic . Accessed: 2026-05-23. Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue, Anthony Moi, Pier-ric Cistac, Tim Rault, Remi Louf, Morgan Funtowicz, Joe Davison, Sam Shleifer, Patrick von Platen, Clara Ma, Yacine Jernite, Julien Plu, Canwen Xu, Teven Le Le Scao, Sylvain Gugger, and 3 others. 2020. Trans-formers: State-of-the-art natural language processing. In Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations , pages 38–45. Association for Com-putational Linguistics. An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayi-heng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, and 41 oth-ers. 2025. Qwen3 technical report. arXiv preprint arXiv:2505.09388 .Jeffrey Zhou, Tianjian Lu, Swaroop Mishra, Sid-dhartha Brahma, Sujoy Basu, Yi Luan, Denny Zhou, and Le Hou. 2023. Instruction-following evalu-ation for large language models. arXiv preprint arXiv:2311.07911 .
+
+10 Andy Zou, Long Phan, Sarah Chen, James Campbell, Phillip Guo, Richard Ren, Alexander Pan, Xuwang Yin, Mantas Mazeika, Ann-Kathrin Dombrowski, Shashwat Goel, Nathaniel Li, Michael J. Byun, Zifan Wang, Alex Mallen, Steven Basart, Sanmi Koyejo, Dawn Song, Matt Fredrikson, and 2 others. 2023a. Representation engineering: A top-down approach to AI transparency. arXiv preprint arXiv:2310.01405 .Andy Zou, Long Phan, Justin Wang, Derek Duenas, Maxwell Lin, Maksym Andriushchenko, Rowan Wang, J. Zico Kolter, Matt Fredrikson, and Dan Hendrycks. 2024. Improving alignment and robust-ness with circuit breakers. In Advances in Neural Information Processing Systems , volume 37. Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J. Zico Kolter, and Matt Fredrikson. 2023b. Univer-sal and transferable adversarial attacks on aligned language models. arXiv preprint arXiv:2307.15043 .
+
+11 18 22 26 30 34 38 42 46    
+
+> bait layer index
+> 0.0 0.5 1.0 1.5 2.0 2.5 3.0 3.5
+> clean-model Fisher  Fℓ + 1
+> selected band 18--38
+> unselected 39--46
+> Clean-model Step 1 evidence
+> 010 20 30
+> cumulative Fisher
+> 18-38 19-39 20-40 25-45 24-44 26-46 23-43 21-41 22-42
+> 27.8 selected
+> 26.7 24.8 24.2 23.9 23.8 23.6 23.4 23.2
+> 21-pair budget candidates
+
+Figure 3: Clean-model layer-prior evidence for Gemma-3-12B. Given the Npair = 21 budget, the selected [18 , 38] 
+
+bait band is the highest-scoring contiguous 21-layer sub-band inside the default [18 , 46] clean-model prior window. 
+
+A Gemma-3-12B Layer-prior Evidence 
+
+Figure 3 shows the clean-model Fisher diagnostic used to select the Gemma-3-12B bait band: with the fixed Npair = 21 pair budget, the contiguous-band selection rule from §4.1 picks [18 , 38] as the highest-scoring 21-layer sub-band inside the de-fault [18 , 46] prior window. 
+
+Table 5: Full overall Heretic results. Models are abbre-viated: Q3-4B (Qwen3-4B-Instruct), Q3-8B (Qwen3-8B), G3-1B (Gemma-3-1B-IT), G3-12B (Gemma-3-12B-IT). 
+
+KL Q3-4B Q3-8B G3-1B G3-12B 
+
+≤ 0.01 100/100/0 97/95/-2 88/NA/NA 72/82/+10 
+
+≤ 0.02 97/97/0 78/84/+6 88/84/-4 37/82/+45 
+
+≤ 0.03 97/78/-19 44/78/+34 77/84/+7 37/82/+45 
+
+≤ 0.05 97/78/-19 36/67/+31 17/84/+67 12/82/+70 
+
+≤ 0.075 97/78/-19 15/60/+45 17/67/+50 8/82/+74 
+
+≤ 0.10 46/78/+32 11/60/+49 5/67/+62 3/82/+79 
+
+≤ 0.15 24/70/+46 11/52/+41 5/64/+59 3/82/+79 
+
+≤ 0.20 24/65/+41 11/50/+39 3/64/+61 2/82/+80 
+
+≤ 0.30 6/65/+59 8/37/+29 2/64/+62 1/82/+81 
+
+≤ 0.50 5/65/+60 8/33/+25 2/64/+62 1/82/+81 
+
+≤ 1.00 5/60/+55 8/33/+25 2/64/+62 0/59/+59 
+
+Table 6: Full global-direction Heretic results. 
+
+KL Q3-4B Q3-8B G3-1B G3-12B 
+
+≤ 0.01 100/100/0 97/95/-2 88/NA/NA 89/83/-6 
+
+≤ 0.02 97/97/0 78/84/+6 88/84/-4 61/83/+22 
+
+≤ 0.03 97/78/-19 44/78/+34 77/84/+7 61/83/+22 
+
+≤ 0.05 97/78/-19 36/67/+31 17/84/+67 61/83/+22 
+
+≤ 0.075 97/78/-19 15/60/+45 17/67/+50 61/83/+22 
+
+≤ 0.10 46/78/+32 11/60/+49 5/67/+62 26/83/+57 
+
+≤ 0.15 24/78/+54 11/52/+41 5/64/+59 26/83/+57 
+
+≤ 0.20 24/78/+54 11/50/+39 3/64/+61 2/83/+81 
+
+≤ 0.30 6/78/+72 8/37/+29 2/64/+62 2/83/+81 
+
+≤ 0.50 5/78/+73 8/33/+25 2/64/+62 1/83/+82 
+
+≤ 1.00 5/78/+73 8/33/+25 2/64/+62 0/59/+59 
+
+Table 7: Full per-layer-direction Heretic results. “NA” means no trial landed inside the KL bucket. 
+
+KL Q3-4B Q3-8B G3-1B G3-12B 
+
+≤ 0.01 NA/NA/NA NA/99/NA 94/NA/NA 72/82/+10 
+
+≤ 0.02 NA/NA/NA NA/99/NA 90/NA/NA 37/82/+45 
+
+≤ 0.03 NA/NA/NA 100/99/-1 88/88/0 37/82/+45 
+
+≤ 0.05 100/95/-5 100/99/-1 78/86/+8 12/82/+70 
+
+≤ 0.075 99/95/-4 100/97/-3 68/82/+14 8/82/+74 
+
+≤ 0.10 94/81/-13 99/88/-11 22/82/+60 3/82/+79 
+
+≤ 0.15 94/70/-24 95/86/-9 10/82/+72 3/82/+79 
+
+≤ 0.20 88/65/-23 93/74/-19 8/80/+72 3/82/+79 
+
+≤ 0.30 88/65/-23 90/67/-23 6/80/+74 1/82/+81 
+
+≤ 0.50 56/65/+9 85/60/-25 3/77/+74 1/82/+81 
+
+≤ 1.00 28/60/+32 78/53/-25 3/73/+70 1/82/+81 
+
+B Detailed Heretic Evaluation Results 
+
+Tables 5–7 report the full evaluation results used to produce the selected main-text attack table. Each entry reports B/D/ ∆, where ∆ = D − B. 
+
+C Qwen3-4B-Instruct Raw Fisher Values 
+
+Table 8 reports the raw Fisher separability scores for the validation split visualized in Figure 2. 
+
+D Reproducibility Details 
+
+We implement the framework in PyTorch (Paszke et al., 2019) with the Hugging Face Transformers library (Wolf et al., 2020). Models are loaded from their official Hugging Face or ModelScope weights and trained in bfloat16 , with device-mapped model parallelism for the larger checkpoints. After training, the bait and recovery adapters are merged into the base weights, so the defended checkpoint runs as a standard causal LM with no custom infer-ence code. Layer-prior extraction and adapter training both use final-token residual activations from training 12 Table 8: Raw Fisher values for Qwen3-4B-Instruct. “Ref.” denotes the before-pass reference used as the retention denominator.                                                                                                                
+
+> Bait Recovery Pass Layer Ref. Def. Ref. Def. A15 0.89 0.54 1.06 0.99 A17 1.05 0.61 1.26 1.16 A19 1.54 0.98 1.35 1.23 A21 1.19 0.70 1.19 1.07 A23 1.23 0.79 1.17 1.04 A25 1.17 0.79 1.12 0.98 A27 1.11 0.77 1.05 0.90 A29 1.04 0.69 1.02 0.88 A31 1.02 0.71 1.00 0.83 A33 0.92 0.59 0.89 0.76 B14 0.65 0.35 0.54 0.51 B16 0.98 0.57 0.61 0.59 B18 1.16 0.76 0.98 0.93 B20 1.22 0.77 0.70 0.67 B22 1.06 0.72 0.79 0.75 B24 1.04 0.70 0.79 0.75 B26 0.98 0.73 0.77 0.72 B28 0.90 0.63 0.69 0.65 B30 0.88 0.65 0.71 0.65 B32 0.83 0.59 0.59 0.55 B34 0.76 0.46 0.66 0.61
+
+splits of the ModelScope-Alpaca and SafeMT datasets that are disjoint from the Heretic evalu-ation prompts. Heretic attacks are run with the Op-tuna search framework, using 200 trials per attack over projection layers, weight matrices, edit direc-tions, and scales, and reporting the lowest-refusal edit within each KL budget. General-capability evaluation uses EvalScope with a vLLM backend, and we use the same chat template, generation length, and post-processing for the clean and de-fended checkpoints of each model when computing MMLU-Redux and IFEval. 13
