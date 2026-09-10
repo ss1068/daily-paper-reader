@@ -1,0 +1,339 @@
+Title: From Review to Authorization: Key-Isolated Threshold Signing for LLM Agents
+
+URL Source: https://arxiv.org/pdf/2609.05901v1
+
+Published Time: Wed, 09 Sep 2026 00:28:11 GMT
+
+Number of Pages: 14
+
+Markdown Content:
+# From Review to Authorization: Key-Isolated Threshold Signing for LLM Agents 
+
+Yu Zheng 
+
+University of California, Berkeley 
+
+yu.zheng@berkeley.edu 
+
+Qizhi Zhang 
+
+Independent Researcher 
+
+zqz.math@gmail.com 
+
+## Abstract 
+
+Autonomous LLM agents can turn untrusted content into effectful actions such as payments and permission changes. If the same process interprets this con-tent and controls a reusable signing credential, prompt injection can cross the judgment boundary and reach execution authority. We present KITA , a review-to-authorization architecture that keeps the user’s personal secret signing key and every threshold signing-key share outside all LLM processes. Under threshold-signature unforgeability and our system assumptions, compromising the proposer and fewer than t reviewer–signer domains cannot produce a valid authorization for a new action without signing contributions from t distinct domains. Thus, any such authorization includes a share from an uncompromised domain, bound to the canonical action and released only after authenticated reviewer approval. This establishes execution-bound authorization integrity. We implement the com-plete reviewer-to-executor path with a structured-output LLM adapter and thresh-old BLS. Six system tests validate quorum gating and message binding at this interface, while cryptographic microbenchmarks measure the online signing path and its scaling behavior. 
+
+## 1 Introduction 
+
+Suppose a user asks a personal agent to buy a laptop for at most $1,500. The agent reads product pages, compares offers, selects a merchant, and initiates a payment. These steps mix two different kinds of computation. Comparing offers is a judgment: the agent interprets information and may be wrong. Payment is an external action: it changes the user’s state and may be costly or impossible to reverse. This distinction motivates separating model-based reasoning from execution authority. This separation becomes important because the agent must reason over untrusted content. Indirect prompt injection can change an agent’s plan or tool calls [Zhan et al., 2024, Debenedetti et al., 2024]. If the same process also controls a reusable signing credential, a manipulated model output can trigger an unauthorized transfer or permission change. The security problem is therefore not only whether the model makes a sound decision. It is also whether one LLM process exposed to untrusted inputs can execute that decision on its own. Agent payment protocols already provide part of the required boundary. AP2 [Google, 2025], for example, binds a concrete closed mandate to an open mandate authorized by the user and requires mandate validation to occur in deterministic code. In autonomous mode, the Shopping Agent signs the closed mandate with an Agent Key. AP2 does not, however, require a threshold of model-based reviewers to authorize that signature. Our work complements mandate-based delegation by asking how semantic approval itself can become enforceable authority. Three research lines address other parts of this problem. Multi-agent debate, voting, and model panels can improve semantic judgment, but their output remains advisory unless another compo-nent enforces it [Du et al., 2024, Verga et al., 2024, Choi et al., 2025]. Policy and delegation 
+
+> Preprint. arXiv:2609.05901v1 [cs.CR] 5 Sep 2026
+
+systems constrain privileges or enforce machine-checkable limits [Debenedetti et al., 2025, Shi et al., 2025, South et al., 2025, Muruaga, 2026], but ambiguous evidence may still require model judgment. Threshold and collective signing make a quorum cryptographically necessary for a mes-sage [Borselius et al., 2002, Syta et al., 2016], while leaving the application’s review semantics and execution boundary to the surrounding system. These lines of work leave open the composition studied here: binding model-based review to threshold authorization for the exact executable action, while keeping all signing-key material outside LLM processes. The executor then accepts an action only when it carries a valid quorum signature over the reviewed bytes. We realize this composition with KITA , a key-isolated threshold authorization framework. A pro-poser that holds no signing-key share constructs a canonical authorization object and its supporting evidence. Multiple separately instantiated LLM reviewers evaluate the same object, while isolated signer services retain the signing-key shares and release per-message signature shares only after authenticated approval of the same bytes. Changing an amount, recipient, permission, evidence commitment, or other signed field creates a new message and requires a new quorum. KITA pro-vides an authorization-integrity guarantee under explicit system assumptions: with isolated signer services and an unforgeable threshold scheme, an adversary controlling the proposer and fewer than 
+
+t reviewer–signer domains cannot produce a valid final signature for a new action without valid signing contributions from t distinct domains. To summarize, our paper makes three contributions: • We define a key-isolated agent architecture in which the proposer holds no signing-key share and no LLM process receives the user’s personal secret signing key or a threshold signing-key share. Semantic approval and signing are separated across reviewer–signer domains. • We bind every approval, signature share, and execution decision to one canonical authorization object. We state the resulting authorization-integrity guarantee and specify the system conditions under which it holds. • We provide an executable end-to-end prototype that connects a structured-output LLM reviewer interface to authenticated approval gating, threshold BLS, and exact-action execution. 
+
+## 2 Threshold-Enforced Agent Authorization 
+
+Design Overview and Framework Functionality. Our goal is to make model-based review an enforceable condition for execution. Instead of letting one key-holding agent both interpret un-trusted content and authorize actions, KITA separates proposal, review, signing, and execution. This separation provides three linked protections: no LLM process receives a personal signing key or threshold signing-key share; every approval and signature share is bound to the same canonical ac-tion m; and the executor accepts m only with a valid threshold signature. Thus, prompt-controlled code cannot directly exercise reusable signing authority, substitute one action for an approved one, or replace missing approvals with a software vote count. During setup, isolated signer services run verifiable distributed key generation to obtain signing-key shares and a group public key without reconstructing the group secret key. For each request, a proposer with no signing-key share constructs m, an evidence manifest E, and the applicable policy π. All reviewers inspect the same (m, E, π ) without receiving signing-key material. An authenticated approval from reviewer Ri unlocks only its paired signer Si, which produces a share 
+
+σi on those exact bytes. A combiner verifies the shares and interpolates shares from t distinct signer indices into a BLS signature σ. An external verifier then checks σ, the policy and key epochs, expiry, and replay state before executing exactly m. Figure 1 summarizes this flow. 2review committee ( t-of-n)               
+
+> Principal
+> policy π
+> Proposer P
+> no key share
+> Verifier V
+> execute m
+> R1|S1:sk 1R2|S2:sk 2Rn|Sn:sk n· · ·
+> π, pk
+> DKG / shares
+> (m, E, π )σiif approve
+> (m, σ )
+
+Figure 1: In KITA , the proposer sends the same canonical action, evidence, and policy to all review-ers. Reviewer Ri may approve m, but only isolated signer Si holds sk i and can return a signature share. The verifier executes m only after a threshold signature has been formed from at least t valid shares. 
+
+Protocol. The principal defines policy π and authorizes a committee. Proposer P may process untrusted content but holds no signing-key share. Each reviewer Ri evaluates requests as data, while its paired signer Si retains sk i outside the LLM runtime and exposes only a narrow sign-share interface. An untrusted combiner collects valid shares, and verifier V independently checks the final signature before executing the signed action. Every component operates on one domain-separated canonical message m, which contains the pro-tocol version, principal, committee and key epoch, policy version, complete action fields, execution domain, nonce, expiry, and H(E). The evidence manifest E records source identifiers, content digests, retrieval times, and freshness metadata. Committing to H(E) prevents evidence from be-ing changed after review. In KITA , this prevents post-review evidence substitution, while reviewers remain responsible for validating the evidence. Appendix A specifies the canonical object and its execution state machine. The functionality is realized by a setup phase and a four-step online protocol. During setup, the signer services run verifiable DKG. Each Si obtains a secret share sk i and an authenticated pub-lic verification share pk i; the committee obtains group public key pk . No party reconstructs the group secret key [Gennaro et al., 2007]. The online steps are ordered so that each one establishes a condition required by the next: 1. Propose one review object. P sends the same (m, E, π ) to every reviewer. This gives the committee one common decision target. Because P has no share, choosing a proposal does not let it authorize that proposal. 2. Review, authenticate, and release. Ri returns reject, revise (c), or approve (m). An authen-ticated approval reaches only its paired Si, which checks the message digest before returning 
+
+σi = SignShare (sk i, m ). A requested change, such as a lower amount, creates new bytes m′
+
+and restarts review. This ordering ensures that an LLM controls a decision but never handles a signing-key share. 3. Validate and combine shares. The combiner accepts (i, σ i) only if VerifyShare (pk i, m, σ i) = 1. It then combines shares from any t distinct valid indices. Per-share verification rejects mal-formed inputs, while threshold combination prevents P from inventing approvals or combining shares issued for different messages. 4. Verify and execute the same bytes. V checks (m, σ ) under pk , validates the policy and key epochs, expiry, and nonce, and executes exactly m. It consumes the nonce atomically. This last check prevents a valid authorization from being detached from the action that reviewers saw. 
+
+Comparison between KITA and traditional workflows. KITA replaces the single-key authoriza-tion boundary of traditional agent workflows with a cryptographically enforced, policy-bounded committee. Unlike per-action human signing, it preserves autonomous execution; unlike a reusable Agent Key, neither the proposer nor any LLM receives the user’s personal key or a committee signing-key share. Authenticated approvals release isolated shares only on the exact object m, and the executor accepts m only under the resulting threshold signature. The contribution is therefore an enforceable bridge from semantic review to exact-action authorization, rather than an advisory multi-agent vote; it can replace the traditional decision-and-signing step while leaving application-specific verification and settlement unchanged. Appendix D gives the detailed comparison. 3Security guarantee (informal). An adversary that controls P and fewer than t reviewer–signer domains cannot make V accept a new action m without either obtaining valid contributions from 
+
+t distinct signer domains or forging the threshold signature. Thus, any below-threshold coalition needs a signature share from an uncompromised domain, released only after authenticated reviewer approval of the canonical action bytes. This authorization-integrity guarantee prevents unilateral authorization and action substitution. Appendix B states the guarantee more precisely and explains why threshold BLS enforces it. 
+
+## 3 Evaluation 
+
+We test three claims needed by the design: exact-action enforcement, threshold–correlation behav-ior, and online signing cost. Appendix E reports the complete settings, execution trace, and tables. 
+
+End-to-end enforcement. Our 2-of-3 prototype connects a typed LLM-reviewer interface to au-thenticated gateways, isolated BLS signers, a combiner, and an executor. All six tests pass: valid quorum, below-threshold rejection, digest mismatch, action substitution, replay, and key-isolated inputs. Three live Codex reviewers also exercise this path. Thus, model text alone cannot execute an action without matching authenticated approvals and a valid threshold signature; together, the tests validate this enforcement path. 
+
+Threshold selection under correlated judgments. We simulate n = 7 reviewers with approval probabilities 0.90 for legitimate and 0.20 for out-of-policy requests, using a one-factor Gaussian latent correlation ρ and 4 × 10 5 trials per estimate. At ρ = 0 .2, a 4-of-7 threshold yields false-approval (FA) and false-rejection (FR) rates 0.083 and 0.017 , versus 0.20 and 0.10 for one reviewer; unanimity yields FA 0.0013 but FR 0.45 . At t = 4 , FA rises from 0.033 at ρ = 0 toward 0.20 as 
+
+ρ → 1. Figure 2 therefore shows two separate controls: t sets the security–availability point, while 
+
+ρ characterizes the value obtained from reviewer diversity. 1 2 3 4 5 6 7          
+
+> approval threshold t(of n= 7)
+> 10 −4
+> 10 −3
+> 10 −2
+> 10 −1
+> 10 0
+> error rate (log)  single-reviewer FA single-reviewer FR majority
+> (a) threshold dials security vs. utility
+> False-approve (bad OK'd) False-reject (good blocked)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> latent score correlation ρ
+> 0.00 0.05 0.10 0.15 0.20
+> error rate
+> single-reviewer FA
+> (b) correlation controls committee benefit
+> False-approve False-reject
+
+Figure 2: Controlled sensitivity: (a) threshold trades FA against FR; (b) reviewer dependence deter-mines the committee benefit. Appendix E reports full settings and confidence intervals. 
+
+Cryptographic cost. Using py ecc 8.0.0 on Apple Silicon [Ethereum Foundation, 2025], signature-share generation averages 4.9–5.7 ms, and combination grows from 5.0 ms at t = 2 to 
+
+62 .0 ms at t = 22 . Pairing-based share and final verification average 0.55 –0.59 s; final verification is independent of (t, n ), and the final signature is 48 bytes. The online path needs no inter-signer communication; combiner work grows with admitted shares, while final-verifier work is constant. Appendices E and C give the full benchmark. 
+
+## 4 Concluding Remarks 
+
+We explore KITA as a starting point for making collective agent judgment an enforceable authoriza-tion boundary. By keeping reusable secret-key material outside LLMs and requiring t approvals on the exact action, KITA separates semantic review, credential custody, and execution for future au-tonomous agents. Semantic quality remains limited by correlated reviewer judgments; future work can use heterogeneous reviewer ensembles with calibrated confidence and abstention. 4References 
+
+Alexandra Boldyreva. Threshold signatures, multisignatures and blind signatures based on the gap-Diffie-Hellman-group signature scheme. In Public Key Cryptography — PKC 2003 , volume 2567 of Lecture Notes in Computer Science , pages 31–46. Springer, 2003. doi: 10.1007/3-540-36288-6 3. Dan Boneh, Ben Lynn, and Hovav Shacham. Short signatures from the Weil pairing. In Advances in Cryptology — ASIACRYPT 2001 , volume 2248 of Lecture Notes in Computer Science , pages 514–532. Springer, 2001. doi: 10.1007/3-540-45682-1 30. Dan Boneh, John Bradley, Sergey Gorbunov, Riad S. Wahby, Hoeteck Wee, Christopher A. Wood, and Zhenfei Zhang. BLS signatures. IETF Internet-Draft draft-irtf-cfrg-bls-signature-07, work in progress, 2026. URL https://datatracker. ietf.org/doc/draft-irtf-cfrg-bls-signature/ .Niklas Borselius, Chris J. Mitchell, and Aaron Wilson. On the value of threshold signatures. ACM SIGOPS Operating Systems Review , 36(4):30–35, 2002. doi: 10.1145/583800.583804. Hyeong Kyu Choi, Xiaojin Zhu, and Sharon Li. Debate or vote: Which yields better decisions in multi-agent large language models? In Advances in Neural Information Processing Systems (NeurIPS) , 2025. doi: 10.52202/085713-3405. Edoardo Debenedetti, Jie Zhang, Mislav Balunovi´ c, Luca Beurer-Kellner, Marc Fischer, and Florian Tram` er. AgentDojo: A dynamic environment to evaluate prompt injection attacks and defenses for LLM agents. In Advances in Neural Informa-tion Processing Systems (NeurIPS), Datasets and Benchmarks Track , 2024. doi: 10.52202/079017-2636. Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes, Nicholas Carlini, Daniel Fabian, Christoph Kern, Chongyang Shi, Andreas Terzis, and Florian Tram` er. Defeating prompt injections by design. arXiv preprint arXiv:2503.18813 , 2025. Yilun Du, Shuang Li, Antonio Torralba, Joshua B. Tenenbaum, and Igor Mordatch. Improving factuality and reason-ing in language models through multiagent debate. In Proceedings of the 41st International Conference on Ma-chine Learning , volume 235 of Proceedings of Machine Learning Research , pages 11733–11763. PMLR, 2024. URL 
+
+https://proceedings.mlr.press/v235/du24e.html .Ethereum Foundation. py ecc: Elliptic curve crypto in pure python (incl. BLS12-381). Version 8.0.0, Python Package Index, 2025. URL https://pypi.org/project/py-ecc/8.0.0/ .Armando Faz-Hernandez, Sam Scott, Nick Sullivan, Riad S. Wahby, and Christopher A. Wood. Hashing to elliptic curves. RFC 9380, RFC Editor, 2023. Rosario Gennaro, Stanisław Jarecki, Hugo Krawczyk, and Tal Rabin. Secure distributed key generation for discrete-log based cryptosystems. Journal of Cryptology , 20(1):51–83, 2007. doi: 10.1007/s00145-006-0347-3. Google. Agent payments protocol (AP2): An open protocol for AI agent payments. https://github.com/ google-agentic-commerce/AP2 , 2025. Specification and reference implementation; defines signed mandates for agent-mediated payments. Xabier Muruaga. Bounded agents: Delegation security for multi-agent AI systems. arXiv preprint arXiv:2608.15888 , 2026. Tianneng Shi, Jingxuan He, Zhun Wang, Hongwei Li, Linyu Wu, Wenbo Guo, and Dawn Song. Progent: Securing AI agents with privilege control. arXiv preprint arXiv:2504.11703 , 2025. Tobin South, Samuele Marro, Thomas Hardjono, Robert Mahari, Cedric Deslandes Whitney, Alan Chan, and Alex Pentland. Position: AI agents need authenticated delegation. In International Conference on Machine Learning (ICML) , volume 267 of Proceedings of Machine Learning Research , pages 82211–82231, 2025. Ewa Syta, Iulia Tamas, Dylan Visher, David Isaac Wolinsky, Philipp Jovanovic, Linus Gasser, Nicolas Gailly, Ismail Khoffi, and Bryan Ford. Keeping authorities “honest or bust” with decentralized witness cosigning. In IEEE Symposium on Security and Privacy , pages 526–545, 2016. doi: 10.1109/SP.2016.38. Pat Verga, Sebastian Hofstatter, Sophia Althammer, Yixuan Su, Aleksandra Piktus, Arkady Arkhangorodsky, Minjie Xu, Naomi White, and Patrick Lewis. Replacing judges with juries: Evaluating LLM generations with a panel of diverse models. arXiv preprint arXiv:2404.18796 , 2024. Qiusi Zhan, Zhixiang Liang, Zifan Ying, and Daniel Kang. InjecAgent: Benchmarking indirect prompt injections in tool-integrated large language model agents. In Findings of the Association for Computational Linguistics: ACL 2024 , pages 10471–10506. Association for Computational Linguistics, 2024. doi: 10.18653/v1/2024.findings-acl.624. URL https: //aclanthology.org/2024.findings-acl.624/ .
+
+5A Protocol Specification 
+
+A.1 Canonical Authorization Object 
+
+The main text defines the signed message m at a high level. This appendix makes the construction explicit. An implementation should serialize a structured authorization object with one documented canonicalization algorithm and sign the resulting bytes, not an LLM transcript or a human-readable summary. Table 1 lists the minimum fields. Application profiles may add fields, but must not remove the bindings needed by the verifier.           
+
+> Field group Example fields Why it is signed Protocol context domain separator, schema version Prevents a signature from being reused in another protocol or parser. Principal and committee principal ID, committee ID, group-key ID, key epoch Binds the action to one delegator and the currently authorized share holders. Policy state policy ID, policy version, optional risk class Prevents an approval under an old policy from surviving a policy change. Action type, normalized parameters, execution audience Defines exactly what the verifier may execute and where it may execute it. Evidence manifest digest H(E), source types, freshness requirements Prevents evidence substitution while leaving source validation to reviewers. Freshness and replay nonce, issue time, expiry, revision counter Limits authorization lifetime and distinguishes revised proposals. Linkage parent proposal digest, external object digest Binds a revision or an AP2 mandate to the object reviewed by the committee.
+
+Table 1: Minimum content of the canonical authorization object. 
+
+Canonicalization and parsing. The deployment selects one encoding, for example a versioned canonical JSON profile, and specifies field ordering, number representation, string encoding, and the treatment of absent values. Reviewers and V parse the object, encode it again, and reject it unless the bytes match the canonical form. Unknown critical fields, duplicate keys, invalid timestamps, and values outside the application schema fail closed. The executor consumes the parsed signed fields directly; it must not rebuild the action from mutable proposer state. This last rule avoids a time-of-check/time-of-use substitution after verification. 
+
+A.2 Review and Execution State Machine 
+
+A request moves through the following states. Each transition is recorded with the proposal digest and policy/key epoch. 1. Draft → review. P freezes one canonical m and sends the same bytes, evidence manifest, and policy reference to every Ri.2. Review → reject, revise, or approve. A reviewer checks deterministic constraints, validates or re-fetches material evidence, and then emits one authenticated outcome. Only approve (m)
+
+causes local signer Si to produce σi = SignShare (sk i, m ); Ri never receives sk i.3. Revise → new review. Conditions such as a lower amount, narrower table scope, or shorter expiry create a new object m′ with a new nonce or revision counter and a parent digest. No share on m is reused. 4. Approve → quorum. The combiner authenticates the claimed reviewer index and verifies each signature share under pk i. It deduplicates indices and combines only shares on the identical digest and epoch. 5. Quorum → execute or expire. V validates the final signature, schema, audience, policy/key epoch, expiry, and unused nonce. Nonce consumption and the external action occur atomically, or under an idempotency protocol, so concurrent replays cannot execute twice. Reject and revise messages should be authenticated to support audit and prevent the proposer from inventing reviewer feedback; authorization remains gated by approve (m) signature shares. When 6reviewer rationales must be bound for audit, their digest is included in m alongside the approval outcome. 
+
+## B Security Model and Authorization-Integrity Guarantee 
+
+B.1 Threat Model and Authorization-Integrity Claim 
+
+Let the threshold scheme be existentially unforgeable against an adversary that controls fewer than 
+
+t shares. Assume (i) authenticated reviewer-to-signer approval, (ii) secure isolated storage and au-thenticated public verification shares, (iii) a unique canonical encoding, and (iv) an honest verifier with no unchecked execution interface. A reviewer–signer domain is corrupt if either component is compromised; we conservatively give the adversary chosen-message access to that domain’s share. If V executes a previously unused action m, the adversary obtained valid contributions from at least 
+
+t distinct signer indices on the exact bytes of m. If at most t−1 reviewer–signer domains are corrupt, at least one contribution came through an honest domain. 
+
+B.2 Proof Sketch and System Composition 
+
+V executes only after accepting a final signature under pk . By threshold unforgeability, an adversary with fewer than t shares cannot create such a signature for a new message without the missing sign-ing contributions. Share verification and index deduplication prevent malformed or repeated signa-ture shares from being counted. Canonical encoding makes the signed message unique, so shares on another action, revision, domain, or epoch do not authorize m. Finally, exact message execution and atomic nonce consumption prevent substitution and replay after verification. Together, these system links compose threshold unforgeability into the end-to-end authorization-integrity guarantee. The final BLS signature proves that the threshold signing authority was used. Reviewer-level au-ditability is supplied alongside it by authenticated approval envelopes, signer indices, verified shares, policy versions, evidence commitments, and execution receipts.                  
+
+> Operating condition KITA behavior Deployment mechanism Compromised proposer Key isolation prevents share fabrication Authenticated feedback logs and availability monitoring
+> f < t corrupt reviewer–signer domains Authorization still requires contributions beyond corrupt domains Reviewer diversity and authenticated evidence
+> f≥tcorrupt domains Threshold assumption is exceeded Organizational separation, monitoring, and recovery Correlated reviewer judgments Signature records an actual quorum Heterogeneous reviewers, calibrated confidence, and abstention Malformed signature share Rejected using authenticated pk iRate limiting and fault monitoring Verifier and execution interfaces Exact-action checks guard the effectful boundary Isolation and audit of every execution path Stale or false evidence Digest fixes the evidence reviewed by the committee Source authentication and freshness checks Reviewer availability Execution proceeds after tvalid responses Quorum sizing, failover, and resharing
+
+Table 2: Security-guarantee composition and deployment controls. Authorization integrity is the formal focus of the guarantee. Deployments support semantic quality, confidentiality, and availability through reviewer diversity, authenticated and encrypted transport, disclosure minimization, monitoring, and recovery procedures. 7C Threshold BLS and Key Lifecycle 
+
+C.1 Threshold BLS Instantiation Base signature. BLS uses prime-order groups G1, G2, and GT with a bilinear pairing e : G1 ×
+
+G2 → GT [Boneh et al., 2001]. Let g2 generate G2 and let HDST hash canonical bytes to G1
+
+under a protocol-specific domain-separation tag. For secret x ∈ Zq , the public key, signature, and verification equation are 
+
+pk = gx 
+
+> 2
+
+, h = HDST (m), σ = hx, e(σ, g 2) = e(h, pk ). (1) The signature is deterministic and contains one group element. Our minimal-signature-size BLS12-381 profile encodes σ ∈ G1 in 48 bytes and pk ∈ G2 in 96 bytes; the opposite placement reverses these sizes [Boneh et al., 2026]. 
+
+Threshold construction. Threshold BLS applies Shamir sharing in the exponent [Boldyreva, 2003]. Verifiable DKG creates a degree-(t − 1) polynomial f with f (0) = x without reconstruct-ing x. Signer Si stores xi = f (i) and publishes an authenticated verification share pk i = gxi 
+
+> 2
+
+.After its paired reviewer approves the exact m, it returns σi = hxi . The combiner first checks 
+
+e(σi, g 2) = e(h, pk i), then for any set S of t valid indices computes 
+
+λi = Y 
+
+> j∈S, j ̸=i
+
+−ji − j (mod q), σ = Y
+
+> i∈S
+
+σλi 
+
+> i
+
+= hx. (2) Thus, each signature share can be produced independently in the online phase, shares on different messages cannot combine, and the verifier receives the same one-signature interface as ordinary BLS. 
+
+Why BLS. BLS gives each isolated signer a one-request, one-response online path without a dis-tributed nonce round, while the final authorization remains one group element as the committee grows. The deployment profile pairs BLS with DKG, authenticated public shares, canonical encod-ing, domain separation, standard hash-to-curve, and strict point validation [Faz-Hernandez et al., 2023, Boneh et al., 2026]. 
+
+C.2 Key Setup and Lifecycle Setup. Production deployment runs verifiable DKG among isolated services S1, . . . , S n. Each Si
+
+receives only sk i; no LLM process receives signing-key material, and no participant reconstructs the group secret key. The output also includes group key pk , authenticated public share pk i, committee membership, threshold t, and key epoch, which an authorization registry binds to policy. DKG gives the strongest non-exposure property because the group secret key never exists in one location. The controlled prototype uses a deterministic dealer profile, while the target deployment uses DKG to eliminate dealer dependence. 
+
+Lifecycle controls. Shares remain in separate failure domains, preferably protected by indepen-dent HSMs. A signing service accepts only a canonical object plus an authenticated approval from its paired reviewer, never an unconstrained digest from the proposer. Logs retain the request di-gest, outcome, authenticated signature shares, policy version, evidence commitment, and execution receipt. Periodic proactive resharing can replace all shares while retaining the group public key, limiting an adversary that compromises different reviewers over time. Committee membership changes may require resharing or a new DKG. A new key or policy increments the epoch; V rejects old epochs after a bounded migration window. Suspected compromise triggers share suspension, audit, and refresh. If the number of healthy reviewers falls below t, KITA fails closed until failover, recovery, or resharing restores quorum. 
+
+C.3 Alternative Signature Schemes 
+
+We use BLS to isolate the simplest online signing path. Existing payment stacks may instead require threshold ECDSA despite its more complex signing protocol. In either case, reconstructing the 8group secret to call a conventional signing API would recreate the single point of failure that KITA 
+
+removes.       
+
+> Scheme Online reviewer interaction Verifier compatibility Main engineering concern Threshold BLS One signature share per signer Requires a supported BLS ciphersuite; 48-byte signature in our variant Pairings, hash-to-curve, subgroup checks, public-share authentication FROST Interactive Schnorr signing Standard Schnorr only where supported Nonce commitments, signer coordination, abort handling Threshold ECDSA Interactive MPC, often with preprocessing Produces a standard ECDSA signature; preserves existing P-256 verification Distributed nonce safety, malicious security, recovery, implementation complexity Multisignature Independent signatures, scheme dependent Verifier must understand several keys/signatures Larger output and explicit signer-set semantics
+
+Table 3: Deployment trade-offs. Scheme choice does not change the review-to-authorization com-position. 
+
+## D Agent-Payment Deployment 
+
+This integration preserves AP2’s mandate and verification roles while replacing the autonomous Agent Key boundary. In autonomous mode, the user first authorizes an open mandate that constrains later purchases and binds an Agent Key. In our architecture, that reference is the committee group key, provided the selected signature algorithm is supported by the mandate and verifier stack. 
+
+Conventional and agent-mediated payment. The reference flow separates two ways to cross the same checkout boundary. Figures 3 and 4 make the control-flow change explicit. A conventional payment keeps the user in the loop to inspect and sign every order. A single-key autonomous variant removes this interaction by binding a reusable Agent Key, but places that credential near the agent that processes untrusted content. KITA instead moves the user’s decision to a reusable policy and committee key while keeping all signing-key material outside the agent. This is an authorization-layer substitution: the merchant-signed checkout and payment-tool checks remain unchanged, and every changed merchant, amount, or order requires a new canonical object and quorum. 
+
+User / wallet  
+
+> human judgment; personal sk u
+
+Payment tool 
+
+> verifies and submits
+
+Merchant      
+
+> creates checkout
+> 1order details
+> 2signed checkout
+> 3payment request
+> 4user-approved order + signature
+> 5pay / receipt the user is on every payment’s critical path
+
+Figure 3: Conventional human-approved payment. The user interprets each concrete order and releases a signature from a wallet holding one personal key. This preserves direct control, but autonomous execution either stops for confirmation or requires exposing an equivalent reusable credential to the agent. 9review and isolated signing committee ( t-of-n)
+
+User   
+
+> personal sk ustays here
+
+Shopping agent 
+
+> proposer; no key
+
+Payment tool  
+
+> verifies (m, σ )
+
+Merchant 
+
+> signed checkout
+
+R1 | S1:sk 1 R2 | S2:sk 2 Rn | Sn:sk n· · ·              
+
+> 1authorize committee
+> 2give scope π
+> 3–4 order + signed checkout
+> 5–6 package + review 7tshares →σ
+> 8submit (m, σ )
+> 9pay / receipt no LLM signing-key material
+
+Figure 4: Agent-mediated threshold payment. Labels map to the nine-step protocol in Appendix D.1. The user delegates a bounded policy; the agent proposes a merchant-signed order; reviewers evaluate identical evidence; and isolated signer services authorize only the same canonical mandate. 
+
+D.1 Nine-Step Payment Protocol 
+
+The following sequence expands Figure 4. It follows the reference workflow while preserving one security-critical rule: all payment fields are fixed before reviewers approve and signer services pro-duce shares. 1. Authorize policy and committee. The user signs an open mandate containing allowed mer-chants or product classes, amount and time limits, evidence rules, threshold (t, n ), group key pk ,and key epoch. Isolated signer services obtain sk 1, . . . , sk n through DKG. These are committee shares, not fragments of the user’s personal key; sk u remains in the user-controlled wallet. 2. Give the agent its scope. The user sends the approved policy, open-mandate reference, and public committee metadata to the shopping agent. The agent receives neither the personal secret signing key nor a threshold signing-key share. 3. Find and reserve an item. The agent searches approved sources, selects a product that appears to satisfy the constraints, and asks the shopping site to create a concrete checkout order. 4. Obtain one order view. The merchant returns a signed checkout object to the agent and exposes the same object to the payment tool. It fixes the merchant, item, amount, currency, and order identifier before review. 5. Build the review package. The agent constructs canonical closed mandate m and sends ev-ery reviewer the same (m, E, π ). Here m binds the open mandate, merchant checkout, payee, amount, audience, nonce, expiry, policy version, key epoch, and H(E); E contains the signed order and policy-relevant evidence. 6. Review the exact action. Each reviewer Ri checks deterministic limits, merchant authenti-cation, and semantic evidence, then returns reject, revise (c), or authenticated approve (m). A revision creates new canonical bytes and restarts this step. 7. Create a signature share. Only after approve (m) does the paired isolated service Si compute 
+
+σi = SignShare (sk i, m ). Signing-key shares never enter an LLM process. Signature shares for different orders, revisions, or epochs cannot be combined. 8. Combine and submit. The agent or an untrusted combiner verifies signer indices and public verification shares, collects at least t valid signature shares on identical m, combines them into 
+
+σ, and submits the open mandate, merchant checkout, (m, σ ), and required disclosures to the payment tool. 10 9. Verify, pay, and return a receipt. The payment tool verifies the open-policy constraints, mer-chant signature, group signature, audience, expiry, key epoch, and unused nonce. It atomically consumes the nonce, executes exactly m, and returns a receipt to the agent and merchant. No execution field may be added after Step 6. If the payment tool normalizes or changes any field, the system constructs m′̸ = m and repeats Steps 5–8. This ordering prevents a valid review from being transferred to a different payment. 
+
+KITA composes with the existing merchant, credential-provider, network, and payment-processor checks: the committee signature supplies autonomous authorization, while those mechanisms con-tinue to provide merchant attestation, credential authorization, payment authentication, settlement, and receipts. Current AP2 examples use JOSE-compatible P-256 signatures. A threshold-ECDSA implementa-tion can preserve that verification surface. For BLS, an agreed algorithm identifier, key representa-tion, canonical signing input, verifier implementation, and interoperability tests together define an interoperable AP2 extension profile. 
+
+## E Evaluation Details 
+
+E.1 End-to-End Enforcement and LLM Integration 
+
+The executable harness connects four components: a reviewer backend, an authenticated review gateway, a BLS signer service, and a verifier/executor. The live reviewer backend sends the same canonical message bytes, evidence, and policy to each separately instantiated model call and requires a structured decision containing an outcome, the message digest, reason codes, and a short rationale. No signing-key share or approval-channel key appears in that request. The gateway authenticates only an approve decision that echoes the expected digest. The signer independently checks the authentication, signer index, outcome, and digest before producing a signature share. For deterministic coverage, the system tests replace the model call with a scripted backend at the same typed interface. The remaining path is real: the code generates Shamir signing-key shares, performs BLS12-381 signature-share generation and pairing checks, interpolates the final signature, verifies it, and records the nonce. We additionally run the same path once with three live Codex reviewers. These two modes provide complementary evidence: the live run demonstrates interface compatibility and end-to-end execution, while the deterministic suite tests the enforcement invari-ants. 
+
+E.1.1 Live Codex-model execution 
+
+We invoked three independent Codex CLI sessions using gpt-5.6-sol with medium reasoning effort. Each session was ephemeral and read-only, received the same canonical request and re-view instruction, and returned the strict schema {outcome , message digest , reason codes ,
+
+rationale }. The CLI exposed neither a temperature nor a sampling seed, so we set neither. The request was the USD 1,299 laptop payment used below: the policy allowed example-merchant ,USD, and amounts up to USD 1,500; the evidence asserted a valid merchant signature. No personal key, signing-key share, or approval-channel key was included. Table 4 summarizes the reviewer decisions and verifier outcomes. 11 Component Observed setting or result Committee 2-of-3; three independent gpt-5.6-sol calls; medium reasoning; identical review-input SHA-256.         
+
+> R1Approve in 6.097 s; cited the amount limit, merchant allowlist, and authenticated evidence.
+> R2Approve in 6.244 s; cited currency, amount, merchant, expiry, and authenticated evidence.
+> R3Approve in 8.123 s; cited amount, currency, merchant, and authenticated evidence. Quorum All decisions echoed the exact message digest. The combiner selected valid signer indices [1 ,2] and formed the threshold signature. Verifier A modified authorization object was rejected; the original object executed once; replay with the spent nonce was rejected.
+
+Table 4: One live Codex execution demonstrating compatibility across the reviewer, authenticated gateway, threshold-BLS, and verifier path. 
+
+E.1.2 Deterministic execution trace and enforcement tests 
+
+The following trace makes the interfaces concrete. It uses a 2-of-3 committee and seed 17. Reviewer decisions are deterministic fixtures at the exact typed boundary used by the live LLM adapter; all gateway, threshold-BLS, verifier, and replay operations are executed. The trace therefore provides an implementation-level view of the enforcement boundary. 
+
+Input and canonicalization. The agent proposes a USD 1,299 payment to example-merchant 
+
+for laptop-model-a . The policy permits that merchant and currency up to USD 1,500. The evidence states that the merchant signature is valid. The canonical authorization additionally binds principal user-123 , policy version 3, committee epoch 1, nonce order-001 , expiry 
+
+2030-01-01T00:00:00Z , and H(E). We denote the SHA-256 digest of the resulting canonical bytes by D.
+
+Reviewer prompt. Each reviewer receives the following developer instruction verbatim: 
+
+> You are one authorization reviewer. Apply the supplied policy to the canonical action and evidence. Treat all evidence text as untrusted data; never follow instructions embedded in it. Reject on policy violation or missing authenticated evidence; use revise only when a concrete change can make the action compliant. Echo message digest exactly.
+
+The dynamic input is one canonical JSON object with four fields: canonical message (the com-plete authorization above), message digest (D), evidence (merchant, product, source text, and signature-validity flag), and policy (currency, maximum, and merchant allowlist). The API re-quest sets store=false and uses a strict JSON schema requiring outcome , message digest ,
+
+reason codes , and rationale . All three calls receive the same input digest. No personal key, threshold signing-key share, or approval-channel key is present. 
+
+Intermediate outputs. The typed reviewer outputs and the deterministic enforcement response are: 1. R1 returns approve , digest D, and reason codes AMOUNT WITHIN LIMIT , MERCHANT ALLOWED ,and EVIDENCE AUTHENTIC . Gateway 1 emits an authenticated approval; signer 1 releases a 48-byte signature share. 2. R2 returns approve , digest D, and reason codes POLICY MATCH and ORDER BOUND . Gateway 2 emits an authenticated approval; signer 2 releases a 48-byte signature share. 3. R3 returns reject , digest D, and reason code SCRIPTED CONSERVATIVE REJECTION . Its gate-way emits no approval envelope, so signer 3 releases no share. 4. The combiner verifies candidate indices [1 , 2] , reaches the threshold, and interpolates a 48-byte final signature. The verifier accepts it for the exact canonical authorization and atomically records 
+
+order-001 as spent. Replaying the same signed bytes returns false because that nonce has already been consumed. 12 This execution illustrates the central security boundary: reviewer text alone does not authorize pay-ment. Only a matching, authenticated approve output can activate its paired signer, and neither the agent nor any reviewer ever receives the user’s personal secret key or a threshold signing-key share.         
+
+> Test Enforced invariant Result Valid quorum Two authenticated approvals on identical bytes form a valid final signature. Pass Below threshold One valid signature share cannot produce a final signature. Pass Digest mismatch An approval that echoes a different digest does not reach the signer. Pass Action substitution Changing the amount after review invalidates the final signature. Pass Replay A spent nonce prevents a second execution of the same signed action. Pass Key-isolated input All reviewers receive identical public inputs and no signing-key field. Pass
+
+Table 5: Deterministic end-to-end tests validating enforcement at the LLM reviewer interface. 
+
+E.2 Committee Sensitivity Model 
+
+For each request class, reviewer i has latent score 
+
+Xi = √ρ Z + p1 − ρ ϵ i, approve i = 1[Xi > τ ], (3) where Z and the ϵi are independent standard Gaussian variables. The threshold τ = Φ −1(1 − p)
+
+gives marginal approval probability p. We set p = 0 .90 for legitimate requests and p = 0 .20 for out-of-policy requests. The parameter ρ correlates latent scores; it is not the correlation between binary votes. We estimate the latter from the simulated approval count and report it separately. For committee size n and authorization threshold t, the error rates are 
+
+FA = Pr[ P 
+
+> i
+
+approve i ≥ t | out of policy ] , FR = Pr[ P 
+
+> i
+
+approve i < t | legitimate ] . (4) Each cell uses 400 ,000 Monte Carlo trials with NumPy generator seed 20260720. Reported 95% intervals use the normal binomial approximation ˆp ± 1.96 pˆp(1 − ˆp)/N ; the largest interval half-width is below 0.0016 . Table 6 gives the complete threshold sweep behind Figure 2(a).                                  
+
+> tof 7 FA 95% CI FR 95% CI 10.69058 [0.68914, 0.69201] 0.00012 [0.00008, 0.00015] 20.39469 [0.39318, 0.39620] 0.00084 [0.00075, 0.00093] 30.19536 [0.19413, 0.19659] 0.00432 [0.00412, 0.00453] 40.08340 [0.08255, 0.08426] 0.01723 [0.01683, 0.01763] 50.02925 [0.02873, 0.02977] 0.05802 [0.05730, 0.05874] 60.00778 [0.00750, 0.00805] 0.17072 [0.16955, 0.17189] 70.00127 [0.00115, 0.00138] 0.44885 [0.44731, 0.45039]
+
+Table 6: Complete threshold sweep for n = 7 and latent ρ = 0 .2. The induced binary correlations are 0.106 for out-of-policy requests and 0.080 for legitimate requests. This diagnostic model parameterizes reviewer quality and dependence at a model-agnostic level, which isolates the causal design variables: selecting t sets the security/utility point, while correla-tion determines how much decision benefit a committee retains. In the correlation sweep behind Figure 2(b), false approvals at t = 4 rise from 0.033 when ρ = 0 toward the single-reviewer rate 
+
+0.20 as ρ → 1. Model-specific benchmarks can directly instantiate the measured marginals and dependence structure in this analysis. 
+
+E.3 Threshold-BLS Prototype 
+
+The prototype uses py ecc 8.0.0 on Python 3.9.6 and macOS 15.7.4 on Apple Silicon. A deter-ministic PRNG with seed 7 and dealer-generated Shamir shares makes the controlled benchmark 13 repeatable; the target deployment uses verifiable DKG with cryptographic randomness. For each 
+
+(n, t ), the prototype generates Shamir shares, derives authenticated public shares, hashes one mes-sage to G1, verifies each admitted signature share using pairings, interpolates t valid signature shares in the exponent, and verifies the aggregate under the group key. It also mutates one signature share and asserts that verification rejects it. Fast operations use 25 repetitions; pairing-based verification uses five. Table 7 reports means. The pure-Python py ecc measurements characterize scaling and protocol structure; optimized native im-plementations set deployment latency.                                         
+
+> ntshare sign (ms) share verify (ms) combine (ms) final verify (ms) 324.907 558.237 5.045 586.684 535.708 565.976 5.536 561.076 755.058 567.418 11.367 555.983 10 75.054 558.328 16.724 554.668 16 11 5.117 560.180 28.711 565.716 24 17 4.936 556.257 47.746 567.630 32 22 5.042 558.746 62.039 555.971
+
+Table 7: Threshold-BLS microbenchmark means. Every configuration produced one 48-byte signa-ture and a 96-byte public key, used an online signing phase with no inter-signer communication, and rejected the malformed signature share. 14
