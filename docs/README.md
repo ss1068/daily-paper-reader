@@ -6,34 +6,26 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-12
-- 运行时间：2026-09-12 21:37:48 UTC
+- 最新运行日期：2026-09-13
+- 运行时间：2026-09-13 21:21:32 UTC
 - 运行状态：成功
-- 本次总论文数：4
-- 精读区：2
-- 速读区：2
+- 本次总论文数：1
+- 精读区：0
+- 速读区：1
 
 ### 今日简报（AI）
-今日聚焦 LLM 安全防线，深度解析 DriftNet 与 SpecGuard 两大防御利器。
-重点关注针对提示词注入的轨迹检测及零成本后门防御技术，这是提升模型鲁棒性的关键。
-建议开发者优先评估现有系统的注入防御能力，并关注 AI 安全从“可选”向“必须”的趋势转变。
-- 详情：[/202609/12/README](/202609/12/README)
+今日聚焦自动驾驶安全，探索利用大模型构建漏洞分类体系与自动化发现框架。
+该研究提出了一种针对自动驾驶软件弱点的系统性分类法，为提升车载系统安全性提供了新思路。
+建议关注大模型在垂直领域安全审计中的应用潜力，了解自动驾驶软件防御的前沿技术趋势。
+- 详情：[/202609/13/README](/202609/13/README)
 
 ### 精读区论文标签
-1. [DriftNet: A Dual-Head Trajectory Transformer for Detecting and Localizing Prompt Injection in LLM Agents](/202609/12/2609.10892v1-driftnet-a-dual-head-trajectory-transformer-for-detecting-and-localizing-prompt-injection-in-llm-agents)  
-   标签：评分：8.0/10、query:llm
-   evidence：检测并定位LLM智能体中的提示注入
-2. [SpecGuard: Inference-Time Backdoor Detection For Free](/202609/12/2609.11799v1-specguard-inference-time-backdoor-detection-for-free)  
-   标签：评分：8.0/10、query:llm
-   evidence：推理阶段检测隐藏后门和攻击者控制的行为
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [LLM-Based Penetration Testing in the Presence of Honeypots](/202609/12/2609.08093v1-llm-based-penetration-testing-in-the-presence-of-honeypots)  
-   标签：评分：7.0/10、query:llm
-   evidence：用于攻击性网络安全和渗透测试的大模型智能体
-2. [AI Safety: Not Optional, Not Later](/202609/12/2609.10630v1-ai-safety-not-optional-not-later)  
-   标签：评分：7.0/10、query:jb-def
-   evidence：安全设计保证架构和系统级控制
+1. [LLMSec-AV: A Vulnerability Taxonomy and LLM-Driven Software Weakness Discovery Framework for Autonomous Vehicles](/202609/13/2609.09386v1-llmsec-av-a-vulnerability-taxonomy-and-llm-driven-software-weakness-discovery-framework-for-autonomous-vehicles)  
+   标签：评分：6.0/10、query:llm
+   evidence：大语言模型驱动的软件弱点发现与漏洞分类
 
 
 <div class="dpr-home-promo-card">
