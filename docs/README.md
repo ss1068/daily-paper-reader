@@ -6,73 +6,49 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-17
-- 运行时间：2026-09-17 22:28:31 UTC
+- 最新运行日期：2026-09-18
+- 运行时间：2026-09-18 21:09:34 UTC
 - 运行状态：成功
-- 本次总论文数：17
-- 精读区：6
-- 速读区：11
+- 本次总论文数：9
+- 精读区：5
+- 速读区：4
 
 ### 今日简报（AI）
-今日聚焦 LLM 智能体安全防御，深度解析对抗攻击与模型鲁棒性前沿进展。
-重点推荐《Universal Defenses》与《Decoy Direction Optimization》，两篇满分论文为工具集成智能体提供了高效的防御新范式。
-建议关注 AI 安全领域，优先阅读这两篇核心论文以掌握当前防御技术的最优解。
-- 详情：[/202609/17/README](/202609/17/README)
+今日聚焦大模型安全前沿，深度解析 9 篇 LLM 漏洞检测与防御机制研究。
+重点推荐通过潜空间状态检测危害及模块化防御框架，这些方法显著提升了模型安全性。
+建议关注大模型鲁棒性评估，并尝试将这些防御策略集成到你的生产环境部署中。
+- 详情：[/202609/18/README](/202609/18/README)
 
 ### 精读区论文标签
-1. [Universal Defenses for Tool-Integrated LLM Agents Against Adversarial Attacks](/202609/17/2609.16098v1-universal-defenses-for-tool-integrated-llm-agents-against-adversarial-attacks)  
+1. [Safety Beyond the Interface: Detecting Harm via Latent States in Large Language Models](/202609/18/2609.19472v1-safety-beyond-the-interface-detecting-harm-via-latent-states-in-large-language-models)  
    标签：评分：10.0/10、query:jb-def
-   evidence：针对LLM智能体对抗攻击的通用防御
-2. [Decoy Direction Optimization: A Post-Hoc Defense Against LLM Abliteration](/202609/17/2609.16204v1-decoy-direction-optimization-a-post-hoc-defense-against-llm-abliteration)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：针对拒绝特征消融攻击的后置防御
-3. [Nameless Tokenization: A Lossless Tokenizer-Level Defense Against Control-Token Forgery in Open-Weight LLMs](/202609/17/2609.16984v1-nameless-tokenization-a-lossless-tokenizer-level-defense-against-control-token-forgery-in-open-weight-llms)  
+   evidence：通过潜状态检测有害提示及越狱评估
+2. [An Efficient and Modular Framework for Targeted Harm Mitigation in LLMS](/202609/18/2609.13624v2-an-efficient-and-modular-framework-for-targeted-harm-mitigation-in-llms)  
    标签：评分：9.0/10、query:jb-def
-   evidence：针对控制令牌伪造的分词器级防御
-4. [Trust propagation and structural containment in Multi-agent LLM pipelines](/202609/17/2609.17648v1-trust-propagation-and-structural-containment-in-multi-agent-llm-pipelines)  
-   标签：评分：9.0/10、query:llm
-   evidence：多智能体LLM流水线中的攻击传播与遏制
-5. [First Token Matters: Understanding Safety Collapse in Large Reasoning Models](/202609/17/2609.18471v1-first-token-matters-understanding-safety-collapse-in-large-reasoning-models)  
+   evidence：大模型的安全对齐与伤害缓解框架
+3. [AUDITPLAN: Commit, Then Answer for Auditable Safety Alignment](/202609/18/2609.19325v1-auditplan-commit-then-answer-for-auditable-safety-alignment)  
    标签：评分：9.0/10、query:jb-def
-   evidence：大语言模型越狱漏洞的安全对齐与缓解技术
-6. [Beyond Routine Compliance: Cunning Data Cultivates Safety Vigilance in Large Language Models](/202609/17/2609.18515v1-beyond-routine-compliance-cunning-data-cultivates-safety-vigilance-in-large-language-models)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：安全对齐与隐蔽有害意图的缓解技术
+   evidence：使用结构化计划的可审计安全对齐
+4. [AgentGuard: Learning Execution Guardrails from Anomalous Coding-Agent Trajectories](/202609/18/2609.16287v1-agentguard-learning-execution-guardrails-from-anomalous-coding-agent-trajectories)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：代码智能体的执行防护栏框架
+5. [Local Sparsity Enables Unsupervised LLM Safety Detection](/202609/18/2609.20129v1-local-sparsity-enables-unsupervised-llm-safety-detection)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：无监督大模型安全检测与护栏
 
 ### 速读区论文标签
-1. [BLINDSPOT: A Benchmark for Safety and Refusal Calibration in Long-Horizon Tool-Using Agents](/202609/17/2609.16305v1-blindspot-a-benchmark-for-safety-and-refusal-calibration-in-long-horizon-tool-using-agents)  
-   标签：评分：8.0/10、query:llm
-   evidence：大语言模型智能体安全与拒绝校准基准
-2. [Toward Secure AI-Powered Penetration Testing Agents: Security Threats, Guardrails, and Architectural Perspectives](/202609/17/2609.16694v1-toward-secure-ai-powered-penetration-testing-agents-security-threats-guardrails-and-architectural-perspectives)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：自主AI渗透测试代理的护栏机制
-3. [Benchmarking Factual Robustness of LLMs via Multi-conversation Persuasion](/202609/17/2609.16777v1-benchmarking-factual-robustness-of-llms-via-multi-conversation-persuasion)  
-   标签：评分：8.0/10、query:llm
-   evidence：针对说服攻击和虚假信息的鲁棒性
-4. [SpliTEE: Improving LLM Inference on Trusted Hardware with Differentially Private GPU Outsourcing](/202609/17/2609.15039v1-splitee-improving-llm-inference-on-trusted-hardware-with-differentially-private-gpu-outsourcing)  
-   标签：评分：7.0/10、query:jb-def
-   evidence：利用可信硬件提高LLM推理安全性
-5. [RAG-CT: Mitigating Privacy Risks on Retrieval-Augmented Generation Systems via Scanning Prompt Distribution](/202609/17/2609.16095v1-rag-ct-mitigating-privacy-risks-on-retrieval-augmented-generation-systems-via-scanning-prompt-distribution)  
-   标签：评分：7.0/10、query:jb-def
-   evidence：缓解RAG系统中的隐私风险和恶意查询
-6. [Permutation-Based Stegomalware in Large Language Models: Threats and Countermeasures](/202609/17/2609.16193v1-permutation-based-stegomalware-in-large-language-models-threats-and-countermeasures)  
+1. [No-Box Vulnerability Analysis: Description-only Detection of Indirect Prompt Injection Vulnerabilities in MCP Servers](/202609/18/2609.10854v2-no-box-vulnerability-analysis-description-only-detection-of-indirect-prompt-injection-vulnerabilities-in-mcp-servers)  
    标签：评分：7.0/10、query:llm
-   evidence：LLM权重中恶意负载的威胁与对策
-7. [InceptionRAG: Stealthy Poisoning Attack Against Retrieval-Augmented Generation](/202609/17/2609.16818v1-inceptionrag-stealthy-poisoning-attack-against-retrieval-augmented-generation)  
+   evidence：间接提示注入漏洞检测
+2. [LLMVul: A Vulnerability-Labeled Dataset of LLM-Generated C/C++ Functions from Real Production Repositories](/202609/18/2609.10945v1-llmvul-a-vulnerability-labeled-dataset-of-llm-generated-cc-functions-from-real-production-repositories)  
    标签：评分：7.0/10、query:llm
-   evidence：RAG系统中针对投毒攻击的缓解机制
-8. [Measuring and Exploiting Implicit Trust in LLM Tool-Calling Pipelines](/202609/17/2609.18217v1-measuring-and-exploiting-implicit-trust-in-llm-tool-calling-pipelines)  
+   evidence：大模型生成代码中的安全缺陷
+3. [ALIBI: Adversarial Legitimacy Injection in Binary Input against LLM Malware Analyzers](/202609/18/2609.19722v1-alibi-adversarial-legitimacy-injection-in-binary-input-against-llm-malware-analyzers)  
    标签：评分：7.0/10、query:llm
-   evidence：LLM工具调用流水线中的提示词注入漏洞与攻击
-9. [Benchmark Radar: A Living Database and Search Engine for AI Benchmarks and Evaluation](/202609/17/2609.11115v1-benchmark-radar-a-living-database-and-search-engine-for-ai-benchmarks-and-evaluation)  
-   标签：评分：6.0/10、query:llm
-   evidence：AI安全与LLM评估基准搜索引擎
-10. [Evaluating Context Segmentation in Locally Deployable SLMs for Cybersecurity CTF Tasks](/202609/17/2609.12839v1-evaluating-context-segmentation-in-locally-deployable-slms-for-cybersecurity-ctf-tasks)  
-   标签：评分：6.0/10、query:llm
-   evidence：绕过本地部署小模型的安全防护栏
-11. [Evaluating Context Segmentation in Locally Deployable SLMs for Cybersecurity CTF Tasks](/202609/17/2609.12839v2-evaluating-context-segmentation-in-locally-deployable-slms-for-cybersecurity-ctf-tasks)  
-   标签：评分：6.0/10、query:llm
-   evidence：缓解网络安全威胁及绕过防护栏
+   evidence：针对基于大模型的恶意软件分析器的对抗攻击
+4. [Guardrailed Meta-Agent Loops: Stress-Testing Policy Pinning, Budget Bounds, and Crash Recovery](/202609/18/2609.12216v1-guardrailed-meta-agent-loops-stress-testing-policy-pinning-budget-bounds-and-crash-recovery)  
+   标签：评分：6.0/10、query:jb-def
+   evidence：带护栏的元智能体循环与策略锁定
 
 
 <div class="dpr-home-promo-card">
