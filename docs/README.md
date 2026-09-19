@@ -6,49 +6,29 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-18
-- 运行时间：2026-09-18 21:09:34 UTC
+- 最新运行日期：2026-09-19
+- 运行时间：2026-09-19 21:22:08 UTC
 - 运行状态：成功
-- 本次总论文数：9
-- 精读区：5
-- 速读区：4
+- 本次总论文数：2
+- 精读区：0
+- 速读区：2
 
 ### 今日简报（AI）
-今日聚焦大模型安全前沿，深度解析 9 篇 LLM 漏洞检测与防御机制研究。
-重点推荐通过潜空间状态检测危害及模块化防御框架，这些方法显著提升了模型安全性。
-建议关注大模型鲁棒性评估，并尝试将这些防御策略集成到你的生产环境部署中。
-- 详情：[/202609/18/README](/202609/18/README)
+今日聚焦强化学习鲁棒性优化与云端大模型隐私保护技术。
+重点关注基于约束的正则化强化学习方法，以及具备可逆验证的去标识化推理框架。
+建议关注隐私计算与模型鲁棒性在实际部署中的平衡策略，提升系统安全性。
+- 详情：[/202609/19/README](/202609/19/README)
 
 ### 精读区论文标签
-1. [Safety Beyond the Interface: Detecting Harm via Latent States in Large Language Models](/202609/18/2609.19472v1-safety-beyond-the-interface-detecting-harm-via-latent-states-in-large-language-models)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：通过潜状态检测有害提示及越狱评估
-2. [An Efficient and Modular Framework for Targeted Harm Mitigation in LLMS](/202609/18/2609.13624v2-an-efficient-and-modular-framework-for-targeted-harm-mitigation-in-llms)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：大模型的安全对齐与伤害缓解框架
-3. [AUDITPLAN: Commit, Then Answer for Auditable Safety Alignment](/202609/18/2609.19325v1-auditplan-commit-then-answer-for-auditable-safety-alignment)  
-   标签：评分：9.0/10、query:jb-def
-   evidence：使用结构化计划的可审计安全对齐
-4. [AgentGuard: Learning Execution Guardrails from Anomalous Coding-Agent Trajectories](/202609/18/2609.16287v1-agentguard-learning-execution-guardrails-from-anomalous-coding-agent-trajectories)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：代码智能体的执行防护栏框架
-5. [Local Sparsity Enables Unsupervised LLM Safety Detection](/202609/18/2609.20129v1-local-sparsity-enables-unsupervised-llm-safety-detection)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：无监督大模型安全检测与护栏
+- 本次无精读推荐。
 
 ### 速读区论文标签
-1. [No-Box Vulnerability Analysis: Description-only Detection of Indirect Prompt Injection Vulnerabilities in MCP Servers](/202609/18/2609.10854v2-no-box-vulnerability-analysis-description-only-detection-of-indirect-prompt-injection-vulnerabilities-in-mcp-servers)  
-   标签：评分：7.0/10、query:llm
-   evidence：间接提示注入漏洞检测
-2. [LLMVul: A Vulnerability-Labeled Dataset of LLM-Generated C/C++ Functions from Real Production Repositories](/202609/18/2609.10945v1-llmvul-a-vulnerability-labeled-dataset-of-llm-generated-cc-functions-from-real-production-repositories)  
-   标签：评分：7.0/10、query:llm
-   evidence：大模型生成代码中的安全缺陷
-3. [ALIBI: Adversarial Legitimacy Injection in Binary Input against LLM Malware Analyzers](/202609/18/2609.19722v1-alibi-adversarial-legitimacy-injection-in-binary-input-against-llm-malware-analyzers)  
-   标签：评分：7.0/10、query:llm
-   evidence：针对基于大模型的恶意软件分析器的对抗攻击
-4. [Guardrailed Meta-Agent Loops: Stress-Testing Policy Pinning, Budget Bounds, and Crash Recovery](/202609/18/2609.12216v1-guardrailed-meta-agent-loops-stress-testing-policy-pinning-budget-bounds-and-crash-recovery)  
+1. [A Unified and Constrained View of Regularization-Based Robust Reinforcement Learning](/202609/19/2609.13050v1-a-unified-and-constrained-view-of-regularization-based-robust-reinforcement-learning)  
    标签：评分：6.0/10、query:jb-def
-   evidence：带护栏的元智能体循环与策略锁定
+   evidence：针对对抗性输入扰动的基于正则化的鲁棒训练
+2. [Reversibility-Verified De-identification for Cloud-Local LLM Inference: A Locally Certified Dehydrate-Rehydrate Loop with Layered Assurance (DR-SL)](/202609/19/2609.14883v1-reversibility-verified-de-identification-for-cloud-local-llm-inference-a-locally-certified-dehydrate-rehydrate-loop-with-layered-assurance-dr-sl)  
+   标签：评分：6.0/10、query:jb-def
+   evidence：云端-本地LLM推理的安全措施与数据去标识化
 
 
 <div class="dpr-home-promo-card">
