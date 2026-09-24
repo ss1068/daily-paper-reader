@@ -6,37 +6,43 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-23
-- 运行时间：2026-09-23 22:01:01 UTC
+- 最新运行日期：2026-09-24
+- 运行时间：2026-09-24 21:56:12 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：1
+- 本次总论文数：7
+- 精读区：3
 - 速读区：4
 
 ### 今日简报（AI）
-今日聚焦 LLM Agent 的安全治理与防御，深度解析 ActGov 如何通过策略约束实现动作合规。
-重点关注 Agent 动作验证与 RAG 知识库投毒防御，这些研究为构建更可控的智能体提供了关键范式。
-建议开发者优先审视 Agent 的执行边界，在部署前引入策略验证机制以规避潜在的安全风险。
-- 详情：[/202609/23/README](/202609/23/README)
+今日聚焦大模型安全前沿，深度解析人机协作控制与细粒度安全信号机制。
+重点关注可验证动作卡（VAC）与细粒度安全信号在提升智能体可信度方面的核心作用。
+建议优先阅读精读论文，深入理解如何通过技术手段构建更安全、可控的 AI 交互环境。
+- 详情：[/202609/24/README](/202609/24/README)
 
 ### 精读区论文标签
-1. [ActGov: Governing LLM Agent Actions via Policy-Constrained Validation](/202609/23/2609.24446v2-actgov-governing-llm-agent-actions-via-policy-constrained-validation)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：通过策略约束验证治理大语言模型智能体行为
+1. [The Verifiable Action Card: Trustworthy Human-in-the-Loop Control for Secure Autonomous Agents](/202609/24/2609.18411v1-the-verifiable-action-card-trustworthy-human-in-the-loop-control-for-secure-autonomous-agents)  
+   标签：评分：9.0/10、query:llm
+   evidence：防御大语言模型智能体中的间接提示注入
+2. [The Role of Fine-grained Harm Signals in LLM Safety](/202609/24/2609.19366v1-the-role-of-fine-grained-harm-signals-in-llm-safety)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：大语言模型内部有害性表示与安全对齐
+3. [SSP-Bench: A Hybrid Data Generation Framework for Safety, Security, and Privacy Evaluation](/202609/24/2609.25352v1-ssp-bench-a-hybrid-data-generation-framework-for-safety-security-and-privacy-evaluation)  
+   标签：评分：8.0/10、query:llm
+   evidence：用于LLM安全和安全性评估的动态基准测试框架
 
 ### 速读区论文标签
-1. [DUMA-Bench: A Dual-Control Multi-Agent Benchmark for Evaluating LLM Agent Security](/202609/23/2609.24662v1-duma-bench-a-dual-control-multi-agent-benchmark-for-evaluating-llm-agent-security)  
+1. [From Intent to Action: Benchmarking LLM Safety in Vehicle Voice Command Authorization](/202609/24/2609.19630v1-from-intent-to-action-benchmarking-llm-safety-in-vehicle-voice-command-authorization)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：关键系统中大语言模型安全与授权的基准测试
+2. [Your Model Is Leaking: Covert Information Transfer through LLM Residual Streams](/202609/24/2609.27996v1-your-model-is-leaking-covert-information-transfer-through-llm-residual-streams)  
    标签：评分：7.0/10、query:llm
-   evidence：对抗环境下评估大语言模型智能体安全的基准
-2. [RAG-NAROK: Retrieval-Aware Knowledge Corpus Poisoning in RAG with Source-specific Refutation](/202609/23/2609.25469v1-rag-narok-retrieval-aware-knowledge-corpus-poisoning-in-rag-with-source-specific-refutation)  
-   标签：评分：7.0/10、query:llm
-   evidence：RAG系统中的对抗性漏洞
-3. [MATE: Policy-Aware Security Auditing for Mobile Agents via Synthesis-Driven Trajectory Learning](/202609/23/2609.22724v1-mate-policy-aware-security-auditing-for-mobile-agents-via-synthesis-driven-trajectory-learning)  
+   evidence：大语言模型中的安全漏洞与隐蔽信息传输
+3. [MiST: Mid-Training LLMs for Cybersecurity](/202609/24/2609.18496v1-mist-mid-training-llms-for-cybersecurity)  
    标签：评分：6.0/10、query:llm
-   evidence：针对基于基础模型的移动智能体的安全审计
-4. [EADC: Evaluation of Advanced and Deep-level Compliance in Large Language Models](/202609/23/2609.26175v1-eadc-evaluation-of-advanced-and-deep-level-compliance-in-large-language-models)  
+   evidence：用于网络安全的大模型及领域特定训练
+4. [Conformal Privacy Auditing: Calibrated Re-identification Attacks with Statistical Guarantees](/202609/24/2609.21340v1-conformal-privacy-auditing-calibrated-re-identification-attacks-with-statistical-guarantees)  
    标签：评分：6.0/10、query:llm
-   evidence：大语言模型的合规性与安全风险
+   evidence：大语言模型中的隐私审计与身份泄露
 
 
 <div class="dpr-home-promo-card">
