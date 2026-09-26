@@ -6,43 +6,28 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-25
-- 运行时间：2026-09-25 22:24:35 UTC
+- 最新运行日期：2026-09-26
+- 运行时间：2026-09-26 22:04:00 UTC
 - 运行状态：成功
-- 本次总论文数：7
-- 精读区：2
-- 速读区：5
+- 本次总论文数：2
+- 精读区：1
+- 速读区：1
 
 ### 今日简报（AI）
-今日聚焦大模型安全前沿，深度剖析音频越狱防御与推理模型前缀攻击。
-重点关注 AEGIS 音频防御机制及推理模型面临的输出前缀攻击风险，这些研究揭示了模型交互中的关键漏洞。
-建议开发者优先审视工具调用与基础设施的安全性，防范潜在的经济损失与恶意探测。
-- 详情：[/202609/25/README](/202609/25/README)
+今日聚焦大模型安全前沿，深度解析机会约束微调技术与内核级代理安全防御。
+核心推荐关注机会约束微调方法，它能有效突破传统平均安全性的局限，显著提升模型鲁棒性。
+建议优先精读《Beyond Average Safety》以掌握安全微调新范式，并结合内核级证据研究拓宽代理安全视野。
+- 详情：[/202609/26/README](/202609/26/README)
 
 ### 精读区论文标签
-1. [AEGIS: Audio Endogenous Guarding via Internal Signals Against Large Audio-Language Model Jailbreaks](/202609/25/2609.29287v1-aegis-audio-endogenous-guarding-via-internal-signals-against-large-audio-language-model-jailbreaks)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：利用内部信号防御大型语音语言模型越狱攻击
-2. [Prefilling the Reasoning Channel: Output-Prefix Attacks on Reasoning LLMs](/202609/25/2609.29775v1-prefilling-the-reasoning-channel-output-prefix-attacks-on-reasoning-llms)  
-   标签：评分：8.0/10、query:llm
-   evidence：大语言模型上的越狱攻击
+1. [Beyond Average Safety: Chance-Constrained LLM Fine-tuning](/202609/26/2609.29960v1-beyond-average-safety-chance-constrained-llm-fine-tuning)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：大语言模型的安全性保持微调
 
 ### 速读区论文标签
-1. [Persistent Billable State: Denial-of-Wallet Attacks and Defenses in Tool-Calling LLM Agents](/202609/25/2609.28585v1-persistent-billable-state-denial-of-wallet-attacks-and-defenses-in-tool-calling-llm-agents)  
+1. [On the Effectiveness of Kernel-Level Evidence for Agent Security](/202609/26/2609.28915v1-on-the-effectiveness-of-kernel-level-evidence-for-agent-security)  
    标签：评分：7.0/10、query:llm
-   evidence：工具调用LLM代理中的钱包拒绝攻击与防御
-2. [OllamaDrama: Designing and Deploying a Honeypot to Measure Attacks on Exposed LLM Infrastructure](/202609/25/2609.29757v1-ollamadrama-designing-and-deploying-a-honeypot-to-measure-attacks-on-exposed-llm-infrastructure)  
-   标签：评分：7.0/10、query:llm
-   evidence：大语言模型中的安全漏洞与威胁
-3. [Instrumental Monitor Evasion Emerges Under Ordinary Task Pressure](/202609/25/2609.30217v1-instrumental-monitor-evasion-emerges-under-ordinary-task-pressure)  
-   标签：评分：7.0/10、query:llm
-   evidence：大语言模型智能体规避运行时监控和安全监管
-4. [MobileCybench: Evaluating Agent Vulnerability Discovery via Executable Probes](/202609/25/2609.23980v1-mobilecybench-evaluating-agent-vulnerability-discovery-via-executable-probes)  
-   标签：评分：6.0/10、query:llm
-   evidence：评估AI智能体漏洞
-5. [PrivDrift: Auditing User-Secret Leakage Under Topic Drift in Active LLM Conversations](/202609/25/2609.30094v1-privdrift-auditing-user-secret-leakage-under-topic-drift-in-active-llm-conversations)  
-   标签：评分：6.0/10、query:llm
-   evidence：审计LLM对话中的用户秘密泄露
+   evidence：智能体安全及针对恶意指令的防御
 
 
 <div class="dpr-home-promo-card">
