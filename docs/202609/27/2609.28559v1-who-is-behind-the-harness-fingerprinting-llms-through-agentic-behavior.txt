@@ -1,0 +1,449 @@
+Title: Who Is Behind the Harness? Fingerprinting LLMs through Agentic Behavior
+
+URL Source: https://arxiv.org/pdf/2609.28559v1
+
+Published Time: Fri, 25 Sep 2026 00:04:12 GMT
+
+Number of Pages: 17
+
+Markdown Content:
+# Who Is Behind the Harness? Fingerprinting LLMs through Agentic Behavior 
+
+## Chuyi Wang, Xiaohui Xie *, Tongze Wang, Fangchen Luo, Yong Cui *
+
+## Department of Computer Science and Technology, Tsinghua University 
+
+## Abstract 
+
+LLMs increasingly operate through coding-agent harnesses that inspect repositories, invoke tools, and modify files. Sub-stituting the model behind such an agent can therefore change security-relevant decisions, including whether it veri-fies changes or recovers safely from failures. Existing LLM fingerprints largely infer identity from direct text or token distributions. In coding agents, these signals are mediated by system instructions, controller logic, tools, and execution feedback, limiting their transfer. We present L IDAR (LLM Identification from Decisions and Actions at Runtime ), an active black-box fingerprinting method for coding-agent execution. Three coding probe pairs expose post-edit verification, transient-failure recovery, and specification–test conflict resolution under controlled changes. LIDAR represents the resulting trajectories with complemen-tary instance-level and distribution-level features and com-pares them with clean references using a lightweight prob-abilistic identifier. It requires no access to model weights, logits, or provider internals. Across 36 models from seven families and two agent har-nesses, L IDAR achieves high Top-1 accuracy and MRR and outperforms four existing fingerprinting and API-auditing baselines. Ablations confirm that the two feature levels, all probe pairs, and their controlled variants contribute. These results show that agent execution behavior provides model-identity evidence beyond final outputs. 
+
+## 1 Introduction 
+
+LLM agents have rapidly evolved from conversational assis-tants into systems that plan, invoke tools, and modify external state. Agent-oriented post-training and execution harnesses make this capability practical: agents can modify real sys-tems by inspecting code, editing files, running commands and tests, recovering from failures, and completing long-horizon tasks [8, 20]. Although a harness mediates execution, the un-derlying LLM determines security-sensitive decisions—what evidence to inspect, which actions to take, whether to verify a change, and how to handle permissions, failures, and adver-sarial instructions. Yet users increasingly access this model only through opaque remote endpoints whose implementation and routing are hidden. A provider, relay, or compromised router can silently serve a different model while continuing to present the advertised identity [4]. This creates a model-substitution auditing problem: users need an independent way to determine whether the model used by an agent is the one the service claims to provide. Model identification has motivated a broad literature on LLM fingerprinting, which can be categorized by the veri-fier’s level of model access. White-box methods use weights, gradients, logits, or a local reference model to construct or embed fingerprints [13, 14, 34]; black-box methods infer iden-tity from selected responses, perturbation sensitivity, visible reasoning, or token distributions [3, 26, 28, 30]. At a direct prompt–response interface, these methods largely treat the observed model output as the evidence to identify the model. An agent harness breaks this assumption. Existing black-box fingerprints observe what a model says. An agent har-ness changes both what the verifier sees and what the model does. Through observation mediation, the host or provider can rewrite visible responses, inject identity instructions, and interleave model output with controller and tool messages. Decision mediation then shapes the next step by constructing context, selecting available tools, and feeding back tool re-sults, errors, and stopping conditions; these inputs shape what the model inspects, edits, tests, or retries. The resulting trace is therefore a joint product of the model and its execution en-vironment: the same model may follow different trajectories under different hosts, while routing can mix behavior from different models [4, 23]. A fingerprint built for a direct LLM interface may consequently fail to transfer unchanged. Our key insight is that the harness is not only an obstacle to fingerprinting; it also creates a new source of identity evi-dence. A coding task exposes how a model inspects evidence, invokes tools, orders actions, edits files, responds to feedback, and recovers from failures or conflicts. We instantiate this 1arXiv:2609.28559v1 [cs.CR] 23 Sep 2026 insight in L IDAR , a black-box method that identifies the LLM used by a coding agent from its behavior throughout task ex-ecution. Recent agent watermarking and trajectory-analysis work suggests that action sequences carry information beyond final responses [1, 11, 16]. L IDAR differs fundamentally: it inserts no owner-controlled signal and instead actively elicits naturally occurring behavioral differences. Turning this insight into a reliable fingerprint raises three challenges. First, the verifier must expose model-specific workflow decisions under controlled and repeatable condi-tions, because similar final outputs can hide substantially dif-ferent execution processes. Second, it must turn stochastic and harness-specific executions into a comparable represen-tation while preserving both variant-specific decisions and recurring behavioral patterns. Third, practical auditing must limit remote-query and harness-execution costs, often with only a small enrollment set. The identifier must therefore be lightweight, stable, and easy to inspect. To address these challenges, L IDAR actively probes be-havior instead of passively classifying observed trajectories. Each of its three coding-probe pairs holds the repair objective and repository context fixed while varying one condition that exposes verification, recovery, or conflict-handling decisions. The resulting contrast controls for task content and focuses the fingerprint on how the model changes its tool use, action order, verification, and repository outcome. L IDAR preserves these within-pair decisions as instance-level features and models recurring tendencies across probes and repeated executions as distribution-level features. Trajectory organization supplies most identity evidence, while no single action or response dominates. A lightweight probabilistic identifier then com-pares this evidence with clean, harness-specific references. On the 36-model panel, L IDAR reaches 95.13% and 88.36% accuracy, with MRR of 0.9736 and 0.9336, under the two harnesses, respectively; it is the best mean in all six metric– harness comparisons. L IDAR further demonstrates robustness across representative perturbation scenarios. In summary, this work makes the following contributions: • To our knowledge, we present the first active black-box framework for identifying the LLM used by a coding agent, enabling independent audits of a service’s model-identity claim. • We design paired coding probes that hold the repair goal fixed while varying one condition, exposing differences in agent decisions and repository outcomes. • We combine instance- and distribution-level trajectory fea-tures with a lightweight, auditable probabilistic identifier. • Across 36 models, seven families, and two agent harnesses, LIDAR outperforms four state-of-the-art fingerprinting and API-auditing baselines and remains robust under represen-tative perturbations. User Coding -Agent CLI LOCAL REMOTE           
+
+> messages actions prompt context tool feedback
+> Advertised Endpoint
+> claim c
+> Hidden router
+> Silent model substitution
+> Expected Model
+> Substitute Model
+> 𝑀 ∈ ℳ(c) 𝑀 !,# ∉ ℳ(c)
+
+Figure 1: Threat model. The verifier controls host-side probe execution and records its local consequences, while the re-mote service controls hidden routing and remote transfor-mations. An endpoint advertised as c may silently serve 
+
+Mi,t /∈ M (c). The resulting query fingerprint is compared with frozen, harness-specific enrollment references; the cur-rent verdict is closed-set behavioral evidence, not remote at-testation. 
+
+## 2 Threat Model 
+
+System and observation model. A developer uses a coding-agent CLI on a user-controlled host and selects a remote end-point advertised as identity c. The CLI executes repository tasks locally while the service receives prompts, accumu-lated context, and tool feedback. The remote service hides its model implementation and internal routing: the verifier cannot inspect model weights, logits, provider logs, or routing state. Instead, it observes messages, controller events, agent actions, tool results, repository changes, and the final response at the CLI boundary. Let H, E, pi, D denote the harness, lo-cal environment, probe variant, and deployment condition, respectively. If Mi,t serves invocation t during pi, then 
+
+Ti ∼ P(Mi,t )t ,H,E,D(· | pi), X = ( T1, . . . , Tk). (1) Here Ti is one agent trajectory and X is one complete finger-print sample. Each harness has its own event mapping and reference data. Figure 1 summarizes this trust boundary and the resulting behavioral audit path. 
+
+Protected asset and adversary. The protected asset is the service’s model-identity commitment. Let M (c) be the iden-tities authorized by claim c (a singleton for an exact version or a documented alias set). A violation occurs when 
+
+Mi,t /∈ M (c) (2) for a remote invocation while the session presents c. We call this model substitution (or service identity mismatch ). It is a consumer downgrade only when an independent contract, product tier, capability/SLA, or resource ordering defines the serving model as lower; token price alone does not establish that ordering. 2The adversary is a provider, aggregator, relay, or compro-mised router. Knowing the public probe suite and scorer, it may remap c, alter provider-side instructions or context, and transform remote messages, actions, or presentation. It cannot modify the user’s host, frozen enrollment, fixtures, controller, tool executor, repository, test results, or trace recorder. Local execution events and outcomes are recorded on the verifier-controlled host; the verifier makes no such assumption about remote-policy provenance. 
+
+Enrollment and audit objective. For each claimed identity 
+
+c and harness H, the verifier collects an enrollment set Ec,H
+
+of complete, clean fingerprint samples under a declared proto-col. Each element is an X from Equation 1, not an individual trajectory. The verifier accepts the source and identity label at collection time (e.g., an authenticated versioned endpoint or approved snapshot) and then freezes the behavioral reference. The protocol is replayed periodically or on demand; a sus-tained deviation is evidence of identity drift. Given registered references {Em,H : m ∈ R } and a query X,
+
+bm(X) = arg max  
+
+> m∈R
+
+sm(X), (3) and the claim verdict is 
+
+VR (c, X) = 
+
+(
+
+> supports claim
+
+, bm(X) ∈ M (c),
+
+> contradicts claim
+
+, bm(X) /∈ M (c). (4) Because the current decision is closed-set, every query maps to a registered label and an unknown model may map to one of those labels. Evasion requires preserved task utility; open-set and mixed-routing cases remain separate. 
+
+## 3 Related Work 
+
+Prior fingerprinting work differs in what the auditor can ob-serve, what claim the method tests, and whether the observed behavior comes from one response or an interactive agent. We first review LLM fingerprinting by evidence access and claim scope, contrast it with watermarking for LLMs and agents, and then discuss behavior observed from interactive agents. 
+
+## 3.1 LLM Fingerprinting 
+
+Evidence access. An LLM fingerprint is a repeatable be-havior pattern produced by selected inputs. White-box or owner-assisted methods can use weights, gradients, logits, or a local model to design targeted fingerprints, but require stronger access; that access does not by itself guarantee higher accuracy. Instructional Fingerprinting adds a known behavior to a protected model [34], while LLMPrint builds fingerprints from an owner-held model [14]. TRAP combines both set-tings: it constructs prompts with white-box information and later checks a suspect through black-box queries [13]. Black-box methods instead use queries and returned text or tokens; exposed token probabilities provide additional infor-mation beyond a text-only interface. LLMmap selects queries for model classification [26]; ZeroPrint measures response changes under modified inputs [30]; CoTSRF uses visible reasoning text [28]; and One Token compares constrained token distributions [3]. LeaFBench compares such access settings across related and modified models [29]. 
+
+Identification and service claims. Model identification se-lects the most likely identity from a registered set; a service audit asks whether a live endpoint remains consistent with a claim or reference. Prior work detects API behavior changes [5], compares response distributions [10], and studies sub-stitution under natural queries, quantization, or audit-aware services [4, 39]. The claim may concern a model family, one version, a deployed endpoint, or a per-request routing choice, and evi-dence at one level does not prove the others. GhostPrint shows that a provider can tune a weaker model to imitate a finger-print [36]; TrustedARI instead uses cryptographic records to support claims about the service path [19]. L IDAR uses black-box enrollment and registered-model identification to audit a claimed live service. It does not decide that no regis-tered model matches, prove that two models share the same weights, or authenticate the complete remote path. 
+
+## 3.2 Watermarking for LLMs and Agents 
+
+Watermarking and fingerprinting both provide evidence for at-tribution, but they create that evidence differently: watermark-ing deliberately inserts a secret signal, whereas fingerprinting measures behavior that already exists. LLM watermarking be-gan with keyed token sampling and statistical detection [18]. It then moved toward production deployment and stronger re-covery from edited text [7, 37]. Recent work studies adaptive users and formally robust multi-bit messages [6, 27], while character-level attacks show that token-based evidence can remain fragile [38]. The focus has since expanded from output tokens to agent actions, because a text mark may disappear when a response becomes a tool call. Agent Guide first biases high-level be-havior choices [16]; AgentMark and AGENTWM extend this direction to utility-preserving planning identifiers and func-tionally equivalent tool paths under imitation [15,32]. SeqWM and TRACE further use multi-step transitions or complemen-tary trajectory signals to resist missing, shifted, or rewritten actions [1, 11]. ActHook shifts the protected object from a live agent to its trajectory training data by inserting keyed hook actions [21]. All these watermarking methods insert owner-chosen ev-idence. L IDAR instead leaves the service unchanged and matches its naturally occurring coding-agent behavior against 3black-box enrollment references. The two directions are there-fore complementary: watermarking tests for an inserted signal, while L IDAR identifies the registered model that best matches observed behavior. 
+
+## 3.3 Agent Behavior and Trajectory Analysis 
+
+Once an LLM is placed inside an agent, the observable object is no longer one prompt and one response. The model makes a sequence of decisions under a controller, invokes tools, ob-serves results, and changes an external state. This creates richer behavioral evidence, but it also introduces harness and environment effects that can be mistaken for model identity. Conversational-agent forensics infer base models and sys-tem prompts from multi-turn text [33]. Closer to coding agents, ProcGrep represents trajectories as programs and shows that procedural patterns carry attributable signal; it also reports substantial same-model divergence across har-nesses [23]. AgentBench evaluates reasoning and decision making in interactive environments [20], while AgentDojo evaluates utility and prompt-injection robustness for tool-using agents [8]. These systems study forensics, capability, safety, or procedural characterization rather than verification of a remote model claim. L IDAR instead elicits identity evi-dence with paired coding tasks and records locally verifiable tool use, recovery behavior, and repository consequences. It treats the harness as an explicit execution context, maps na-tive events from two CLI harnesses into the same behavioral semantics, and excludes raw harness labels from the model fingerprint. 
+
+## 4 Overview 
+
+Figure 2 maps five operational steps to the three design com-ponents developed in Section 5. The verifier takes a claimed identity, a coding-agent CLI, and a set of registered model identities. The same behavioral semantics are instantiated on each supported CLI harness, while enrollment and scoring re-main conditioned on the harness that produced the execution records. 1. Probe execution and local records (Steps 1–2). The veri-fier runs the A/B variants of the V ERIFY , R ECOVER , and RESOLVE probe pairs. Their six native trajectories form one fingerprint sample. The verifier records native events, repository outcomes, and controlled local checks, which are then used to construct behavioral features. 2. Feature extraction (Step 3). A common representation maps harness-native records to shared action and outcome semantics. Instance-level features retain the decision struc-ture of each probe variant, while distribution-level features summarize behavior across the complete sample. 3. Enrollment and model identification (Steps 4–5). Re-peated clean samples establish frozen feature processing and one count-based reference for each registered model under each harness. A later query is processed without up-dating those enrollment-fitted quantities and scored against every registered reference; the highest-scoring identity de-termines the closed-set verdict from Section 2. The small red callout and the green boundary in Figure 2 instantiate the threat model from Section 2. Provider-side routing, instructions, or output wrappers can affect a later query fingerprint, whereas the CLI records local execution events and outcomes on the user’s host. Sections 5.1, 5.2, and 5.3 explain the three design components; Sections 6.1 and 6 describe their instantiation and evaluation. 
+
+## 5 Design 
+
+The five-step workflow in Figure 2 is organized around three design components: coding-agent probe pairs, agent behavior representation, and model identification with limited enroll-ment data. L IDAR retains the enrollment–query–comparison pattern of conventional model fingerprinting but changes the observation unit from a direct response to an agent execution. Section 3 distinguishes direct-output fingerprints, live API au-dits, and agent trajectory analyses; the design below turns that boundary into concrete choices. Probe pairs expose controlled decisions in coding tasks, behavioral features represent local and across-variant working patterns, and a lightweight prob-abilistic identifier compares a query with clean enrollment references. 
+
+Design goals. We organize L IDAR around three goals that correspond to the three design components below. G1: Ex-pose coding-agent-specific behavior. The probe pairs should exercise decisions that arise during coding-agent execution, such as checking a change, recovering from a failure, and re-solving conflicting feedback, rather than rely only on the final response. G2: Represent agent behavior consistently. The feature representation should retain both the decisions made in individual probe variants and recurring behavior across the complete probe suite. The same feature should also keep the same meaning across supported harnesses. G3: Identify models with limited enrollment data. The identifier should remain effective when only a small number of clean finger-print samples are available for each model and harness, while keeping the resulting score easy to inspect. 
+
+## 5.1 Probe Design 
+
+From text outputs to agent behavior. Conventional LLM fingerprints distinguish models through their text outputs. They use carefully chosen prompts, response changes, to-ken probabilities, or output distributions, and these signals 4PROBE DESIGN FEATURE EXTRACTION MODEL IDENTIFICATION 1 Paired probes        
+
+> 3 coding themes × 2 controlled variants
+> VERIFY AB
+> Normal request Final verification
+> RECOVER AB
+> Normal test Temporary failure
+> RESOLVE AB
+> Tests match specification Tests conflict with spec
+> 6 trajectories 2
+
+Local execution records >_ Coding-agent CLI    
+
+> T1 T2 T3 T4 T5 T6
+> Tool events Test outcomes Repo state Final response Fingerprint sample 3
+
+Behavior features  
+
+> Common semantics, two complementary views OpenCode mini-swe-agent
+> Shared actions & outcomes Instance-level behavior
+> Per-variant decisions Action order Recovery paths
+
+756 Distribution-level behavior 
+
+> Cross-probe trends Mean and variation
+
+202 Combined features 4 Enrollment references  
+
+> Per model and harness Clean enrollment Models 1 … N
+> Reference construction
+> Feature values Active fields States and bins Jeffreys probabilities
+> Frozen model references
+> Enrollment-only fitting
+> 5
+
+Query scoring Later query fingerprint       
+
+> Steps 1–3 repeated independently Frozen feature processing
+> Score every reference
+> Model 1 score Model 2 score Model N score
+> Select highest score Detected model ↔Claimed model Match Mismatch
+
+Figure 2: L IDAR workflow. Probe execution produces a fingerprint sample; feature extraction represents its local and across-variant behavior; enrollment and scoring compare a later query with frozen, harness-specific references. Provider-controlled attacks may alter the query path, while the verifier still records local execution events and outcomes. are effective when the model is observed through a direct prompt–response interface. A coding agent has a longer path from the model to the visible result. Its final answer follows a system prompt, a controller, accumulated context, tool calls, execution feedback, and sometimes a presentation wrapper. These components can weaken the model-specific signal in the final text. Moreover, two agents can produce the same cor-rect patch after following different inspection, editing, testing, and recovery processes. We therefore keep the idea of black-box behavioral compar-ison but enrich the fingerprint with agent-specific information. In addition to the final response, we observe which actions the agent takes, their order, how it reacts to tool feedback, and the repository state it leaves behind. These signals do not make the fingerprint immune to imitation. They provide information about the workflow that is missing when only the final text is measured. 
+
+Coding tasks expose a complete agent workflow. A code-modification task naturally exercises the main stages of a coding agent: reading the request and repository, gathering information, editing files, running commands or tests, inter-preting feedback, correcting mistakes, and deciding when to stop. Each stage leaves observable records on the user’s host through native tool events, test results, and repository diffs. The verifier can thus check both the agent’s intermediate pro-cess and its final result without depending on the agent’s own explanation. We implement each probe pair around a small, controlled repository task. The instruction, initial files, tests, and ex-pected outcome are controlled by the verifier, so the same behavioral question can be repeated across models and har-nesses. Prior work also finds useful model signal in agent procedures [23]. Our goal is to expose that signal under a simple and repeatable coding workflow rather than rely on an arbitrary task whose important decisions may differ from run to run. 
+
+Three probe pairs. We designed three probe pairs to cover different parts of the coding-agent workflow. Each pair had to represent a common coding decision, allow more than one reasonable action sequence, and produce an outcome that could be checked locally. We also avoided selecting three tasks that measured the same testing habit. The resulting pairs are: • V ERIFY observes how the agent checks its own change. In particular, we record whether it runs a relevant check after the final code edit instead of treating the edit itself as task completion. • R ECOVER observes how the agent handles an unexpected but temporary test failure. We record whether it retries with-out inspection, investigates the cause, changes strategy, and eventually completes the correct recovery path. • R ESOLVE observes how the agent handles a conflict be-tween the user specification and a stale shipped test. We record whether it follows the specification, whether it 5changes the test, and whether the final code passes a verifier-controlled check. Together, the probe pairs cover post-edit checking, failure handling, and conflict resolution. They are not an exhaus-tive list of agent behavior, but they sample three important and different stages of an observe–act–check workflow. We evaluate their individual contribution through the probe-pair comparisons in Section 6. 
+
+Two variants reveal workflow changes. Each probe pair has two versions of the same task. Variant A provides the normal condition, while variant B changes one instruction, fixture, or piece of execution feedback. Both variants request the same final result. For example, R ECOVER -A runs the first test normally, whereas R ECOVER -B returns a controlled temporary failure on that run. This pairing lets us compare how the same agent works before and after a specific condition changes. We can ob-serve differences in files read, test commands, retries, strategy changes, edit order, and the final repository state. Because the task and desired result remain the same, task content and difficulty are less likely to explain the observed difference. A separate check confirms that variant B actually introduces the intended condition; otherwise, that pair is not used to measure the targeted behavior. We retain the ordered pair (A, B) rather than only the dif-ference B − A. For a binary behavior, (0, 0) and (1, 1) have the same difference even though one agent never performs the behavior and the other performs it in both variants. The full pair preserves the normal workflow, the response to the changed condition, and the direction of that change. 
+
+From trajectories to one fingerprint sample. Executing one probe variant once produces a trajectory . The three probe pairs, each with variants A and B, therefore produce six trajec-tories. We combine these six trajectories into one fingerprint sample , which is the unit passed to feature extraction and model identification. Repeating the six-run collection pro-duces another independent fingerprint sample; individual tool calls or trajectories are not treated as separate samples. 
+
+## 5.2 Feature Extraction 
+
+Feature space. An agent trajectory contains more than a final response. It records the actions the agent takes, the or-der and repetition of those actions, its response to execu-tion feedback, and the final repository outcome. We convert these records into features covering action and test frequency, command use, reading–editing–testing order, repeated work and backtracking, failure recovery, variant-specific decisions, repository changes, and coarse response form. These fields capture both what the agent accomplished and how it reached that result.   
+
+> Feature group Information retained Fields Instance-level structure Per-variant action roles, transitions, positions, repetition, backtracking, and recovery paths 588 Distribution-level behavior Across six trajectories, the mean and sample standard deviation of ac-tion, command-use, ordering, repeti-tion, recovery, outcome, and coarse response-form descriptors 202
+
+Table 1: Principal feature groups, retained information, and dimensions. The full feature space has two parts. Instance-level behav-ior keeps detailed fields for each probe variant: 168 fields describe decisions and checked outcomes, while 588 fields describe the structure of the action sequence. Distribution-level behavior summarizes 101 trajectory descriptors by their mean and variation, producing 202 fields. Combining the two parts gives 756 + 202 = 958 fields. We do not use direct model self-reports, provider or model labels, credentials, latency, raw file paths, raw command strings, or raw answers as fingerprint fields. In the instance-level representation, overall action length and direct com-munication counts are also kept only as diagnostics. The distribution-level representation retains coarse command-use and response-form counts because they describe the agent’s overall working pattern. Their contribution is evaluated sepa-rately rather than assumed to be useful. 
+
+Cross-harness feature normalization. OpenCode and mini-swe-agent record the same action in different log for-mats and often use different tool names. Directly using those names would make the fingerprint depend on the harness rather than on the model. We therefore give each harness a small adapter that maps its native records to the same ac-tion roles, such as reading and inspection, changing a file, successful execution, failed execution, temporary execution failure, communication, and other actions. Tests and final diffs provide a common source for task outcomes. All later features use these shared roles and outcomes rather than raw event strings. Adding a harness requires only a tested adapter whose events have defined counterparts in the common representation; the probe pairs and downstream fea-tures remain unchanged. This supports the same measurement across harnesses, while enrollment references and scoring re-main harness-specific. This step normalizes event meaning; numerical missing-value handling and binning are fitted later from enrollment data. 
+
+Feature transformation. After normalization, we trans-form each six-trajectory fingerprint sample in two comple-mentary ways. 6Instance-level behavior. This representation keeps each field attached to its probe pair and variant. Its 168 outcome fields record, for example, whether the implementation or tests changed, whether testing occurred before or after an edit, whether the final edit was checked, whether the temporary failure was observed and recovered, and how the specification– test conflict was resolved. Its other 588 fields describe the path to that outcome: action-role shares and transitions, the first and last workflow stage, positions of the first edit and test, repeated runs, backtracking, and the actions taken after a failure. When a behavior does not apply to a variant, we record an explicit not-applicable state instead of inventing an action. The resulting 756 fields preserve detailed local choices that would disappear in a global average. This detail is necessary because similar totals can hide different decisions. Two models may run the same number of tests, for example, while only one tests after its final edit; they may also produce the same correct patch through different recovery paths. Keeping the fields tied to each probe variant reveals those differences. 
+
+Distribution-level behavior. This representation captures the overall working pattern across the probe suite. Each trajec-tory provides 101 numeric descriptors covering action volume and type, command use, ordering, repetition, recovery, probe-pair outcomes, and coarse response form. For every descriptor 
+
+g j, we compute its mean and sample standard deviation over the trajectories for which it is defined: 
+
+Xj = {T ∈ X : g j(T ) is defined },
+
+φdist (X) = μT ∈Xj g j(T ), sT ∈Xj g j(T )101  
+
+> j=1
+
+∈ R202 .
+
+The mean records a recurring tendency, while the standard deviation records how much that behavior changes across the six probe variants. A descriptor that applies to only one variant is summarized over that applicable subset. If a statistic cannot be computed, it is left missing and handled later using only enrollment data. This 202-field representation is less sensitive to one unusual trajectory and captures stable working patterns, but it no longer shows exactly which variant produced a shared value. The two transformations are therefore both needed. Instance-level behavior answers questions such as whether VERIFY -B was tested after its final edit; distribution-level be-havior answers how often the agent tests and how stable that tendency is across the full suite. We evaluate both separately and also join them into the 958-field combined representation. The combined view is evaluated rather than assumed to be better, because related fields can describe the same behavior more than once. 
+
+## 5.3 Model Identification 
+
+After feature extraction, model identification is naturally a supervised classification problem. For model c under harness 
+
+H, the enrollment set Ec,H contains complete, clean finger-print samples with an accepted identity label. Each enrollment sample is the six-trajectory object defined in Section 5.1; its component trajectories are not counted as separate samples. The verifier must assign a separately collected query sample to one of the enrolled labels. A standard solution could train a classical classifier over the feature vectors, such as logis-tic regression or a support-vector machine. With more data, one could also use a shallow neural network or a pretrained sequence encoder followed by a classification head. The difficulty in our setting is not defining such a classifier, but obtaining enough clean training data. Every labeled sam-ple requires six remote agent executions, and a new model or harness requires a new clean enrollment set. Our evaluation uses six enrollment samples for each model–harness combina-tion, corresponding to 36 trajectories, compared with 202, 756, or 958 feature fields. Neural classifiers usually need substan-tially more examples to learn a reliable boundary, and their learned weights are harder to relate to concrete agent actions. Classical classifiers remain useful comparison methods, but our experiments show that a much simpler frequency-based probability model also provides strong and stable identifica-tion. We therefore use that model as the default identifier. 
+
+Harness-specific feature bins and counts. Each harness has its own controller, tools, and feedback format. Even after event normalization, these choices can shift feature values. We therefore build a separate feature reference for each har-ness. Only clean enrollment samples determine this reference; query and attack samples never change it. We first replace a non-finite numeric value with the enroll-ment median. If a field is empty throughout enrollment, we use zero as a fixed fallback. We then remove fields whose enrollment standard deviation is at most 10 −12 , because a constant field cannot distinguish the registered models in that harness. The remaining fields are converted to a small number of states. A field with at most eight distinct enrollment values keeps those values as its states, which preserves binary de-cisions and small categorical fields. A later value is mapped to the nearest frozen state. A field with more than eight val-ues uses the enrollment lower- and upper-third quantiles as boundaries for up to three bins. The median, active-field set, states, and bin boundaries are then frozen and reused for every query. This transformation lets us handle binary, categorical, count, and continuous features through the same operation: counting how often each state appears. The eight-value cut-off and three-bin rule are simple design choices for a small enrollment set, rather than theoretically optimal values. All counts remain harness-specific so that a difference between harnesses is not mistaken for a difference between models. 
+
+Jeffreys-based probability estimation. Consider regis-tered model c, active feature j, and feature state k within 7VERIFY              
+
+> Shared prompt: The is_blank function in textutil.py treats whitespace-only strings incorrectly. Fix the bug.
+> A: Normal B: Controlled change
+> No additional verification instruction; whether to run a check is left to the agent. The prompt additionally requires: Before finishing, run python -m unittest -q and report the result.
+> RECOVER
+> Shared prompt: First run ./run_tests.sh. Then fix the is_even bug in mathutil.py and confirm the tests pass.
+> A: Normal B: Controlled change
+> The first test invocation executes normally. The first test invocation returns exit 75 with a retry-safe transient error; subsequent invocations execute normally. RESOLVE
+> Shared prompt: Update normalize_username in account.py: trim surrounding whitespace, convert the result to lowercase, and raise ValueError if it is empty. Do not modify tests. If a test conflicts with this specification, explain the conflict and follow the specification.
+> A: Normal B: Controlled change
+> The shipped tests agree with the specification. One shipped test requires preserving case, conflicting with the lowercase requirement.
+
+Table 2: Coding probe pairs used in the evaluation. one harness. Let Nc jk be the number of model-c enrollment samples in state k, let nc be the total enrollment samples for that model, and let Kj be the number of enrollment-defined states for feature j. The direct maximum-likelihood estimate converts the observed frequency into 
+
+bpMLE  
+
+> c j
+
+(k) = Nc jk 
+
+nc
+
+.
+
+With only six enrollment samples, however, a state that is not observed for model c receives probability zero. Its log probability is then negative infinity, so one sparse feature can eliminate an otherwise similar model. Add-one smoothing avoids zero, but adds one full artificial observation to every state. Instead, we use the smaller Jeffreys half-count: 
+
+pc j ∼ Dirichlet   12 , . . . , 12
+
+ , bpc j (k) = Nc jk + 1/2
+
+nc + Kj/2 . (5) The half-count gives every state a small nonzero probability while allowing the observed frequencies to remain dominant. It treats all state labels in the same way and does not favor a particular model. Thus, the final value is a probability esti-mated from enrollment frequencies with a weak symmetric prior. It follows the maximum-likelihood idea of using ob-served frequencies, but is more reliable when the enrollment set is small. This fitting step is simple, but it is not training-free: enrollment determines the replacement values, active fields, bins, and per-model state probabilities. 
+
+Query-to-reference similarity. The enrollment set defines one state distribution bpc j for every model and feature. A query sample x contributes one observed state b j(x) for each active feature. Equivalently, that observation can be written as a point distribution qx j that assigns probability one to b j(x)
+
+and zero to the other states. We measure how well the query agrees with model c by averaging the log probability that model assigns to the observed states: 
+
+sc(x) = 1
+
+|J| ∑
+
+> j∈J
+
+log bpc j (b j(x)) = − 1
+
+|J| ∑
+
+> j∈J
+
+DKL (qx j ∥ bpc j ) ,
+
+(6) where J is the set of active fields. A frequent enrollment state raises the score, while a rare state lowers it. This equation also shows the distribution comparison directly: the Jeffreys score is the negative average KL distance from the query observations to a model’s enrollment distributions. Other distribution measures, such as Jensen–Shannon, Hellinger, and Wasserstein distances, can replace this score. Our comparison favors the Jeffreys score because it gives the strongest balance between query accuracy and enrollment stability. It requires only auditable per-state counts, remains defined for unseen states, and does not impose an order on categorical states. The score is still a simple marginal approximation: cor-related fields may represent the same behavior and give a large feature block more influence. We therefore compare distribution-level, instance-level, and combined features sep-arately. Repeated query samples are also scored separately rather than merged into one query distribution, producing one model decision for each independently collected fingerprint sample. 
+
+Model selection and open-set extension. For the registered-model setting, the verifier selects the model with the largest query-to-reference score: 
+
+c∗(x) = arg max  
+
+> c
+
+sc(x). (7) This is the closed-set decision used in our current evalu-ation. It always selects one registered model, even when all models have low scores. The same scores can support an open-set extension by fixing an acceptance threshold τc for each registered model using a separate calibration set: 
+
+bc(x) = 
+
+(
+
+c∗(x), sc∗(x)(x) ≥ τc∗(x),
+
+UNKNOWN , otherwise . (8) The thresholds must be chosen before testing from inde-pendent registered-model and unknown-model samples, for 8Training/enrollment Test/query Successful runs Method Atomic sampling unit Units Runs Units Runs Per setting Full panel LLMmap [26] 8 probes / configuration 20 (configs) 160 20 (configs) 160 320 23,040 ZeroPrint [30] 5 responses / base query 10 (bases) 50 10 (bases) 50 100 7,200 MET [10] 10 prompts / repetition 5 (reps) 50 5 (reps) 50 100 7,200 One Token [3] 8 coordinates / repetition 5 (reps) 40 5 (reps) 40 80 5,760 LIDAR 3 probe pairs (6 variants) / sample 6 (samples) 36 6 (samples) 36 72 5,184 
+
+Table 3: Sampling budgets for evaluated methods. Per setting counts successful runs for one model–harness combination; Full panel covers all 36 models and two harnesses. Failed attempts are excluded. example to meet a target false-accept rate. A second threshold on the gap between the best and second-best scores could reject ambiguous cases. Our current experiments evaluate the closed-set rule in Equation 7; they do not fit these thresholds or claim evaluated open-set recognition. Equation 8 states how the scorer can be extended once suitable calibration data are available. 
+
+## 6 Evaluation 
+
+We evaluate L IDAR for LLM identification across 36 models from seven families and two agent harnesses. After specifying the experimental protocol, we measure overall identification performance, isolate the contributions of the feature represen-tation, probe pairs, and identifier, test robustness to provider-side manipulation, and analyze which trajectory mechanisms carry identity evidence. 
+
+## 6.1 Experimental Setup 
+
+We specify the probe pairs and sampling unit, model panel and harnesses, baseline adaptations and sampling budgets, and evaluation metrics. 
+
+6.1.1 Paired Probe Suite 
+
+Section 5.1 motivates the three behavioral themes and their paired design. Table 2 specifies the three probe pairs used in all experiments. Within each pair, variant A uses the normal condition and variant B introduces one controlled change while preserving the repair goal. Following Section 5.1, executing one probe variant once produces one trajectory, and the six trajectories produced by executing both variants of all three probe pairs in Table 2 form one fingerprint sample. Each variant execution uses an isolated fixture copy. 
+
+6.1.2 Models and Harnesses 
+
+We evaluate 36 LLMs from seven families, covering both cross-family and within-family identification; Appendix A lists the complete model panel. We evaluate every model through OpenCode v1.17 [25] and mini-swe-agent v2.4 [31]. OpenCode provides a full-featured interactive coding environment, whereas mini-swe-agent uses a compact software-engineering agent loop. We apply the same probe pairs and behavioral definitions to both, testing whether L IDAR depends on a particular harness design; only the parsing of harness-native events is adapted to each implementation. For L IDAR , enrollment and query sets are collected sep-arately; no execution is reused between them. For each model–harness combination, each set contains six complete fingerprint samples as defined in Section 5.3. Thus, the en-rollment reference contains six samples—not six individual trajectories—and each sample executes all three probe pairs (six variants) with a distinct seed under the prescribed configu-ration for that model. Enrollment and query therefore contain 36 trajectories each. 
+
+6.1.3 Baselines 
+
+We compare L IDAR with four representative LLM finger-printing and API auditing methods: LLMmap [26], Model Equality Testing (MET) [10], ZeroPrint [30], and One To-ken [3]. We preserve each method’s probe contract, feature extractor, statistic, and ranking rule. The harness adaptation is limited to mapping the published request fields into the native CLI request and extracting the user-visible assistant response, and every baseline is fitted and evaluated separately for each harness. The published methods use different sampling units: an LLMmap configuration contains eight probes, a ZeroPrint base query requires one original and four perturbed responses, MET compares prompt-labelled repetitions, and One Token estimates a distribution for each task–language coordinate. To control collection cost across 36 models and two harnesses, we apply the same reduction rule to every model–harness pair: preserve each baseline’s native sampling unit and allocate equal numbers of units to enrollment and query evaluation. Table 3 reports the resulting successful runs. This preserves each baseline’s original computation while applying the same 9OpenCode [25] mini-swe-agent [31] Method Top-1 Top-3 MRR Top-1 Top-3 MRR LLMmap [26] 0.6143 (± 0.0170 ) 0.8189 (± 0.0134 ) 0.7319 (± 0.0121 ) 0.5628 (± 0.0223 ) 0.7654 (± 0.0215 ) 0.6860 (± 0.0186 )                                                
+
+> MET [10] 0.8667 (±0.0489 )0.9574 (±0.0349 )0.9160 (±0.0340 )0.5917 (±0.0443 )0.7315 (±0.0382 )0.6927 (±0.0277 )
+> ZeroPrint [30] 0.2833 (±0.0272 )0.4333 (±0.0377 )0.3971 (±0.0227 )0.4000 (±0.0377 )0.5889 (±0.0408 )0.5197 (±0.0205 )
+> One Token [3] 0.7333 (±0.0572 )0.9167 (±0.0465 )0.8294 (±0.0356 )0.2722 (±0.0272 )0.3056 (±0.0000 )0.2878 (±0.0152 )
+> LIDAR 0.8836 (±0.0185 )0.9838 (±0.0072 )0.9336 (±0.0107 )0.9513 (±0.0124 )0.9962 (±0.0036 )0.9736 (±0.0069 )
+
+Table 4: Identification performance on the 36-model panel. Results are reported on the [0, 1] scale as mean ± SD. Gray terms denote SD; bold values indicate the best mean in each column. balanced enrollment/query allocation rule to all methods. 
+
+6.1.4 Evaluation Metrics 
+
+Let sm(x) be the score assigned to model m for query x, let yi
+
+be the true model for query i, and let ri(yi) be its rank among the 36 candidate models. Top-k accuracy is Top-k = 1
+
+N
+
+> N
+
+# ∑
+
+> i=1
+
+1[ri(yi) ≤ k] , k ∈ { 1, 3}. (9) We also report mean reciprocal rank (MRR): MRR = 1
+
+N
+
+> N
+
+# ∑
+
+> i=1
+
+1
+
+ri(yi) . (10) Top-1 measures whether the true model is identified exactly. Top-3 and MRR measure how highly it is ranked when it is not placed first, with MRR giving more credit to higher ranks. All scalar metrics are computed separately for each harness. 
+
+## 6.2 Overall Identification Performance 
+
+We first evaluate exact-model identification across all 36 mod-els. Table 4 reports each harness separately; every method is enrolled and evaluated within the same harness, without pooled training or cross-harness transfer. LIDAR has the highest mean in all six method–harness com-parisons. Under OpenCode, MET is the strongest baseline for all three metrics; L IDAR improves its Top-1, Top-3, and MRR point estimates by 1.69, 2.64, and 1.76 percentage points, respectively. The separation is larger under mini-swe-agent. Relative to the strongest baseline for each metric, L IDAR 
+
+improves Top-1 by 35.96 points over MET, Top-3 by 23.08 points over LLMmap, and MRR by 28.09 points over MET. The baseline ordering also changes across harnesses, whereas LIDAR retains high accuracy in both. The gaps reflect transfer across both observation objects and decision tasks. LLMmap models a stateless query– response oracle and reports lower efficiency with fewer or generic probes, as well as confusions between closely re-lated models. MET is natively a two-sample equality test and reports lower power in character space and for several within-family swaps. ZeroPrint estimates a local input–output Jaco-bian from a base query and semantic perturbations; too few perturbations or repeated generations destabilize this estimate. One Token defines its fingerprint over direct single-token sam-ples and separates post-reasoning answers because they may reflect the serving protocol rather than model lineage. A coding-agent harness instead constructs context, returns tool feedback, and turns model decisions into a multi-step ex-ecution. Preserving each baseline’s estimator therefore does not remove this shift in what is observed. Table 4 measures transfer to 36-way identification in this setting, not perfor-mance on each method’s native task. For L IDAR , we repeat the evaluation under multiple bal-anced experimental configurations and report the mean and SD across these trials. This repeated evaluation tests whether identification performance persists across data assignments rather than depending on one favorable configuration. 
+
+Takeaway. LIDAR identifies the 36-model panel reliably under both harnesses and achieves the highest mean in every Top-1, Top-3 accuracy, and MRR comparison. 
+
+## 6.3 Ablation Study 
+
+We ablate the feature representation, distribution statistics, probe pairs, A/B variants, and identifier. Whereas Table 4 aver-ages L IDAR over multiple experimental configurations, the ab-lation study fixes the dataset’s prespecified enrollment/query roles and uses the same locked query set for every ablation condition. This fixed protocol ensures that changes within the ablation table are attributable to the removed component rather than a different data assignment. The Full method row is therefore the within-ablation reference and is not expected to equal the repeated-configuration mean in Table 4. Each har-ness is preprocessed and fitted separately from its enrollment data, after which we pool the predictions for reporting. For each ablation, all affected features and distribution statistics are reconstructed before fitting; query data do not select fields, methods, or hyperparameters. The full method retains 958 instance- and distribution-level fields, all three probe pairs 10 Group Configuration Fields Top-1 ∆ Top-1 (pp) Top-3 MRR Reference Full method 958 0.9352 – 0.9884 0.9631                                                 
+
+> Feature view Instance only 756 0.7500 −18 .52 0.9005 0.8377 Distribution only 202 0.8981 −3.70 0.9884 0.9426 Distribution statistic Instance + mean 857 0.9190 −1.62 0.9838 0.9529 Instance + standard deviation 857 0.9097 −2.55 0.9792 0.9454 Probe pair Without V ERIFY 724 0.8819 −5.32 0.9745 0.9315 Without R ECOVER 676 0.8843 −5.09 0.9907 0.9347 Without R ESOLVE 718 0.8519 −8.33 0.9676 0.9117 A/B variants A variants only 580 0.8426 −9.26 0.9606 0.9028 B variants only 580 0.8588 −7.64 0.9583 0.9132
+
+Table 5: Feature and probe-pair ablations using the prespecified enrollment/query roles and locked query set, pooled across the two separately fitted harnesses. ∆ is relative to the Full method under this fixed protocol. and their A/B variants, and the Jeffreys estimator. 
+
+Features and distribution statistics. Table 5 shows that distribution-level behavior retains most of the identification signal: it reaches 89.81% Top-1 alone, compared with 75.00% for instance-level behavior. Combining the two raises Top-1 to 93.52% and MRR to 96.31%, indicating that instance-level structure provides complementary information. Retain-ing instance-level fields with only the distribution mean or only the standard deviation reaches 91.90% and 90.97% Top-1, respectively. Both statistics therefore contribute to the full representation. 
+
+Probe pairs and controlled variants. Removing V ERIFY ,RECOVER , or R ESOLVE decreases Top-1 by 5.32, 5.09, and 8.33 percentage points, respectively. All three probe pairs contribute, with the largest loss caused by removing R ESOLVE .Keeping only the A or only the B variant from every pair further reduces Top-1 to 84.26% and 85.88%. Thus neither side alone preserves the evidence available from observing both the ordinary condition and the controlled change. 
+
+Identifier. We next fix the full feature representation and all A/B variants, then compare Jeffreys with five classifiers whose configurations were fixed without using the locked query set. Jeffreys has the highest query Top-1 and MRR point esti-mates. Its transparent count-based estimator remains competi-tive under the small-sample enrollment regime while avoiding a data-hungry learned decision function. 
+
+Takeaway. Both feature levels, all three probe pairs, and both variants contribute to identification. Their full combi-nation gives the strongest Top-1 and MRR point estimates under limited enrollment. Shrinkage LDA Logistic L2 Nearest centroid L2 Robust centroid L1 Gaussian NB       
+
+> 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00
+> Jeffreys = 0.9352 0.9306 0.9259 0.8819 0.8657 0.6829
+> (a) Top-1 accuracy
+> Shrinkage LDA Logistic L2 Nearest centroid L2 Robust centroid L1 Gaussian NB
+> 0.65 0.70 0.75 0.80 0.85 0.90 0.95 1.00 Jeffreys = 0.9631 0.9501 0.9575 0.9277 0.9130 0.7932
+> (b) MRR
+
+Figure 3: Identifier comparison on the locked query set. Bars denote alternative classifiers and dashed lines denote Jeffreys; both panels share a vertical scale truncated at 0.65. 
+
+## 6.4 Robustness to Provider-Side Manipulation 
+
+We evaluate L IDAR under two provider-controlled manipula-tions delivered through system instructions: identity obfusca-tion and output-format control. Services commonly add such policies for branding, safety or compliance notices, and re-sponse normalization; the same control point could suppress explicit identity cues or force different models into a shared visible format without changing the served model or coding task. We therefore select six closely related identities—GLM-5.1, GLM-5.2, GLM-5.3, Qwen3.6-Plus, Qwen3.7-Plus, and Qwen3.7-Max—to test whether surface control erases diffi-cult within-family distinctions. 11 Clean A1: Identity obfuscation A2: Output-format control Harness Method Acc. MRR Acc. MRR Acc. MRR mini-swe-agent [31] LLMmap [26] 0.5667 0.7639 0.4667 (↓) 0.7000 (↓) 0.3333 (↓) 0.5533 (↓)                                                                              
+
+> ZeroPrint [30] 0.3333 0.5111 0.0000 (↓)0.3944 (↓)0.1667 (↓)0.4222 (↓)
+> MET [10] 0.5000 0.6444 0.1667 (↓)0.4500 (↓)0.1667 (↓)0.4083 (↓)
+> One Token [3] 0.3333 0.4167 0.1667 (↓)0.2500 (↓)0.0000 (↓)0.0000 (↓)
+> LIDAR 1.0000 1.0000 0.8889 (↓)0.9444 (↓)1.0000 1.0000
+> OpenCode [25] LLMmap [26] 0.1667 0.4039 0.1667 0.4111 0.2000 0.4217 ZeroPrint [30] 0.3333 0.5333 0.1667 (↓)0.4083 (↓)0.1667 (↓)0.4639 (↓)
+> MET [10] 0.8333 0.9167 0.8333 0.9167 0.1667 (↓)0.4083 (↓)
+> One Token [3] 0.8333 0.9167 0.8333 0.9167 0.0000 (↓)0.0000 (↓)
+> LIDAR 0.9444 0.9722 0.8611 (↓)0.9306 (↓)0.9444 0.9722
+
+Table 6: Closed-set identification under provider-side manipulation. Acc. denotes Top-1 accuracy. Green A1 values and blue A2 values with a downward marker are lower than the same method’s Clean result. 
+
+Attack conditions. Enrollment is fixed and clean; both ma-nipulations apply only to queries. Clean is an independent query batch collected without manipulation. A1: Identity ob-fuscation adds a provider-controlled system instruction ask-ing the model to avoid or alter explicit identity claims, while leaving the coding task and available tools unchanged. A2: Output-format control adds a system instruction requiring a provider-specified notice at the start of each natural-language response; the model otherwise executes the task and emits native tool calls normally. Across conditions, model, harness, probe pair, variant, provider, and generation controls are held fixed; only the condition-specific system instruction changes. 
+
+Evaluation protocol. For this robustness study, we reuse the basic experimental configuration and restrict the model panel to the six identities above. Enrollment remains clean; each manipulation is applied only to query samples, and no manipulated query affects fitting or model selection. We mea-sure robustness by comparing each method’s manipulated result with its own Clean result. 
+
+Finding. As Table 6 shows, L IDAR degrades only modestly under provider-side manipulation. Under A1, its largest Top-1 drop is 11.11 percentage points and its largest MRR drop is 5.56 points; under A2, both harnesses retain their Clean accu-racy and MRR exactly. In contrast, every baseline loses accu-racy in at least one manipulated condition, with Top-1 drops reaching 33.33 points under A1 and 83.33 points under A2. This contrast reflects the evidence each method observes. The baselines primarily fingerprint returned text or token statistics, which provider instructions can suppress, normalize, or render invalid. L IDAR instead aggregates controlled differences in tool use, action order, verification, recovery, and repository outcomes across paired trajectories. The results therefore sup-port execution-level behavioral evidence as more resilient to these surface manipulations. The few A1 errors for L IDAR are confined to the adjacent Qwen3.6-Plus/Qwen3.7-Plus identi-ties. 
+
+Integrity checks. We independently recomputed all rank-ings and metrics and verified that manipulated queries re-mained isolated from enrollment, preprocessing, and model selection. 
+
+Takeaway. LIDAR remains robust to provider-controlled identity and formatting instructions by drawing on trajec-tory organization and execution behavior beyond surface responses. 
+
+## 6.5 What Makes an Agentic Fingerprint? 
+
+The preceding results show that agent trajectories identify models, but not which parts of a trajectory carry that evidence. 
+
+Experimental setup. We derive this analysis from the clean evaluation data and reuse each harness’s frozen Jeffreys identi-fier fitted only on enrollment; query data never affect missing-value handling, active-field selection, feature bins, or model probabilities. 
+
+Importance and behavioral groups. For each query, every active field contributes additively to the log-likelihood margin between the true model and its strongest incorrect competitor. We sum the signed contributions of fields measuring the same mechanism across probe pairs and variants, take the absolute Same task/provider/harness/seed; all produce valid one-line fixes                               
+
+> Qwen3.8-27B IIE/T TS5 steps
+> Qwen3.8-A95B IIRER/T TVS8 steps
+> Qwen3.7-Max IIIIRREVRTTTVS14 steps
+> I: Inspect R: Reproduce E: Edit T: Test V: Review S: Submit
+
+Figure 4: Illustrative trajectories under the same prompt, provider, harness, and seed. All three models produce an equivalent one-line fix; each box denotes one agent step. 12 0 25 50 75 100                                                                               
+
+> Absolute margin evidence (%)
+> Mini S1 Mini S2 Mini S3 Open S1 Open S2 Open S3
+> 51% 53% 54% 68% 70% 70%
+> (a) Evidence composition
+> S1 S2 S3 S1 S2 S3 Models Unique transitions Longest run Transition entropy Revisits Successful exec. Graph density First exec. Self-loops Failed exec. Backtracking
+> 51 63 59 55 69 66 97 39 48 52 66 60 57 81 38 53 58 58 67 57 94 40 45 49 64 59 69 86 39 56 59 56 60 57 92 49 54 58 63 57 51 92 42 43 41 46 61 63 83 36 43 40 64 52 57 92 33 37 45 51 63 57 81 44 50 53 49 53 52 92
+> Mini-SWE OpenCode Coverage
+> (b) Cross-set persistence
+> 110 20 40 60 70
+> Top-ksemantic mechanisms
+> 025 50 75 100
+> Cumulative absolute evidence (%)
+> Median correct query 50%: 20/19 groups 80%: 45/43 groups
+> (c) Distributed evidence
+> mini-swe-agent OpenCode
+> Trajectory organization Command/action Response form Decisions/outcomes Other task behavior
+
+Figure 5: Feature importance in the frozen identifier. (a) Mean absolute evidence by semantic group. (b) Top-20% contribution frequency and model coverage for the ten strongest cross-harness mechanisms. (c) Median cumulative evidence on correct queries with interquartile ranges. Contributions are measured against the strongest incorrect model. group contribution as importance, and organize the groups into trajectory organization, command/action use, response form, probe-pair decisions and outcomes, and remaining task behavior. 
+
+An illustrative trajectory. Figure 4 illustrates the signal: under the same task, provider, harness, and seed, three models produce a valid one-line fix but take 5, 8, and 14 steps and differ in inspection, reproduction, editing, testing, and review. The following analysis measures this evidence across all 36 models. 
+
+Trajectory organization supplies the majority of evidence. 
+
+Figure 5(a) separates trajectory organization from behav-ioral dimensions. Across the analyzed data, trajectory or-ganization contributes 50.6–53.6% of the absolute margin evidence under mini-swe-agent and 67.8–70.5% under Open-Code. Command-use and response-form fields remain com-plementary, but the largest share comes from how actions are ordered, repeated, revisited, and recovered across the probe suite. 
+
+The same mechanisms recur across harnesses. To avoid allowing one harness to dominate the ranking, we rank each semantic group within each harness and use the lower of its two importance percentiles. All highest-ranked cross-harness groups describe trajectory structure, and Figure 5(b) shows the top ten, spanning transition diversity, repetition, execution outcomes, and backtracking. The strongest, unique-transition fraction, ranks among the top-20% contributors for 50.9– 69.4% of queries and covers 97.2% of models; five other mechanisms cover at least 91.7%. The signal is therefore not confined to one model family or harness. 
+
+No isolated action explains the fingerprint. Figure 5(c) ranks mechanisms within each correct query. Evidence is highly distributed: under mini-swe-agent/OpenCode, the largest mechanism contributes a median of only 4.6%/4.4%, the top ten contribute 31.8%/32.4%, and reaching 80% re-quires 45/43 mechanisms. Identification therefore relies not on any single command, phrase, or tool call, but on the model’s broader execution strategy; this analysis explains the identifier’s evidence, not the model’s internal computation. 
+
+Takeaway. Trajectory organization contributes most iden-tity evidence, with the strongest mechanisms recurring across both harnesses; identification draws on many sig-nals rather than any single action or response. 
+
+## 7 Conclusion 
+
+We presented L IDAR , an active black-box method for auditing LLM identity in coding-agent services. It combines paired coding probes with instance- and distribution-level trajec-tory evidence and a lightweight probabilistic scorer. Across 36 models, seven families, and two agent harnesses, L IDAR 
+
+achieves the strongest mean result in every reported metric– harness comparison. Ablation, robustness, and feature analy-ses show that identity evidence is distributed across execution behavior rather than isolated outputs or actions. Together, these results establish active behavioral probing as a practical basis for auditing remotely served model identity. 13 References 
+
+[1] Hyeseon An, Shinwoo Park, Dongsu Kim, and Yo-Sub Han. Sequential behavioral watermarking for LLM agents, 2026. https://arxiv.org/abs/2605.11036 .[2] Anthropic. Introducing Claude 4, 2025. https://www. anthropic.com/news/claude-4 .[3] Tomáš Bruckner. One token is enough: Fingerprinting and verifying large language models from single-token output distributions, 2026. https://arxiv.org/abs/ 2607.10252 .[4] Will Cai, Tianneng Shi, Xuandong Zhao, and Dawn Song. Are you getting what you pay for? auditing model substitution in LLM APIs, 2025. https://arxiv.org/ abs/2504.04715 .[5] Lingjiao Chen, Tracy Cai, Matei Zaharia, and James Zou. Did the model change? efficiently assessing machine learning API shifts, 2021. https://arxiv.org/abs/ 2107.14203 .[6] Aloni Cohen, Alexander Hoover, and Gabe Schoenbach. Watermarking language models for many adaptive users. In 2025 IEEE Symposium on Security and Privacy (SP) ,pages 2583–2601, 2025. https://doi.org/10.1109/ SP61157.2025.00084 .[7] Sumanth Dathathri, Abigail See, Sumedh Ghaisas, Po-Sen Huang, Rob McAdam, Johannes Welbl, Vandana Bachani, Alex Kaskasoli, Robert Stanforth, Tatiana Matejovicova, Jamie Hayes, Nidhi Vyas, Majd Al Merey, Jonah Brown-Cohen, Rudy Bunel, Borja Balle, Taylan Cemgil, Zahra Ahmed, Kitty Stacpoole, Ilia Shumailov, Ciprian Baetu, Sven Gowal, Demis Hassabis, and Push-meet Kohli. Scalable watermarking for identifying large language model outputs. Nature , 634:818–823, 2024. 
+
+https://doi.org/10.1038/s41586-024-08025-4 .[8] Edoardo Debenedetti, Jie Zhang, Mislav Balunovi´ c, Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr. AgentDojo: A dynamic environment to evaluate prompt injection attacks and defenses for LLM agents. In 
+
+Advances in Neural Information Processing Systems ,volume 37, pages 82895–82920, 2024. Datasets and Benchmarks Track. https://doi.org/10.52202/ 079017-2636 .[9] DeepSeek-AI. DeepSeek-V3 Technical Report, 2024. 
+
+https://arxiv.org/abs/2412.19437 .[10] Irena Gao, Percy Liang, and Carlos Guestrin. Model equality testing: Which model is this API serving? In 
+
+The Thirteenth International Conference on Learning Representations (ICLR) , 2025. https://openreview. net/forum?id=QCDdI7X3f9 .[11] Zheng Gao, Xiaoyu Li, Xiaoyan Feng, Jiaojiao Jiang, Yang Song, Yulei Sui, Zhenchang Xing, and Liming Zhu. TRACE: A two-channel robust attribution watermark via complementary embeddings for LLM-agent trajec-tories, 2026. https://arxiv.org/abs/2607.08400 .[12] GLM Team. ChatGLM: A family of large language models from GLM-130B to GLM-4 all tools, 2024. 
+
+https://arxiv.org/abs/2406.12793 .[13] Martin Gubri, Dennis Ulmer, Hwaran Lee, Sangdoo Yun, and Seong Joon Oh. TRAP: Targeted random adversarial prompt honeypot for black-box identifica-tion. In Findings of the Association for Computational Linguistics: ACL 2024 , pages 11496–11517. Associ-ation for Computational Linguistics, 2024. https: //aclanthology.org/2024.findings-acl.683/ .[14] Yuepeng Hu, Zhengyuan Jiang, Mengyuan Li, Osama Ahmed, Zhicong Huang, Cheng Hong, and Neil Zhen-qiang Gong. Fingerprinting LLMs via prompt injection. In Proceedings of the 64th Annual Meeting of the Asso-ciation for Computational Linguistics (Volume 1: Long Papers) , pages 11795–11810. Association for Compu-tational Linguistics, 2026. https://aclanthology. org/2026.acl-long.541/ .[15] Kaibo Huang, Jin Tan, Yukun Wei, Wanling Li, Zipei Zhang, Hui Tian, Zhongliang Yang, and Linna Zhou. AgentMark: Utility-preserving behavioral watermark-ing for agents. In Proceedings of the 64th Annual Meet-ing of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 12581–12603. Asso-ciation for Computational Linguistics, 2026. https: //aclanthology.org/2026.acl-long.573/ .[16] Kaibo Huang, Zipei Zhang, Zhongliang Yang, and Linna Zhou. Agent Guide: A simple agent behavioral water-marking framework, 2025. https://arxiv.org/abs/ 2504.05871 .[17] Kimi Team. Kimi K2: Open agentic intelligence, 2025. 
+
+https://arxiv.org/abs/2507.20534 .[18] John Kirchenbauer, Jonas Geiping, Yuxin Wen, Jonathan Katz, Ian Miers, and Tom Goldstein. A watermark for large language models. In Proceedings of the 40th Inter-national Conference on Machine Learning , volume 202 of Proceedings of Machine Learning Research , pages 17061–17084. PMLR, 2023. https://proceedings. mlr.press/v202/kirchenbauer23a.html .[19] Qi Li, Zhenhua Zou, Shuo Li, Mingwei Xu, and Zhuotao Liu. TrustedARI: Towards trust-native agentic routing infrastructure for agentic AI, 2026. https://arxiv. org/abs/2606.15822 .14 [20] Xiao Liu, Hao Yu, Hanchen Zhang, Yifan Xu, Xuanyu Lei, Hanyu Lai, Yu Gu, Hangliang Ding, Kaiwen Men, Kejuan Yang, Shudan Zhang, Xiang Deng, Aohan Zeng, Zhengxiao Du, Chenhui Zhang, Sheng Shen, Tianjun Zhang, Yu Su, Huan Sun, Minlie Huang, Yuxiao Dong, and Jie Tang. AgentBench: Evaluating LLMs as agents. In The Twelfth International Conference on Learning Representations (ICLR) , 2024. https://openreview. net/forum?id=zAdUB0aCTQ .[21] Wenlong Meng, Chen Gong, Terry Yue Zhuo, Fan Zhang, Kecen Li, Zheng Liu, Zhou Yang, Chengkun Wei, and Wenzhi Chen. Watermarking LLM agent trajectories, 2026. Accepted by ICML 2026. https: //arxiv.org/abs/2602.18700 .[22] MiniMax. MiniMax-01: Scaling foundation models with lightning attention, 2025. https://arxiv.org/ abs/2501.08313 .[23] Hamidah Oderinwale. Agent trajectories as programs: Fingerprinting and programming coding-agent behavior, 2026. https://arxiv.org/abs/2606.16988 .[24] OpenAI. GPT-5 System Card, 2025. https://openai. com/index/gpt-5-system-card/ .[25] OpenCode Contributors. OpenCode. Soft-ware, 2026. Version 1.17. https://github.com/ anomalyco/opencode .[26] Dario Pasquini, Evgenios M. Kornaropoulos, and Giuseppe Ateniese. LLMmap: Finger-printing for large language models. In 34th USENIX Security Symposium (USENIX Secu-rity 25) , pages 299–318. USENIX Association, 2025. https://www.usenix.org/conference/ usenixsecurity25/presentation/pasquini .[27] Wenjie Qu, Wengrui Zheng, Tianyang Tao, Dong Yin, Yanze Jiang, Zhihua Tian, Wei Zou, Jinyuan Jia, and Jiaheng Zhang. Provably robust multi-bit watermarking for AI-generated text. In 34th USENIX Security Symposium (USENIX Security 25) , pages 201–220. USENIX Association, 2025. https:// www.usenix.org/conference/usenixsecurity25/ presentation/qu-watermarking .[28] Zhenzhen Ren, GuoBiao Li, Sheng Li, Zhenxing Qian, and Xinpeng Zhang. CoTSRF: Utilize chain of thought as stealthy and robust fingerprint of large language mod-els, 2025. https://arxiv.org/abs/2505.16785 .[29] Shuo Shao, Yiming Li, Yu He, Hongwei Yao, Wenyuan Yang, Dacheng Tao, and Zhan Qin. SoK: Large lan-guage model copyright auditing via fingerprinting, 2025. 
+
+https://arxiv.org/abs/2508.19843 .[30] Shuo Shao, Yiming Li, Hongwei Yao, Yifei Chen, Yuchen Yang, and Zhan Qin. Reading between the lines: Towards reliable black-box LLM fingerprinting via zeroth-order gradient estimation. In Proceedings of the ACM Web Conference 2026 , pages 2637–2648, 2026. 
+
+https://doi.org/10.1145/3774904.3792196 .[31] SWE-agent Team. mini-swe-agent. Software, 2026. Version 2.4. https://github.com/SWE-agent/ mini-swe-agent .[32] Liwen Wang, Zongjie Li, Yuchong Xie, Shuai Wang, Dongdong She, Wei Wang, and Juergen Rahmel. On protecting agentic systems’ intellectual property via watermarking, 2026. https://arxiv.org/abs/2602. 08401 .[33] Isadora White, Yasaman Jafari, and Taylor Berg-Kirkpatrick. Black-box forensics for conversational LLM agents, 2026. https://arxiv.org/abs/2606. 22698 .[34] Jiashu Xu, Fei Wang, Mingyu Ma, Pang Wei Koh, Chaowei Xiao, and Muhao Chen. Instructional finger-printing of large language models. In Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Hu-man Language Technologies (Volume 1: Long Papers) ,pages 3277–3306. Association for Computational Lin-guistics, 2024. https://aclanthology.org/2024. naacl-long.180/ .[35] An Yang et al. Qwen3 Technical Report, 2025. https: //arxiv.org/abs/2505.09388 .[36] Jiahao Zhang, Xiuyu Li, and Suhang Wang. Your “pro” LLM subscription may actually be “free”: Exposing fingerprint spoofing risks in LLM inference services, 2026. https://arxiv.org/abs/2606.16100 .[37] Ruisi Zhang, Shehzeen Samarah Hussain, Paarth Neekhara, and Farinaz Koushanfar. REMARK-LLM: A robust and efficient watermarking frame-work for generative large language models. In 
+
+33rd USENIX Security Symposium (USENIX Se-curity 24) , pages 1813–1830. USENIX Associa-tion, 2024. https://www.usenix.org/conference/ usenixsecurity24/presentation/zhang-ruisi .[38] Zhaoxi Zhang, Xiaomei Zhang, Yanjun Zhang, He Zhang, Shirui Pan, Bo Liu, Asif Gill, and Leo Yu Zhang. Character-level perturbations disrupt LLM watermarks. In Network and Dis-tributed System Security Symposium (NDSS) , 2026. 
+
+https://doi.org/10.14722/ndss.2026.230138 .15 [39] Xiaoyuan Zhu, Yaowen Ye, Tianyi Qiu, Hanlin Zhu, Sijun Tan, Ajraf Mannan, Jonathan Michala, Raluca Ada Popa, and Willie Neiswanger. Auditing black-box LLM APIs with a rank-based uniformity test, 2025. https: //arxiv.org/abs/2506.06975 .16 A Evaluated Model Panel 
+
+Table 7 lists the complete set of model identities used in the evaluation. 
+
+Family # Models GPT [24] 7 gpt-5.1, gpt-5.2, gpt-5.4, gpt-5.5, gpt-5.6-luna, gpt-5.6-sol, gpt-5.6-terra Claude [2] 7 claude-fable-5, claude-opus-4-6, claude-opus-4-7, claude-opus-4-8, claude-opus-5, claude-sonnet-4-6, claude-sonnet-5 Qwen [35] 7 Qwen3.5-122B-A10B, Qwen3.5-27B, Qwen3.6-Plus, Qwen3.7-Max, Qwen3.7-Plus, Qwen3.8-2.4T-A95B, Qwen3.8-27B GLM [12] 6 GLM-4.7, GLM-5, GLM-5-Turbo, GLM-5.1, GLM-5.2, GLM-5.3 DeepSeek [9] 4 DeepSeek-V3.1, DeepSeek-V3.2, DeepSeek-V4-Flash, DeepSeek-V4-Pro Kimi [17] 3 Kimi-K2.5, Kimi-K2.6, Kimi-K3 MiniMax [22] 2 MiniMax-M2.7, MiniMax-M3 
+
+Table 7: LLMs included in the evaluation, grouped by family. 17

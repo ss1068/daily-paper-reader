@@ -1,0 +1,1193 @@
+Title: LLMs as Linguistic Chameleons: Decoupling Semantics and Structure for Privacy-Preserving Communication
+
+URL Source: https://arxiv.org/pdf/2609.23193v1
+
+Published Time: Tue, 22 Sep 2026 01:04:23 GMT
+
+Number of Pages: 26
+
+Markdown Content:
+# LLMs as Linguistic Chameleons: Decoupling Semantics and Structure for Privacy-Preserving Communication 
+
+Yuzhu Mao 
+
+Emory University 
+
+yuzhu.mao@emory.edu 
+
+Liang Zhao *
+
+Emory University 
+
+liang.zhao@emory.edu 
+
+Abstract 
+
+As Large Language Model (LLM) APIs become increasingly integrated into privacy-sensitive work-flows, ensuring inference-time privacy without compromising task utility remains a major chal-lenge. Existing approaches preserve most of the original semantic content to maintain downstream performance, but this also leaves exploitable cues for reconstructing the original text. This work investigates semantic decoupling, which replaces original semantics with alternative content while preserving the structure needed for LLM reasoning. Based on this idea, we propose CROSS-MAP, a bidirectional framework that maps private inputs into a different semantic domain before inference and recovers the corresponding outputs afterward. Local models are trained with multi-objective opti-mization to maximize semantic divergence in the mapping stage while minimizing semantic incon-sistency in the recovery stage. Experiments show that CROSS-MAP reduces reconstruction success across multiple attack settings while outperform-ing existing baselines in utility. Code is avail-able at https://anonymous.4open.science/r/ CROSS-MAP-7B2C/ .
+
+1 Introduction 
+
+As LLM APIs are increasingly integrated into pri-vate workflows, a growing amount of sensitive communication, from user queries to inter-agent instructions, is sent to third-party providers. Pro-tecting textual information has therefore become a critical challenge in the era of LLMs (Hong et al., 2024; Kan et al., 2023). A standard view in lin-guistics and natural language processing (NLP) is that text decomposes into semantics (meaning-bearing elements such as entities, events, and at-tributes) and structure (the syntactic organization 
+
+> *Corresponding author.
+
+of these elements, such as word order and depen-dency relations) (Bloom and Lahey, 1979; Hill et al., 2025). Many reasoning tasks in LLMs are largely driven by structural patterns, implying that logical relations among entities remain valid re-gardless of changes in semantic content (Kim and Linzen, 2020; Li et al., 2023a). Since sensitive in-formation is encoded primarily in semantic content rather than abstract structural templates, privacy leakage typically arises from semantics (Frikha et al., 2025; Staab et al., 2024), while structure remains largely benign. Existing privacy-preserving approaches for LLM interaction face a fundamental trade-off between privacy and utility. To maintain downstream task performance, these methods typically keep the transformed text semantically close to the origi-nal input, since inference is performed directly on the transmitted text. Methods such as differential privacy and anonymization obfuscate sensitive in-formation by perturbing semantic content, often degrading utility for tasks that rely on fine-grained details (Wu et al., 2024c; Hong et al., 2024; Staab et al., 2025). Other approaches introduce recovery mechanisms to mitigate semantic drift (Chowdhury et al., 2025; Kan et al., 2023; Shen et al., 2024; Chen et al., 2023b). However, since these meth-ods operate in a semantic preserving regime, the semantic content is subject to only limited changes to retain utility, leaving exploitable cues that al-low attackers to infer or reconstruct the original text (Tong et al., 2025a; Pang et al., 2025). For example, even after transformation, an LLM can still infer a user’s sensitive financial and medical circumstances from a statement such as Alice trans-ferred $50 , 000 from her savings account to pay medical debt after being diagnosed with serious disease .To address the dilemma inherent in semantic pre-serving approaches, we explore a new scenario, 
+
+semantic decoupling , that allows LLMs to reason 1arXiv:2609.23193v1 [cs.CR] 19 Sep 2026 over preserved structural patterns while sensitive semantics remain local. Instead of transmitting sen-sitive content directly, the input is mapped into an 
+
+insensitive semantic domain that preserves the structure but replaces the meaning. This allows the LLM to operate on a structure-preserving represen-tation, where the original semantics is completely hidden and can only be restored locally afterward. For example, the thief robs the bank , the waiter wipes the table , and the programmer tests the soft-ware share the same noun + verb + determiner + noun structure despite expressing different mean-ings. Thus, for queries such as identifying who performs which action, the LLM can reason over the preserved structure, while only an authorized receiver with the mapping codebook (e.g., thief ↔
+
+waiter, rob ↔ wipe, bank ↔ table ) can recover the original text, leaving attackers observing the mapped text with little information about the sensi-tive content. Historically, this paradigm has been difficult to realize. Semantic decoupling requires discovering mappings across semantic domains that preserve structural reasoning while enabling reliable recov-ery, which in effect requires constructing a code-book that aligns concepts across domains. Iden-tifying such mappings demands broad linguistic and conceptual knowledge, which was largely in-feasible before the emergence of modern founda-tion models. Recent LLMs show a strong abil-ity to model cross-domain semantic relationships, making automated mapping increasingly plausi-ble. However, for privacy, this capability must run locally rather than through a third-party API, since sending sensitive inputs externally would de-feat the purpose of semantic decoupling. Mean-while, general foundation models are often too large for practical local deployment and are not trained for semantic-decoupling mapping and re-covery. A practical solution must therefore meet three requirements simultaneously: efficient local deployment, strict locality to avoid external expo-sure of private inputs, and adaptability to semantic-decoupling tasks. This paper explores the extent to which semantic decoupling, which replaces sensitive semantic con-tent while preserving structural reasoning patterns, can move beyond the privacy–utility dilemma in-herent in semantics-preserving approaches. Specif-ically, we first formulate the semantics-preserving and semantic-decoupling paradigms and analyze their respective advantages from an information-theoretic perspective, characterizing when seman-tic decoupling offers a better privacy–utility trade-off. Second, we propose CROSS-MAP, a compact local framework for semantic-decoupling text map-ping and recovery. With training objectives that encourage large semantic shifts while maintaining consistent recovery, compact local models such as Qwen-2.5-7B can be adapted to perform semantic decoupling through multi-objective optimization, achieving both stronger privacy and higher utility than semantics-preserving baselines. Finally, in addition to the defense-centric view, we adopt an attack-centric view of security by introducing an optimization-based attack to evaluate the robust-ness of semantic-decoupling systems against white-box adversaries, including scenarios with partial codebook leakage. 
+
+2 Related Work 
+
+This section provides a brief overview of related work. A more detailed review is provided in Ap-pendix A. 
+
+2.1 Differential Privacy 
+
+Differential Privacy (DP) approaches for LLMs inject noise into data, gradients, or generation pro-cesses to avoid directly exposing the original pri-vate dataset to an external model (Abadi et al., 2016; Wu et al., 2024a; Yue et al., 2023; Wang et al., 2025; Wu et al., 2024c; Utpala et al., 2023; Flemings and Annavaram, 2024; Hong et al., 2024). However, DP noise can significantly degrade model performance. To preserve downstream utility, exist-ing methods often either restrict DP protection to less critical components (Chowdhury et al., 2025; Tong et al., 2025b) or focus on tasks that are rel-atively insensitive to fine-grained details, such as sentiment analysis (Mattern et al., 2022; Kurakin et al., 2023). 
+
+2.2 Text Anonymization and Sanitization 
+
+Text anonymization aims to transform text to re-duce the risk of revealing personal information (e.g., identity or sensitive attributes) while preserv-ing downstream utility (Pilán et al., 2022). Prior work demonstrates that modern LLMs have the po-tential to both anonymize and deanonymize text, highlighting risks of malicious re-identification at-tacks (Patsakis and Lykousas, 2023; Staab et al., 2024, 2025). Text sanitization extends beyond pro-tecting personal identity information to broader sen-sitive content (Yue et al., 2021; Li et al., 2025; Chen 2et al., 2023a). To further improve downstream util-ity, some studies introduce an explicit desanitiza-tion step to form a bidirectional framework (Kan et al., 2023; Shen et al., 2024; Chen et al., 2023b; Chowdhury et al., 2025). This line of works share a consensus that the mapped text and original text must be within the same semantic space for more accurate LLM inference. 
+
+3 Preliminaries 
+
+This section presents necessary knowledge for un-derstanding the difference between the proposed method and related work. 
+
+3.1 Problem Formulation 
+
+Framework that contains both mapping and recov-ery processes is termed as bidirectional privacy-preserving framework in this work. Let X be the space of original texts and Y the space of mapped texts. A mapping process M produces a mapped output y ∼ M (x) from the original text x. A recov-ery process R produces a recovered text ˜x ∼ R (y)
+
+from y. Privacy-preserving communication with LLMs aims to maintain the downstream task util-ity while protecting the original input x. With-out protection, the LLM outputs a model response 
+
+xa = LLM (x) upon receiving the input x. But to prevent the LLM from directly observing the original input x, the mapping mechanism M first conducts the mapping x 7 → y and then sends y ∈ Y 
+
+to the LLM. Given the mapped input y, the LLM outputs a model response ya = LLM (y).After receiving the model response ya from the LLM, the recovery mechanism R produces a re-covered response ˜xa = R(ya).The downstream task utility requires the recovered response ˜xa to be consistent with the ground-truth response xa:
+
+Sim( xa, ˜xa) ≥ 1 − ϵ, 
+
+where Sim( ·, ·) is a text similarity measure, e.g., embedding cosine, BERTScore, or an LLM-judge. The threshold ϵ is a measure for the drift in the model response induced by the mapping and recov-ery processes. 
+
+3.2 Two Mapping Paradigms 
+
+According to linguistic research, language is com-prised of three primary components: form, content, and use (Bloom and Lahey, 1979; Hill et al., 2025). Form covers syntax, morphology, and orthogra-phy. Content denotes semantics, while use refers to pragmatics, which relates to the context of com-munication. Consequently, any written text x itself can be decomposed into structural component xc
+
+(e.g., sentence organization, word worder, and rela-tionships between words) and semantic element xs
+
+(e.g., entities, phrases, and key spans). Under such decomposition, we present the key difference between existing mapping mechanisms, which is summarized as semantic-preserving map-ping , and the proposed semantic-decoupling map-ping : The goal of semantic-preserving mapping 
+
+can be formulated as solving the following opti-mization problem 
+
+max  
+
+> M,R
+
+Sim( LLM (x), R(LLM (M(x)))) ,
+
+subject to the semantic similarity constraint :
+
+Sim( xs, M(xs)) ≥ 1 − ϵs.
+
+In contrast, the goal of semantic-decoupling mapping can be formulated as subject to the struc-tural similarity constraint :
+
+Sim( xc, M(xc)) ≥ 1 − ϵc.
+
+Briefly speaking, both mapping paradigms aim to maximize the similarity between the ground-truth LLM response xa = LLM (x) and the recov-ered response ˜xa = R(LLM (M(x))) . Semantic-preserving mapping requires the mapped text 
+
+M(x) to remain semantically similar to the orig-inal text x. For example, the number increases rapidly 7 → the value rises quickly . However, the 
+
+semantic-decoupling mapping removes this con-straint on semantic similarity. Instead, it requires structure invariance between the original text x and the mapped text M(x). For example, The number increases rapidly 7 → The rain drops heavily .
+
+4 An Information-Theoretic View 
+
+The difference between semantic-preserving and 
+
+semantic-decoupling mappings can be understood from an information-theoretic perspective. Recall the mapping pipeline (xc, x s) M
+
+−→ (yc, y s) LLM 
+
+−−−→
+
+z, where xc and xs are the structural and semantic components of the original text x, yc and ys are the structural and semantic components of the mapped text y, and z is the LLM response on y.
+
+Information bottleneck objective. Searching for the optimal mapping mechanism M is equiva-lent to solving the following optimization problem: 
+
+G(M) = min  
+
+> M
+
+I(x; y) − βI (y; z), (1) where I(x; y) quantifies the amount of information from the original text retained within the mapped 3Symbol Meaning                     
+
+> x, y, z original text, mapped text, and LLM re-sponse
+> xs, x csemantic and structural components of xλs, λ ctask dependence on semantic and struc-tural information, respectively
+> MSD ,MSP semantic-decoupling /semantic-preserving mapping mechanisms
+> ∆ρs,∆ρchow much less semantic and structural in-formation from the original text is pre-served by MSD than by MSP in the mapped text (i.e., MSD ’s compression gain)
+> ∆ηs,∆ηchow much less task-relevant semantic and structural information is preserved by MSD than by MSP in the mapped text (i.e., MSD ’s task-relevant informa-tion loss)
+
+Table 1: Core notation used in the main text. Other notations used in the proof are defined in Appendix B. 
+
+text, and I(y; z) measures the task-relevant infor-mation preserved in the mapped text for the down-stream LLM. For readability, Table 1 summarizes the core notation used in the main text. 
+
+Theorem 1. Let MSP and MSD denote semantic-preserving and semantic-decoupling mappings re-spectively under the same task distribution over inputs x. Assume semantic and structural informa-tion is indepdent in any text. Then, the information bottleneck objective satisfies 
+
+G(MSD ) < G(MSP ),
+
+i.e., MSD achieves a lower information bottle-neck objective than MSP , if the downstream task’s semantic-dependence coefficient λs is smaller than this threshold: 
+
+λs < r · ∆ρs + (1 − r)∆ ρc − β′ · ∆ηc
+
+β′(∆ ηs − ∆ηc) , (2) 
+
+where β′ and r are some constants. The detailed definitions of involved quantities and a full deriva-tion are provided in Appendix B. 
+
+Corollary 1. MSD achieves a lower information bottleneck objective than MSP , if its gains in com-pression outweigh its task-relevant information loss in the following way: 
+
+r · ∆ρs + (1 − r)∆ ρc > β ′(∆ ηs · λs + ∆ ηc · λc).
+
+Remark 1. Eq. (2) formalizes an intuitive trade-off that MSD is advantageous when it brings substan-tial compression gains while only mildly harming the task-relevant information needed by the down-stream task: In the numerator, larger ∆ρs or ∆ρc
+
+means that MSD removes more semantic or struc-tural information from the original text than MSP ,leading to a stronger compression and privacy ad-vantage. This enlarges the threshold, so MSD re-mains preferable for a wider range of tasks. The weight r reflects where most of the entropy in the original input lies. When r is larger, the informa-tion carried by the original text is dominated by its semantic content. By contrast, larger ∆ηs means that semantic decoupling discards more task-relevant semantic information, which increases the denominator and thus lowers the threshold. Larger ∆ηc has a similar effect through the term −β′∆ηc in the numerator. Finally, a larger β′ implies that downstream utility is weighted more heavily relative to compression, so the threshold becomes more stringent. 
+
+Privacy benefits with compression. According to the variational information bottleneck (VIB) framework, the mutual information terms in Equa-tion (1) can be bounded as follows: 
+
+I(x; y) = Ey∼p(y) [KL (p(x|y) ∥ p(x))] ,
+
+and I(y; z) ≥ Ey,z [log q(z|y)] ,
+
+where q(z|y) is an auxiliary variational distribution used to approximate the posterior p(z|y). On one hand, MSD reduces I(x; y) by decoupling the se-mantic information of x and y, which encourages smaller KL divergence between p(y|x) and p(y).Equivalently, the attacker posterior p(x|y) becomes closer to the true prior p(x) on average, implying that the mapped output y reveals less usable infor-mation about the original text x. Therefore, this compression directly enhances privacy against at-tackers observing y. 1
+
+On the other hand, such privacy benefits of MSD 
+
+come at the cost of dropping more task-relevant semantic information compared to MSP , which might impact the q(z|y) modelled by the down-stream LLM. As implied by Equation (2), if the downstream task’s dependence on semantic infor-mation can tolerate such loss, MSD dominates 
+
+MSP with compression benefits outweighing the task information loss. 
+
+5 CROSS-MAP 
+
+This section presents CROSS-MAP, a semantic-decoupling framework designed for cross-domain mapping and recovery. 
+
+> 1An in-depth analysis of the connection between KL diver-gence and posterior-based attack success rate is provided in Appendix C.
+
+4The legal committee proposed a new procedural framework to enhance evidence consolidation. The judicial system achieved greater consistency while reducing administrative burden. The framework was evaluated across multiple precedent cases. 
+
+> Restored Context Restored Question
+> What did the research team propose?
+> Mapped Context Mapped Question
+> What did the legal committee propose? A new procedural framework to enhance evidence consolidation.
+> LLM Output
+> A new algorithm to improve data compression.
+> Restored Output
+> The research team developed a new algorithm to improve data compression. The model achieved higher accuracy with lower computational cost. The algorithm was tested on multiple benchmark datasets.
+> Input Context Question
+> What did the research team propose?
+> Mapper Recoverer
+> Mapped Context Mapped Question
+> What did the legal committee propose?
+> ✅
+> The research team proposed a new algorithm to enhance data compression. The model achieved greater accuracy while reducing computational cost. The algorithm was evaluated across multiple benchmark datasets. The legal committee proposed a new procedural framework to enhance evidence consolidation. The judicial system achieved greater consistency while reducing administrative burden. The framework was evaluated across multiple precedent cases.
+
+Figure 1: Illustration of inference-time protection with CROSS-MAP. 
+
+5.1 Key Components 
+
+To address the challenges of highly-unstructured text inputs, two key designs are needed: (i) a struc-tured mapping and a recovery module, and (ii) a verifiable reward and metric design. 
+
+Structured mapping and recovery. Given an original input x, the mapper Mϕ produces a cross-domain representation (τ, D, y ) ∼ M ϕ(x) con-sisting of a target-domain theme τ , a dictionary 
+
+D, and a mapped text y. Here D = {(si, ˆsi)}mi=1 
+
+maps each original span si to a target-domain span 
+
+ˆsi. The recoverer Rψ reconstructs the restored text ˜x ∼ R ψ(τ, D, y ) from (τ, D, y ). Both Mϕ
+
+and Rψ are implemented as instruction-following LLMs with structured outputs (e.g., JSON). 
+
+Verifiable reward. A compact set of score met-rics is needed to guide the training of the mapper and the recoverer: • Dictionary coverage cdict (x, D ). Let x =(x1, . . . , x n) be the token sequence of length 
+
+n. Each original span si in D corresponds to a contiguous index interval Ii ⊆ { 1, . . . , n } in 
+
+x. Define the set of covered token positions as 
+
+I(D) := Smi=1 Ii. The dictionary coverage is the fraction of tokens in x that are covered by a dictionary span: cdict (x, D ) = |I (D)|/n .Intuitively, higher cdict means a larger portion of the original text x is explicitly handled by the mapper through D.• Dictionary distance ddict (D). Using a co-sine similarity measure Sim( ·, ·) that takes in span embeddings, the distance between spans in D is measured as ddict (D) = 1 −
+
+1
+
+m
+
+Pmi=1 Sim( si, ˆsi).• Text distance dtext (x, y ). Using a cosine similarity measure that takes in sentence embeddings, the text distance between x
+
+and y is measured as dtext (x, y ) = 1 −
+
+1
+
+L
+
+PLj=1 Sim( xj , y j ), where {xj }Lj=1 and 
+
+{yj }Lj=1 are sentence splits of x and y.• Fluency ftext (y). Let (y1, . . . , y T ) be the to-ken sequence of the mapped text y. The flu-ency score is set to the negative log-perplexity 
+
+− 1
+
+T
+
+PTt=1 log pLM 
+
+ yt|y<t 
+
+, where pLM repre-sents the output distribution of a reference language model. Finally, the above metrics are aggregated into a single scalar reward: 
+
+r(x, τ, D, y, ˜x) = w1 cdict (x, D ) + w2 ddict (D)+ w3 dtext (x, y ) + w4 ftext (y)+ w5 (1 − dtext (x, ˜x)) ,
+
+with nonnegative weights {w1, w 2, w 3, w 4, w 5}.The last term measures the consistency between the original text x and recovered text ˜x
+
+5.2 Training: SFT to DPO 
+
+The training pipeline has three stages: (i) seed data synthesis, (ii) supervised fine-tuning (SFT) 5for structured mapping/recovery, and (iii) direct preference optimization (DPO) for multi-objective alignment. 
+
+Stage 1: Data synthesis. We first use GPT-5.2 to synthesize a small subset 2 of training instances 
+
+Dsynth = {(x M
+
+−→ (τ, D, y )) , (( τ, D, y ) R
+
+−→ ˜x)}.
+
+Stage 2: SFT. The goal is to train two instruction-following models: a private mapper Mϕ and a recoverer Rψ. Both are initialized from the same base LLM and fine-tuned with parameter-efficient adapters. The mapper learns to generate (τ, D, y )
+
+from x, while the recoverer learns to generate ˜x
+
+from (τ, D, y ).
+
+Stage 3: DPO. SFT establishes a strong base, but it does not directly optimize the multi-objective re-ward. DPO is therefore employed to refine the mapper with preference pairs obtained by sam-pling and scoring. During preference construc-tion, for each x, we sample K mapped candidates 
+
+(τ (k), D (k), y (k)) ∼ pϕ(· | x), k = 1 , . . . , K ,and obtain a recovery for each candidate as ˜x(k) ∼
+
+pψ(· | τ (k), D (k), y (k)). The scalar reward is com-puted as r(k) := r(x, τ (k), D (k), y (k), ˜x(k)), and a preference pair (k+, k −) is selected such that 
+
+r(k+) ≥ r(k−) + γ for a margin γ > 0. Let 
+
+o+ := o(k+) and o− := o(k−) denote the preferred and dispreferred mapper outputs, and pϕ0 be the frozen reference model (typically the SFT check-point). DPO optimizes the mapper parameters ϕ
+
+by increasing the relative likelihood of high-reward mapped outputs over low-reward ones. 
+
+5.3 Workflow with LLMs as Third-Party API 
+
+Figure 1 illustrates the workflow of the proposed CROSS-MAP with the trained mapper and recov-erer. After training, the private mapper Mϕ and the private recoverer Rψ are deployed locally (e.g., on the user side), while the downstream LLM is accessed as a third-party API. Before the trans-mission, Mϕ first maps the original input x to a mapped version y. The LLM then produces a response ya and transmits it back to the recov-erer. The private recoverer can subsequently re-cover the original-domain answer ˜xa by reasoning jointly over the dictionary and the LLM response 
+
+ya. Therefore, users can interact with external APIs or proprietary services under the protection of the local mapper and recoverer via CROSS-MAP. It 
+
+> 2These instances are available in the provided GitHub repository.
+
+allows the external model to operate on an alter-native semantic domain while keeping the original sensitive content local. Algorithm 1 in Appendix D summarizes this workflow. 
+
+5.4 Adversarial Attacks 
+
+To evaluate the security of CROSS-MAP, we sim-ulate a white-box attacking scenario where the at-tacker has access to the mapper Mϕ and even to a partially leaked dictionary. Assume the attacker ob-serves a mapped output y and attempts to recover the original input x using a parametric attack policy 
+
+pθ(·| y).
+
+Attack objective and reward. Given a candidate reconstruction ˆx ∼ pθ(·| y), the attacker can evalu-ate how well it explains the observation by passing 
+
+ˆx through the mapper to obtain ˆo := (ˆ τ , ˆD, ˆy) ∼Mϕ(ˆ x). A successful ˆx should be mapped to ˆy
+
+that is close to the observed y. The attack reward is therefore defined as the similarity between ˆy and 
+
+y: ˆr(ˆ x; y) = 1 − dtext (ˆ y, y ). The attacker aims to find a reconstruction ˆx that maximizes ˆr(ˆ x; y).
+
+DPO-based attacker. An optimization-based at-tacker can align pθ(·| y) to the reward ˆr(ˆ x; y) via DPO. For each observed y, multiple candidate re-constructions {ˆx(k)}Kk=1 are sampled from pθ(·| y),then mapped by Mϕ to obtain ˆy(k), and finally scored by ˆr(k) = 1 − dtext (ˆ y(k), y ). A prefer-ence pair (ˆ x+, ˆx−) is then constructed by select-ing two candidates with a reward gap ˆr(ˆ x+; y) ≥
+
+ˆr(ˆ x−; y) + γatk for a margin γatk > 0. A detailed theoretical analysis of the attacker in the presence of dictionary leakage is provided in Appendix E. 
+
+6 Experiments 
+
+CROSS-MAP is evaluated along two dimensions: (i) utility on question answering (QA), summa-rization, and generation tasks; and (ii) security against de-anonymization, black-box span restora-tion, and optimization-based white-box attacks. Ex-periments are conducted on datasets from multi-ple semantic domains, including medicine, finance, news, and daily life. A full description of the exper-imental setup, including the datasets and models used, is provided in Appendix F.1. 
+
+6.1 Utility and Privacy 
+
+Figure 2 plots utility against privacy. It visualizes each method as a point in the plane of downstream QA accuracy and text distance dtext (x, y ) between original text x and mapped text y as described in Section 5.1. Across datasets, Pr εε mpt (Chowd-hury et al., 2025) clusters near the upper-utility 60.2 0.4 0.6 0.8 1.0 Normalized ACC 0.2 0.4 0.6 0.8 1.0 Normalized  dtext (x; y ) 
+
+> Plain QA Pr "" mpt InferDPT HAS
+> CROSS-MAP
+> Best trade-off
+> Dataset
+> SQuAD BioASQ FinCausal NarrativeQA
+
+Figure 2: Privacy-utility trade-offs across methods and datasets. The round points denote the median of sub-points representing individual datasets. 
+
+but low-privacy corner with Plain QA, indicating Pr εε mpt, which primarily targets numerical values, leaves the original text largely unchanged. Infer-DPT (Tong et al., 2025b) typically shifts upward in privacy but drifts leftward in utility due to its lack of an explicit recovery process. HAS (Chen et al., 2023b) provides a better trade-off compared to In-ferDPT and Pr εε mpt. However, it is still inferior to CROSS-MAP, which consistently lies closest to the upper-right corner, achieving larger dtext (x, y ) than other baselines, and meanwhile maintains down-stream QA performance very close to Plain QA. Table 4 in Appendix F.2 reports the concrete num-bers. For example, on SQuAD, CROSS-MAP in-creases dtext (x, y ) from 0.238 for HAS to 0.752 ,while increasing QA accuracy from 91 .84 for HAS to 92 .98 . Similar trends are observed on other datasets. We also report sensitive-span retention rate (the fraction of original sensitive spans retained in the mapped text) as a more direct privacy metric. Averaged across SQuAD, BioASQ, FinCausal, and NarrativeQA, CROSS-MAP retains only 3.1% of sensitive spans, compared to 63 .1% for HAS and 
+
+100 .0% for Plain QA. Table 17 in Appendix F.2 provides examples of different mapping methods. To broaden the evaluation beyond QA, the SQuAD-trained mapper and recoverer are also eval-uated on two non-QA task families without extra in-domain training. Table 2 summarizes the results. On CNN/DailyMail summarization, CROSS-MAP preserves summary quality, yielding a BERTScore of 0.877 compared to 0.882 for direct Plain LLM inference, while reducing the sensitive-span reten-tion from 100 .0% to 7.3% . On CommonGen open-ended generation, CROSS-MAP preserves high concept coverage ( 0.891 ) while reducing retention                 
+
+> Task Method ROUGE-L BERT/Cov. Retention CNN/DM Plain LLM 0.240 0.882 100.0% CNN/DM CROSS-MAP 0.285 0.877 7.3% CommonGen Plain LLM 0.587 0.932 98.3% CommonGen CROSS-MAP 0.414 0.891 18.9%
+
+Table 2: Generalization on summarization and genera-tion tasks. The BERT/Cov. metric denotes BERTScore for summarization and concept coverage for generation. Retention represents the sensitive-span retention rate. Plain Text Pr "" mpt HAS GPT-AA CROSS-MAP Method 0.0 0.2 0.4 0.6 0.8 Inference Accuracy Metric 
+
+> Inference Accuracy Inference Certainty
+> 012345Inference Certainty
+
+Figure 3: De-anonymization results via LLM attribute inference on SynthPAI (Yukhymenko et al., 2024), com-paring attacker inference accuracy and certainty across methods. 
+
+from 98 .3% to 18 .9% . These results support The-orem 1: semantic decoupling is strongest when the task-relevant structure is sufficient, but it can still provide a superior privacy-utility trade-off for semantic-dependent generation when the mapper performs domain-level dictionary construction and the recoverer performs soft semantic recovery in-stead of string replacement. 
+
+6.2 Security Against Attacks 
+
+This subsection reports and compares the security of different methods in three attack scenarios. 
+
+6.2.1 De-anonymization Attacks 
+
+LLM attribute inference is a strong way for de-anonymization. The goal is to use an LLM to infer private attributes (e.g., gender, age, and location) from the mapped text. This subsection reports the success rate of LLM attribute inference on Synth-PAI (Yukhymenko et al., 2024) using GPT-4 as the attacker as in GPT-AA (Staab et al., 2025). Fig-ure 3 shows that CROSS-MAP yields the lowest inference accuracy and certainty among all com-pared methods. The concrete numbers for each method are reported in Table 6 in Appendix F.2. 
+
+6.2.2 Black-box Span Restoration Attacks 
+
+Span restoration attacks aim to reconstruct the ex-act protected spans from the mapped text. The Attack Success Rate (ASR) is defined as the span 7Dataset Method k = 10 k = 30 k = 50                                                            
+
+> ASR Post. Mass ASR Post. Mass ASR Post. Mass FinCausal 2025 (Moreno-Sandoval et al., 2025)
+> CROSS-MAP 0.37 %0.006 0.84 %0.003 1.19 %0.002
+> HAS 5.88 %0.116 35.29 %0.026 35.29 %0.026 Plain QA 7.86 %0.181 41.43 %0.088 41.43 %0.088 BioASQ (Tsatsaronis et al., 2015)
+> CROSS-MAP 1.05 %0.004 1.05 %0.004 1.05 %0.004
+> HAS 12.73 %0.279 28.14 %0.164 34.66 %0.135 Plain QA 16.29 %0.316 32.81 %0.239 36.12 %0.208 SQuAD (Rajpurkar et al., 2016)
+> CROSS-MAP 0.68 %0.068 1.22 %0.042 1.49 %0.023
+> HAS 4.95 %0.164 12.10 %0.145 14.57 %0.124 Plain QA 5.33 %0.209 15.70 %0.171 15.70 %0.171
+
+Table 3: Black-box span restoration results across datasets, reporting span restoration accuracy as ASR and the attacker’s posterior mass on the ground-truth span at different candidate list sizes k.
+
+restoration accuracy, calculated as the ratio of cor-rectly restored spans to the total number of pro-tected spans. Table 3 shows that span restora-tion becomes easier as the candidate list size k
+
+increases. Plain QA consistently yields the highest ASR, while HAS offers only limited improvement. In contrast, CROSS-MAP substantially reduces restoration success across all datasets and all values of k. This suggests that preserving semantic an-chors makes posterior-based restoration easier for the attacker. The table also reports posterior mass on the ground-truth span, which is defined in Ap-pendix C. Across datasets and different k, methods with lower posterior mass exhibit lower ASR. For instance, on FinCausal 2025 at k = 50 , CROSS-MAP assigns the lowest posterior mass ( 0.002 )together with the lowest ASR ( 1.19% ), whereas HAS and Plain QA show higher posterior mass (0.026 and 0.088 ) and correspondingly higher ASR (35 .29% and 41 .43% ). Figure 5 in Appendix F.2 visualizes such trend across datasets as k varies. 
+
+6.2.3 White-box Optimization-based Attacks 
+
+The attacker is initialized from the trained map-per and then optimized using DPO algorithm as described in Section 5.4. ASR here refers to the similarity score 1−dtext (ˆ x, x ) between the restored text ˆx and the original text x. Table 14 and Ta-ble 15 in Appendix F.2 show that restoration be-comes easier as the dictionary leakage ratio ρ in-creases for both datasets, and that the DPO-based attacker consistently outperforms the base attacker without optimization at every ρ. Figure 6 in Ap-pendix F.2 shows that higher leakage also helps DPO-based attacker to achieve larger gains over the base attacker. However, it is noticeable that even under this optimization-based white-box at-tacker, the improvement brought by optimization under CROSS-MAP remains bounded. Across both datasets and all leakage ratios ρ, the maximum rela-tive gain of the DPO attacker over the base attacker is 29 .4% , achieved on NarrativeQA at ρ = 0 .1
+
+(where the DPO attacker’s ASR is still only 24 .2% ). On SQuAD, the maximum relative gain is 13 .6% 
+
+(achieved at ρ = 0 .1, with the DPO attacker’s ASR still only 32 .6% ). This bounded improvement sug-gests that, even when the mapper’s parameters are exposed and the attacker is allowed to optimize based on extra knowledge, e.g., some pairs from the mapping dictionary, the restoration advantage that can be extracted by optimization is still limited, supporting the robustness of CROSS-MAP against optimization-driven white-box restoration. 
+
+6.3 Ablation Study 
+
+The ablation studies in this paper systematically evaluate the key factors impacting model deploy-ment, including input complexity, paraphrase ro-bustness, target-domain selection, dictionary cov-erage, training scale, external LLM capabilities, mapper/recoverer architecture, and training strate-gies. These findings offer empirical guidelines for optimal experimental configurations. Detailed ta-bles and extended analyses are provided in Ap-pendix F.2. 
+
+7 Conclusion 
+
+This paper proposes CROSS-MAP, a semantic-decoupling framework for inference-time text pro-tection. By replacing semantic content while pre-serving the structural patterns needed for down-stream LLM reasoning, CROSS-MAP addresses the privacy–utility dilemma inherent in semantics-preserving approaches. An information-theoretic analysis characterizes how and when semantic de-coupling provides a better privacy–utility trade-off. Experiments on QA, summarization, and genera-tion tasks validate the analysis and demonstrate that CROSS-MAP outperforms existing baselines in both privacy and utility. These findings highlight the potential of semantic decoupling as a practical direction for privacy-preserving LLM inference. 88 Limitations 
+
+The utility of CROSS-MAP depends on the extent to which a downstream task can be supported by preserved structure, discourse roles, and recover-able relational information. The summarization and generation results show that the method is not restricted to extractive QA. However, the utility drop on CommonGen also confirms that highly semantic-dependent tasks remain more challeng-ing. One promising direction for future work is to augment CROSS-MAP with external relational knowledge sources, such as ConceptNet or related knowledge graphs, to better preserve entity-level relationships during mapping. This may be espe-cially useful for downstream tasks that depend not only on abstract structural patterns but also on re-lational coherence among entities. Extending this framework to complex real-world tasks, including contract review, sensitive email drafting, and multi-turn reasoning, represents a critical next step. In addition, CROSS-MAP does not guarantee that mapped text will remain consistent with real-world facts or commonsense knowledge. Like other model-based text obfuscation methods, it may gen-erate content that is factually implausible or incon-sistent with external knowledge. Such artifacts can make obfuscated text easier to detect and may cre-ate opportunities for fact-based inference attacks, in which attackers use real-world constraints to narrow down the possible original meanings. Im-proving factual consistency under model-based text obfuscation remains an important direction for fu-ture work. A further limitation is the potential dual-use risk of semantic decoupling. By replacing sensitive se-mantics while preserving structural patterns, the method could also be used to obscure malicious in-tent from external oversight while retaining enough structure for downstream reasoning. This creates a potential safety risk: harmful requests or plans may become less interpretable to LLM service providers even when their functional structure is preserved. Although CROSS-MAP is intended for privacy pro-tection, its practical deployment should therefore incorporate safeguards against misuse. 
+
+References 
+
+Martin Abadi, Andy Chu, Ian Goodfellow, Bren-dan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. 2016. Deep learning with differential pri-vacy. In Proceedings of the ACM Conference on Computer and Communications Security , pages 308– 318. Lois Bloom and Margaret Lahey. 1979. Language devel-opment and language disorders. Language , 55:945. Sai Chen, Fengran Mo, Yanhao Wang, Cen Chen, Jian-Yun Nie, Chengyu Wang, and Jamie Cui. 2023a. A customized text sanitization mechanism with differ-ential privacy. In Proceedings of the Annual Meet-ing of the Association for Computational Linguistics ,pages 5747–5758. Yu Chen, Tingxin Li, Huiming Liu, and Yang Yu. 2023b. Hide and seek (HaS): A lightweight framework for prompt privacy protection. Computing Research Repository , arXiv:2309.03057. Zhiyu Chen, Yu Li, Suochao Zhang, Jingbo Zhou, Ji-wen Zhou, Chenfu Bao, and Dianhai Yu. 2024. A framework for cost-effective and self-adaptive LLM shaking and recovery mechanism. Computing Re-search Repository , arXiv:2403.07283. Amrita Roy Chowdhury, David Glukhov, Divyam Anshumaan, Prasad Chalasani, Nicolas Papernot, Somesh Jha, and Mihir Bellare. 2025. Pr εε mpt: San-itizing sensitive prompts for LLMs. Computing Re-search Repository , arXiv:2504.05147. James Flemings and Murali Annavaram. 2024. Differ-entially private knowledge distillation via synthetic text generation. In Proceedings of the Annual Meet-ing of the Association for Computational Linguistics ,pages 12957–12968. Ahmed Frikha, Nassim Walha, Krishna Kanth Nakka, Ricardo Mendes, Xue Jiang, and Xuebing Zhou. 2025. IncogniText: Privacy-enhancing conditional text anonymization via LLM-based private attribute randomization. In Proceedings of the International Joint Conference on Natural Language Processing and the Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics , pages 2490–2501. Elizabeth Hill, Kate Tonta, Mark Boyes, Courtenay Fra-zier Norbury, Sarah Griffiths, Shaun Goh, and Brooke Ryan. 2025. Why would someone like me with DLD want to sit in a room and talk? How would that make me feel better?!: Developmental language disorder and the language demands of cognitive behaviour therapy. International Journal of Cognitive Behav-ioral Therapy , 18:405–424. Junyuan Hong, Jiachen T. Wang, Chenhui Zhang, Zhangheng Li, Bo Li, and Zhangyang Wang. 2024. DP-OPT: Make large language model your privacy-preserving prompt engineer. In Proceedings of the International Conference on Learning Representa-tions .Xiaoyang Hou, Jian Liu, Jingyu Li, Yuhan Li, Jiawen Zhang, Wen-jie Lu, Cheng Hong, and Kui Ren. 2026. CipherGPT: Secure two-party GPT inference. IEEE Transactions on Dependable and Secure Computing ,pages 1–16. 
+
+9Sofoklis Kakouros, Juraj Šimko, Martti Vainio, and Antti Suni. 2023. Investigating the utility of sur-prisal from large language models for speech syn-thesis prosody. Computing Research Repository ,arXiv:2306.09814. Zhigang Kan, Linbo Qiao, Hao Yu, Liwen Peng, Yifu Gao, and Dongsheng Li. 2023. Protecting user pri-vacy in remote conversational systems: A privacy-preserving framework based on text sanitization. 
+
+Computing Research Repository , arXiv:2306.08223. Najoung Kim and Tal Linzen. 2020. COGS: A compo-sitional generalization challenge based on semantic interpretation. In Proceedings of the Conference on Empirical Methods in Natural Language Processing ,pages 9087–9105. Tomáš Koˇ cisk` y, Jonathan Schwarz, Phil Blunsom, Chris Dyer, Karl Moritz Hermann, Gábor Melis, and Ed-ward Grefenstette. 2018. The NarrativeQA reading comprehension challenge. Transactions of the Asso-ciation for Computational Linguistics , 6:317–328. Alexey Kurakin, Natalia Ponomareva, Umar Syed, Liam MacDermed, and Andreas Terzis. 2023. Har-nessing large-language models to generate private synthetic text. Computing Research Repository ,arXiv:2306.01684. Bingzhi Li, Lucia Donatelli, Alexander Koller, Tal Linzen, Yuekun Yao, and Najoung Kim. 2023a. SLOG: A structural generalization benchmark for semantic parsing. In Proceedings of the Conference on Empirical Methods in Natural Language Process-ing , pages 3213–3232. Dacheng Li, Hongyi Wang, Rulin Shao, Han Guo, Eric Xing, and Hao Zhang. 2023b. MPCFORMER: Fast, performant and private transformer inference with MPC. In Proceedings of the International Confer-ence on Learning Representations .Siyan Li, Vethavikashini Chithrra Raghuram, Omar Khattab, Julia Hirschberg, and Zhou Yu. 2025. PA-PILLON: Privacy preservation from internet-based and local language model ensembles. In Proceed-ings of the Conference of the Nations of the Americas Chapter of the Association for Computational Lin-guistics: Human Language Technologies (Volume 1: Long Papers) , pages 3371–3390. Justus Mattern, Zhijing Jin, Benjamin Weggenmann, Bernhard Schölkopf, and Mrinmaya Sachan. 2022. Differentially private language models for secure data sharing. In Proceedings of the Conference on Empir-ical Methods in Natural Language Processing , pages 4860–4873. Antonio Moreno-Sandoval, Blanca Carbajo-Coronado, Jordi Porta Zamorano, Yanco Amor Torterolo Orta, and Doaa Samy. 2025. The financial document causality detection shared task (FinCausal 2025). In 
+
+Proceedings of the Joint Workshop of the Financial Technology and Natural Language Processing, the Financial Narrative Processing, and the Workshop on Large Language Models for Finance and Legal ,pages 214–221. Shuchao Pang, Zhigang Lu, Haichen Wang, Peng Fu, Yongbin Zhou, and Minhui Xue. 2025. Reconstruc-tion of differentially private text sanitization via large language models. In International Symposium on Research in Attacks, Intrusions and Defenses , pages 1–17. Constantinos Patsakis and Nikolaos Lykousas. 2023. Man vs the machine in the struggle for effective text anonymisation in the age of large language models. 
+
+Scientific Reports , 13(1):16026. Ildikó Pilán, Pierre Lison, Lilja Øvrelid, Anthi Pa-padopoulou, David Sánchez, and Montserrat Batet. 2022. The text anonymization benchmark (TAB): A dedicated corpus and evaluation framework for text anonymization. Computational Linguistics ,48(4):1053–1101. Ildikó Pilán, Benet Manzanares-Salor, David Sánchez, and Pierre Lison. 2025. Truthful text sanitization guided by inference attacks. Applied Soft Computing ,page 114013. Qwen, An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang Lin, and 24 oth-ers. 2025. Qwen2.5 technical report. Computing Research Repository , arXiv:2412.15115. Pranav Rajpurkar, Jian Zhang, Konstantin Lopyrev, and Percy Liang. 2016. SQuAD: 100,000+ questions for machine comprehension of text. In Proceedings of the Conference on Empirical Methods in Natural Language Processing , pages 2383–2392. Aleksandr Romanov, Anna Kurtukova, Anastasia Fe-dotova, and Roman Meshcheryakov. 2019. Natural text anonymization using universal transformer with a self-attention. In Proceedings of the International Conference on Language Engineering and Applied Linguistics , pages 22–37. Zhili Shen, Zihang Xi, Ying He, Wei Tong, Jingyu Hua, and Sheng Zhong. 2024. The fire thief is also the keeper: Balancing usability and privacy in prompts. 
+
+Computing Research Repository , arXiv:2406.14318. Rakshith Shetty, Bernt Schiele, and Mario Fritz. 2018. A4NT: Author attribute anonymity by adversarial training of neural machine translation. In Proceed-ings of the USENIX Conference on Security Sympo-sium , pages 1633–1650. Robin Staab, Mark Vero, Mislav Balunovi´ c, and Mar-tin Vechev. 2024. Beyond memorization: Violating privacy via inference with large language models. In Proceedings of the International Conference on Learning Representations .
+
+10 Robin Staab, Mark Vero, Mislav Balunovi´ c, and Martin Vechev. 2025. Large language models are advanced anonymizers. In Proceedings of the International Conference on Learning Representations .Meng Tong, Kejiang Chen, Xiaojian Yuan, Jiayang Liu, Weiming Zhang, Nenghai Yu, and Jie Zhang. 2025a. On the vulnerability of text sanitization. In Proceed-ings of the Conference of the Nations of the Americas Chapter of the Association for Computational Lin-guistics: Human Language Technologies (Volume 1: Long Papers) , pages 5150–5164. Meng Tong, Kejiang Chen, Jie Zhang, Yuang Qi, Weiming Zhang, Nenghai Yu, Tianwei Zhang, Tian-wei Zhang, and Zhikun Zhang. 2025b. InferDPT: Privacy-preserving inference for black-box large lan-guage models. IEEE Transactions on Dependable and Secure Computing , pages 4625 – 4640. George Tsatsaronis, Georgios Balikas, Prodromos Malakasiotis, Ioannis Partalas, Matthias Zschunke, Michael R. Alvers, Dirk Weissenborn, Anastasia Krithara, Sergios Petridis, Dimitris Polychronopou-los, Yannis Almirantis, John Pavlopoulos, Nico-las Baskiotis, Patrick Gallinari, Thierry Artiéres, Axel-Cyrille Ngonga Ngomo, Norman Heino, Eric Gaussier, Liliana Barrio-Alvers, and 3 others. 2015. An overview of the BioASQ large-scale biomedical semantic indexing and question answering competi-tion. BMC Bioinformatics , 16(1):138. Saiteja Utpala, Sara Hooker, and Pin-Yu Chen. 2023. Locally differentially private document generation using zero shot prompting. In Proceedings of the Conference on Empirical Methods in Natural Lan-guage Processing , pages 8442–8457. Jianwei Wang, Chengming Shi, Junyao Yang, Haoran Li, Qianli Ma, Huiping Zhuang, Cen Chen, and Ziqian Zeng. 2025. RewardDS: Privacy-preserving fine-tuning for large language models via reward driven data synthesis. In Proceedings of the Conference on Empirical Methods in Natural Language Processing ,pages 4479–4500. Fan Wu, Huseyin A. Inan, Arturs Backurs, Varun Chan-drasekaran, Janardhan Kulkarni, and Robert Sim. 2024a. Privately aligning language models with re-inforcement learning. In Proceedings of the Interna-tional Conference on Learning Representations .Haoqi Wu, Wenjing Fang, Yancheng Zheng, Jun-ming Ma, Jin Tan, and Lei Wang. 2024b. Ditto: Quantization-aware secure inference of transformers upon MPC. In Proceedings of the International Con-ference on Machine Learning , pages 53346–53365. Tong Wu, Ashwinee Panda, Jiachen T. Wang, and Pra-teek Mittal. 2024c. Privacy-preserving in-context learning for large language models. In Proceedings of the International Conference on Learning Repre-sentations .An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayi-heng Liu, Fan Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, and 41 oth-ers. 2025a. Qwen3 technical report. Computing Research Repository , arXiv:2505.09388. Tianyu Yang, Xiaodan Zhu, and Iryna Gurevych. 2025b. Robust utility-preserving text anonymization based on large language models. In Proceedings of the Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 28922– 28941. Mu Yuan, Lan Zhang, and Xiang-Yang Li. 2023. Secure transformer inference protocol. Computing Research Repository , arXiv:2312.00025. Patrick Yubeaton, Jianqiao Cambridge Mo, Karthik Garimella, Nandan Kumar Jha, Brandon Reagen, Chinmay Hegde, and Siddharth Garg. 2024. Trunc-Former: Private LLM inference using only truncations. Computing Research Repository ,arXiv:2412.01042. Xiang Yue, Minxin Du, Tianhao Wang, Yaliang Li, Huan Sun, and Sherman S. M. Chow. 2021. Differ-ential privacy for text analytics via natural text sani-tization. In Findings of the Association for Compu-tational Linguistics: Annual Meeting of the Associa-tion for Computational Linguistics and International Joint Conference on Natural Language Processing ,pages 3853–3866. Xiang Yue, Huseyin Inan, Xuechen Li, Girish Kumar, Julia McAnallen, Hoda Shajari, Huan Sun, David Levitan, and Robert Sim. 2023. Synthetic text gener-ation with differential privacy: A simple and practical recipe. In Proceedings of the Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers) , pages 1321–1342. Hanna Yukhymenko, Robin Staab, Mark Vero, and Mar-tin Vechev. 2024. A synthetic dataset for personal attribute inference. Advances in Neural Information Processing Systems , 37:120735–120779. Ruoyan Zhang, Zhongxiang Zheng, and Wankang Bao. 2025. Practical secure inference algorithm for a fine-tuned large language model based on fully homomor-phic encryption. IEEE Transactions on Information Forensics and Security , 21:17–29. 
+
+A Appendix A: Full Literature Review 
+
+This section provides a comprehensive review of related work. 
+
+A.1 Cryptography 
+
+This line of work studies text encryption for pri-vacy protection (Zhang et al., 2025; Wu et al., 2024b; Li et al., 2023b). Many systems for agent-to-agent communication also provide support for standard encryption primitives (Yuan et al., 2023). 11 While these techniques offer lossless protection that allows complete recovery, they induce nontriv-ial computational overhead and additional com-munication latency. Even when optimizations are applied (Chen et al., 2024; Hou et al., 2026; Yubeaton et al., 2024), the cost and engineering complexity remain substantial in interactive infer-ence pipelines, particularly in long-context and latency-sensitive settings, which limits the prac-ticality of cryptography as a general-purpose solu-tion for inference-time text protection. 
+
+A.2 Differential Privacy 
+
+Differential Privacy (DP) achieves privacy protec-tion by perturbing data-dependent computations with randomness. As LLMs progress, there are growing concerns about their capacity to memo-rize sensitive information from their input data. Existing approaches include applying DP during model training, such as using DP variants of stochastic optimization when fine-tuning on pri-vate datasets (Abadi et al., 2016; Wu et al., 2024a). Another line of DP research focuses on training private generative models locally under DP con-straints to synthesize data, which is then utilized for downstream fine-tuning or inference with larger models (Yue et al., 2023; Wang et al., 2025; Wu et al., 2024c; Utpala et al., 2023; Flemings and Annavaram, 2024; Hong et al., 2024). These DP-based approaches share the core principle of in-jecting noise into data, gradients, or generation processes to avoid directly exposing the original private dataset to an external model. However, DP noise can significantly degrade model performance by perturbing information essential for reasoning and prediction. To preserve downstream utility, ex-isting methods often either restrict DP protection to less critical components (Chowdhury et al., 2025; Tong et al., 2025b), or focus on tasks that are rela-tively insensitive to exact factual and entity-level details, such as sentiment analysis (Mattern et al., 2022; Kurakin et al., 2023). 
+
+A.3 Text Anonymization and Sanitization 
+
+Text anonymization aims to transform text to re-duce the risk of revealing personal information (e.g., identity or sensitive attributes) while preserv-ing downstream utility (Pilán et al., 2022). Early neural rewriting approaches combined feature-guided edits, such as dictionary-based synonym substitution, with sequence-to-sequence generation for anonymization (Romanov et al., 2019; Shetty et al., 2018). Prior work demonstrates that mod-ern LLMs have the potential to both anonymize and deanonymize text, highlighting risks of mali-cious re-identification attacks (Patsakis and Lyk-ousas, 2023; Staab et al., 2024). Following re-search further proposes an LLM-based adversarial anonymization framework against LLM-driven re-identification (Staab et al., 2025). Related attempts include multi-objective optimization for utility-preserving anonymization (Yang et al., 2025b), misleading adversaries into predicting incorrect private attributes (Frikha et al., 2025), and span-level truthful anonymization via semantic general-ization (Pilán et al., 2025). Compared to text anonymization, text sanitiza-tion extends beyond protecting personal identity information to broader sensitive content (Yue et al., 2021; Li et al., 2025; Chen et al., 2023a). To further improve text utility for downstream tasks, some studies introduce an explicit desanitization step. Existing methods include approaches based on pre-defined plaintext–ciphertext mappings (Kan et al., 2023), methods that use a language model to gen-erate span replacements and internalize transforma-tion rules in a local model (Shen et al., 2024; Chen et al., 2023b), and designs that protect only specific sensitive types, e.g. numerical values, to preserve most of the original semantics (Chowdhury et al., 2025). This line of works share a consensus that the mapped text and original text must be within the same semantic space for more accurate LLM inference. 
+
+B Appendix B: Proof of Theorem 1 
+
+The formal proof of Theorem 1 begins with the following definitions. 
+
+Preservation ratios ρs and ρc. These ratios mea-sure the amount of semantic and structural infor-mation from the original text that is preserved in the mapped text y:
+
+ρs = I(ys; xs)
+
+H(xs) , ρc = I(yc; xc)
+
+H(xc) ,
+
+where I(ys; xs) and I(yc; xc) denote the mutual information between the semantic and structural components of the mapped text and those of the original text. H(xs) and H(xc) denote the entropy of the semantic and structural components of the original text. 12 Task-relevant preservation ratios ηs and ηc.
+
+These ratios quantify how much task-relevant se-mantic and structural information is transferred from the original text to the mapped text: 
+
+ηs = I(ys; z)
+
+I(xs; z) , ηc = I(yc; z)
+
+I(xc; z) ,
+
+where I(ys; z) and I(yc; z) denote the mutual infor-mation between the semantic and structural compo-nents of the mapped text and the downstream task output z. I(xs; z) and I(xc; z) denote the mutual information between the semantic and structural components of the original text and the downstream task. These ratios characterize the fraction of task-relevant information preserved in the mapped text. 
+
+Task dependence coefficients λs and λc. These coefficients describe the relative importance of se-mantic and structural information in the original text for the downstream task: 
+
+λs = I(xs; z)
+
+I(x; z) , λc = I(xc; z)
+
+I(x; z) ,
+
+where I(xs; z) and I(xc; z) denote the mutual in-formation between the semantic and structural com-ponents of the original text and the downstream task output z, and I(x; z) denotes the mutual infor-mation between the entire input text and the task output. Since 
+
+I(x; z) = I(xs; z) + I(xc; z),
+
+it follows that 
+
+λs + λc = 1 .
+
+Compression gains ∆ρs and ∆ρc. These quan-tities measure the difference in preserved informa-tion between the semantic-preserving and semantic-decoupling mappings: 
+
+∆ρs = ρSP s − ρSD s , ∆ρc = ρSP c − ρSD c ,
+
+where ρSP s and ρSP c denote the preservation ratios under the semantic-preserving mapping, and ρSD s
+
+and ρSD c denote the preservation ratios under the semantic-decoupling mapping. 
+
+Task-relevant preservation differences ∆ηs and 
+
+∆ηc. These quantities measure the difference in task-relevant information retained by the two map-pings: 
+
+∆ηs = ηSP s − ηSD s , ∆ηc = ηSP c − ηSD c ,
+
+where ηSP s and ηSP c denote the task-relevant preser-vation ratios under the semantic-preserving map-ping, while ηSD s and ηSD c denote those under the semantic-decoupling mapping. 
+
+Proof of Theorem 1. Consider the information bottleneck objective of a mapping M:
+
+G(M) = I(x; y) − βI (y; z),
+
+where x denotes the original text, y the mapped text, and z the downstream task variable. Let the difference between the objectives of the semantic-decoupling mapping and the semantic-preserving mapping be 
+
+∆ = G(MSD ) − G (MSP ).
+
+Expanding the definition yields 
+
+∆ =  ISD (x; y) − ISP (x; y)
+
+− β ISD (y; z) − ISP (y; z).
+
+Define the compression gain 
+
+∆C = ISP (x; y) − ISD (x; y),
+
+and the task-information difference 
+
+∆T = ISP (y; z) − ISD (y; z).
+
+Then 
+
+∆ = −∆C + β∆T. 
+
+Therefore, 
+
+G(MSD ) < G(MSP )
+
+holds whenever 
+
+∆C > β ∆T. 
+
+Compression term. Assume that the semantic and structural components of the text are indepen-dent, 
+
+x = ( xs, x c), xs ⊥ xc.
+
+Under this assumption, 
+
+I(x; y) = I(xs; ys) + I(xc; yc).
+
+Using the definitions of preservation ratios, 
+
+I(x; y) = ρsH(xs) + ρcH(xc).
+
+The compression term is therefore 
+
+∆C = ( ρSP s − ρSD s )H(xs)+( ρSP c − ρSD c )H(xc).
+
+Using the definitions 
+
+∆ρs = ρSP s − ρSD s , ∆ρc = ρSP c − ρSD c ,
+
+13 this becomes 
+
+∆C = ∆ ρsH(xs) + ∆ ρcH(xc).
+
+Under the independence assumption, there is 
+
+H(x) = H(xs) + H(xc).
+
+Define the semantic information ratio 
+
+r = H(xs)
+
+H(x) .
+
+Then 
+
+H(xs)
+
+H(x) = r, H(xc)
+
+H(x) = 1 − r. 
+
+Thus 
+
+∆C = H(x) r∆ρs + (1 − r)∆ ρc
+
+.
+
+Task-information term. The mutual information between the mapped text and the downstream task can be decomposed as 
+
+I(y; z) = I(ys; z) + I(yc; z).
+
+From the definitions of the task-relevant preser-vation ratios, 
+
+I(y; z) = ηsI(xs; z) + ηcI(xc; z).
+
+Using the task dependence coefficients 
+
+λs = I(xs; z)
+
+I(x; z) , λc = I(xc; z)
+
+I(x; z) ,
+
+there is 
+
+I(y; z) = ( ηsλs + ηcλc)I(x; z).
+
+Therefore 
+
+∆T = ( ηSP s λs + ηSP c λc)I(x; z)
+
+− (ηSD s λs + ηSD c λc)I(x; z)= (∆ ηsλs + ∆ ηcλc)I(x; z),
+
+where 
+
+∆ηs = ηSP s − ηSD s , ∆ηc = ηSP c − ηSD c .
+
+Combining the two terms. The condition 
+
+∆C > β ∆T, 
+
+becomes 
+
+H(x) r∆ρs + (1 − r)∆ ρc
+
+
+
+> β (∆ ηsλs + ∆ ηcλc)I(x; z).
+
+Let 
+
+β′ = β · I(x; z)
+
+H(x) .
+
+Dividing both sides by H(x) gives 
+
+r∆ρs + (1 − r)∆ ρc > β ′(∆ ηsλs + ∆ ηcλc).
+
+Since 
+
+λc = 1 − λs,
+
+the right-hand side becomes 
+
+β′(∆ ηsλs + ∆ ηc(1 − λs)) .
+
+Solving the inequality for λs yields 
+
+λs < r∆ρs + (1 − r)∆ ρc − β′∆ηc
+
+β′(∆ ηs − ∆ηc) .
+
+Whenever this condition holds, the inequality 
+
+G(MSD ) < G(MSP ),
+
+is satisfied. This completes the proof. 
+
+C Appendix C: Analysis of Attack Success Rate 
+
+This section supplements the analysis of the rela-tionship between KL divergence and attack success rate in Section 4. 
+
+Posterior-based span inference attack. Let x
+
+be the original text, and let s⋆ := ( s⋆
+
+> 1
+
+, . . . , s ⋆m)
+
+denote the m sensitive spans in x protected by the mapping mechanism. Given the attacker-observed output y = M(x), the attacker aims to recover each hidden span s⋆i from y.Let qθ(si|y) denote the attacker model, e.g., an LLM posterior over the i-th span conditioned on y.For each span i ∈ { 1, . . . , m }, the attacker outputs 
+
+K guesses 
+
+ˆs(1)  
+
+> i
+
+, . . . , ˆs(K) 
+
+> i
+
+∼ qθ(si|y).
+
+Equivalently, the attacker forms a candidate set 
+
+bCKi (y) := {ˆs(1)  
+
+> i
+
+, . . . , ˆs(K) 
+
+> i
+
+}.
+
+A span is said to be successfully recovered if the ground-truth span appears in the candidate set, i.e., 
+
+s⋆i ∈ bCKi (y).
+
+14 The patient Bob, aged 37, reported persistent fatigue, rapid weight loss, and abnormal blood sugar levels.  
+
+> After several tests, the doctor confirmed a diagnosis of diabetes. The individual Mark, aged 42, described chronic tiredness, unexpected weight reduction, and irregular glucose readings. Based on the examination results, the clinician identified as the underlying condition. diabetes
+> bankruptcy
+> recession
+> crisis
+> …
+
+Original Text (Medical Domain) Semantic-preserving Mapping (Medical) Semantic-decoupling Mapping (Medical → Business) 
+
+> diabetes
+> disorder
+> syndrome
+> …
+
+✦ ✦  
+
+> hyperthyroidism
+> anemia
+> …
+> Next-token probability
+> Attacker Attacker LLM
+> The company, founded 37 years ago, experienced declining productivity, shrinking revenue, and unstable financial indicators. After a series of internal audits, the executive board determined that the organization was facing .
+
+Figure 4: Examples of semantic-preserving and semantic-decoupling mappings under posterior sampling attacks. Semantic decoupling prevents correct inferences by stripping contextual cues from the source domain. 
+
+Attack success rate at top-K. We define the per-example attack success rate at top-K as the fraction of sensitive spans successfully recovered: 
+
+ASR@ K(x, y ) := 1
+
+m
+
+mX
+
+i=1 
+
+1
+
+n
+
+s⋆i ∈ bCKi (y)
+
+o
+
+.
+
+Taking expectation over the data distribution and mapping randomness gives 
+
+ASR@ K(M) := Ex∼p(x), y ∼M (x) [ASR@ K(x, y )] .
+
+Thus, ASR@ K(M) measures the expected pro-portion of sensitive spans that can be recovered by the attacker using K guesses per span. 
+
+Proposition 1 (ASR@ K under posterior sam-pling) . Assume that for each sensitive span i, the attacker draws K i.i.d. guesses from the posterior 
+
+qθ(si|y). Then 
+
+ASR@ K(M) = Ex,y 
+
+"
+
+1
+
+m
+
+> m
+
+X
+
+> i=1
+
+
+
+1 −  1 − qθ (s⋆i | y)K #
+
+.
+
+Proof. For a fixed (x, y ) and a fixed span i, let 
+
+pi(y) := qθ(s⋆i | y).
+
+Since the attacker draws K i.i.d. guesses from 
+
+qθ(si|y), the probability that none of the K guesses equals the true span s⋆i is 
+
+(1 − pi(y)) K .
+
+Therefore, the probability that the true span is recovered at least once is 
+
+1 − (1 − pi(y)) K = 1 −  1 − qθ(s⋆i | y)K .
+
+Taking the average over the m spans gives 
+
+E[ASR@ K(x, y ) | x, y ] = 1
+
+m
+
+> m
+
+X
+
+> i=1
+
+
+
+1− 1−qθ (s⋆i | y)K 
+
+.
+
+Finally, taking expectation over (x, y ) yields the result. 
+
+Connection to KL divergence. For each sensi-tive span s⋆i , define its surprisal (Kakouros et al., 2023) under the attacker posterior as 
+
+Si(y) := − log 2 qθ(s⋆i | y).
+
+Taking expectation over the data distribution 
+
+ESi(Y) = H(Si(Y) | Y )= H(Si(Y)) − I(Si(Y); Y),
+
+15 Algorithm 1 Cross-domain Mapping and Recovery 
+
+Require: Trained mapper Mϕ; trained recoverer 
+
+Rψ; downstream LLM . 
+
+> 1:
+
+for each input x do  
+
+> 2:
+
+(τ, D, y ) ∼ M ϕ(x). 
+
+> 3:
+
+ya ← LLM (y). 
+
+> 4:
+
+(˜ x, ˜xa) ∼ R ψ
+
+ τ, D, concat( y, y a). 
+
+> 5:
+
+return ˜xa. 
+
+> 6:
+
+end for 
+
+where 
+
+I(Si(Y); Y) = Ey
+
+KL  p(si | y) ∥ p(si) .
+
+Therefore, smaller KL divergence implies larger expected surprisal. Furthermore, since 
+
+qθ(s⋆i | y) = 2 −S i(y),
+
+then Proposition 1 can be rewritten as       
+
+> ASR@ K(M) = Ex,y
+> "
+> 1
+> m
+> mX
+> i=1
+> 
+> 1− 1−2−S i(y)K#
+> .
+
+Therefore, ASR@ K is a monotonically decreas-ing function of the span surprisal. Lower sur-prisal assigns larger posterior mass to the ground-truth span, which increases the probability that the true span appears among the attacker’s K guesses. Consequently, a larger posterior-to-prior KL diver-gence leads to smaller expected surprisal and hence higher ASR@ K.This aligns with the qualitative conclusion of this section: semantic-preserving mappings tend to be more vulnerable because they preserve cues in y
+
+that concentrate the posterior around s⋆. Figure 4 provides an example of such pattern. 
+
+D Appendix D: Algorithm 
+
+The details of the inference workflow with CROSS-MAP described in Section 5.3 are summarized in Algorithm 1. 
+
+E Appendix E: Security Analysis of CROSS-MAP 
+
+This section analyzes the security of CROSS-MAP against posterior-based attackers under dictionary leakage, when the attacker additionally observes or infers a subset of the mapper dictionary. As discussed in Appendix C, the security of a mapping mechanism can be characterized through the posterior mass assigned to the ground-truth sen-sitive spans. In particular, under posterior-based attacks with K guesses per span, the attack suc-cess rate ASR@ K is determined by the posterior probabilities of the true spans, equivalently by their surprisal. We now analyze how these quantities change when part of the dictionary is leaked to the attacker. 
+
+Leakage model. Let s⋆ = ( s⋆
+
+> 1
+
+, . . . , s ⋆m) denote the m sensitive spans in the original text x, and let 
+
+ˆs = (ˆ s1, . . . , ˆsm) be their mapped-domain counter-parts produced by CROSS-MAP. The full mapper dictionary for this example is 
+
+D = {(s⋆i , ˆsi)}mi=1 .
+
+Assume the attacker additionally learns a leaked subset Dleak ⊆ D containing ℓ revealed pairs, with leakage rate ρ = ℓ/m . Let Ileak ⊆ { 1, . . . , m }
+
+denote the indices of leaked spans, and let Ihid := 
+
+{1, . . . , m } \ I leak be the indices of the still-hidden spans. Given the attacker-observed mapped out-put y = M(x), dictionary leakage enriches the attacker-visible information from y to (y, D leak ).Accordingly, for each hidden span i ∈ I hid ,the attacker posterior changes from qθ(si | y) to the leakage-conditioned posterior qρθ (si | y, D leak ).For leaked spans i ∈ I leak , recovery is trivial once the corresponding dictionary pair is known. 
+
+Attack success rate under leakage. Under the same attack protocol as in Appendix C, the at-tacker outputs K guesses for each span. For leaked spans, the correct value is directly recovered from 
+
+Dleak . For hidden spans, the attacker draws K
+
+guesses from the leakage-conditioned posterior 
+
+qρθ (si|y, D leak ). Define the per-example success rate under leakage as       
+
+> ASR@ Kρ(x, y ) := 1
+> m
+> X
+> i∈I leak
+> 1 + X
+> i∈I hid
+> 1
+> n
+> s⋆i∈bSKi,ρ (y)
+> o,
+
+where bSKi,ρ (y) denotes the attacker’s K guesses for span i under leakage. Taking expectation over the data distribution and mapping randomness gives 
+
+ASR@ Kρ(M) := Ex,y [ASR@ Kρ(x, y )] .
+
+Proposition 2 (ASR@ Kρ under dictionary leak-age) . Assume that for each hidden span i ∈Ihid , the attacker draws K i.i.d. guesses from 
+
+qρθ (si|y, D leak ). Then 
+
+16 ASR@ Kρ(M) = Ex,y             
+
+> 1
+> m(|I leak |
+> +X
+> i∈I hid
+> 
+> 1− 1−qρθ(s⋆i|y, D leak )K.
+
+Proof. For each leaked span i ∈ I leak , the true span is directly revealed by the leaked dictionary pair, so its contribution to the success rate is 1.For each hidden span i ∈ I hid , let 
+
+pρi (y) := qρθ (s⋆i | y, D leak ).
+
+Since the attacker draws K i.i.d. guesses from the leakage-conditioned posterior, the probability that none of the K guesses equals the ground-truth span is 
+
+(1 − pρi (y)) K .
+
+Therefore, the probability that the true span is recovered at least once is 
+
+1 − (1 − pρi (y)) K = 1 −  1 − qρθ (s⋆i | y, D leak )K .
+
+Averaging over all m spans yields the condi-tional per-example success rate, and taking expec-tation over (x, y ) gives the result. 
+
+Connection to surprisal under leakage. For each hidden span i ∈ Ihid , define its leakage-conditioned surprisal as 
+
+Sρi (y) := − log 2 qρθ (s⋆i | y, D leak ).
+
+Then Proposition 2 can be rewritten as           
+
+> ASR@ Kρ(M) = Ex,y
+> 1
+> m(|I leak |+
+> X
+> i∈I hid
+> 
+> 1− 1−2−S ρi(y)K.
+
+Hence, for the unrevealed spans, dictionary leak-age increases attack success exactly when it de-creases the surprisal of the ground-truth spans un-der the attacker’s posterior. 
+
+Effect 1: Search-space reduction for hidden spans. Dictionary leakage reduces the effective search space for the remaining hidden spans. Intu-itively, once some span–mapping pairs are known, candidates inconsistent with the leaked dictionary can be eliminated, which increases the relative pos-terior mass assigned to the feasible values of the unrevealed spans. To make this precise, suppose that for each hid-den span i, the attacker originally considers a fea-sible candidate set Ci(y), while under leakage the feasible set shrinks to 
+
+Cρi (y, D leak ) ⊆ C i(y).
+
+If the posterior over the feasible set is approxi-mately uniform, then 
+
+qθ(s⋆i | y) ≈ 1
+
+|C i(y)| ,qρθ (s⋆i | y, D leak ) ≈ 1
+
+|C ρi (y, D leak )| .
+
+Since 
+
+|C ρi (y, D leak )| ≤ |C i(y)|,
+
+the posterior mass of the true span increases af-ter leakage, which lowers surprisal and raises 
+
+ASR@ K.
+
+Effect 2: Posterior concentration via cross-span dependence. Beyond search-space reduc-tion, leaked spans can provide additional seman-tic or structural clues about the remaining hidden spans. Let shid and sleak denote the collections of hidden and leaked spans, respectively. Condi-tioning on the leaked dictionary cannot increase uncertainty: 
+
+H(shid | y, D leak ) ≤ H(shid | y).
+
+Equivalently, 
+
+I(shid ; Dleak | y)= H(shid | y) − H(shid | y, D leak ) ≥ 0.
+
+Thus, leaked dictionary entries provide addi-tional information about the unrevealed spans be-yond what is already contained in y. At the per-span level, for each hidden span si this implies 
+
+H(si | y, D leak ) ≤ H(si | y).
+
+If the attacker posterior is well calibrated to the true posterior, then the expected leakage-conditioned surprisal satisfies 
+
+E[Sρi (Y)] = H(si | Y , D leak )
+
+≤ H(si | Y ) = E[Si(Y)] .
+
+Therefore, dictionary leakage reduces the ex-pected surprisal of the unrevealed spans and in-creases their recovery probability under posterior-based attacks. 17 The above analysis shows that dictionary leakage harms security through two coupled mechanisms: it directly reveals the leaked spans themselves, and it indirectly increases the recoverability of the remain-ing spans by concentrating the attacker posterior. In terms of the CROSS-MAP framework developed in this paper, both effects increase the posterior mass on the ground-truth spans, reduce their surprisal, and therefore raise ASR@ K. This motivates eval-uating security as a function of the leakage rate ρ
+
+and reporting robustness against strong attackers with partial dictionary knowledge inferred from historical observations. 
+
+F Appendix F: Supplementary Experimental Results 
+
+This section provides supplementary details on the experimental setup and results. 
+
+F.1 Experimental Setup 
+
+This subsection reports the experimental setup, in-cluding datasets, baselines, models, and evaluation metrics. 
+
+Datasets. SQuAD (Rajpurkar et al., 2016), BioASQ (Tsatsaronis et al., 2015), FinCausal 2025 (Moreno-Sandoval et al., 2025), and Narra-tiveQA (Koˇ cisk` y et al., 2018) are used for QA-style evaluation across general, biomedical, finan-cial, and narrative domains. CNN/DailyMail is used for summarization, and CommonGen is used for constrained open-ended generation. Synth-PAI (Yukhymenko et al., 2024) is used for eval-uation against de-anonymization attacks. Model optimization involves a subset of SQuAD compris-ing 754 instances for SFT and 1,502 instances for DPO. For QA evaluation, 500 test instances are sampled from each dataset. The additional sum-marization and open-ended generation experiments use 200 CNN/DailyMail instances and 100 Com-monGen instances, respectively. All reported re-sults are averaged across the corresponding test subset in a single run for each dataset. 
+
+Baselines. State-of-the-art methods for inference-time privacy protection are used as baselines, in-cluding the sanitization method InferDPT (Tong et al., 2025b), and bidirectional frameworks HAS (Chen et al., 2023b) and Pr εε mpt (Chowd-hury et al., 2025). For evaluation against de-anonymization attacks, the adversarial anonymiza-tion framework GPT-AA (Staab et al., 2025) is also included as a baseline. 
+
+Metrics. The evaluation focuses on the trade-off between utility and privacy across tasks. For QA, utility is assessed with EM/F1/ACC. For summa-rization, utility is assessed with ROUGE-L and BERTScore. For CommonGen, utility is assessed with ROUGE-L and concept coverage. The utility-oriented training objectives introduced in Section 5, including fluency and recovery quality, are also re-ported where applicable. Privacy is measured using dictionary-/text-level distance, dictionary coverage, sensitive-span retention, and the posterior-mass quantity derived from surprisal in Appendix E. Be-yond these intrinsic metrics, attack success rate (ASR) is reported under different attackers to re-flect effective privacy under each threat model. 
+
+Models. Qwen-2.5-3B/7B/14B (Qwen et al., 2025) and Qwen3-4B (Yang et al., 2025a) are used as the base models for the mapper and the recov-erer. LLAMA-8B is used as the downstream model for the main experiments, and the additional de-ployment ablation also evaluates stronger external LLM access through CROSS-MAP. LoRA is used for parameter-efficient fine-tuning with r = 16 ,
+
+α = 32 , and a learning rate of 1 × 10 −5 for all runs. 
+
+Prompts. Figure 8 and 9 show the mapper and recoverer prompts, respectively. 
+
+F.2 Supplementary Experimental Results 
+
+This section provides a full description of exper-imental results, including tables and figures, as a supplement to Section 6. 
+
+F.2.1 Utility and Privacy 
+
+In Table 4, the ACC metric calculates the pro-portion of recovered LLM responses that con-tain the ground-truth answer span. The similar-ity (Sim.) metric for recovered text is defined as 
+
+1 − dtext (x, ˜x). The BLEU and ROUGE-1 (R-1) metrics are also computed by comparing x with ˜x.Fluency Loss (Flu. Loss) is the token-level nega-tive log-likelihood under the reference LM, i.e., the negative of the fluency score ftext in Section 5.1. Other metrics are consistent with the definitions in Section 5.1. Among all methods, Plain QA and Pr εε mpt re-tain the highest downstream utility but provide neg-ligible or weak privacy. For Pr εε mpt, the mapped-text privacy scores remain low overall, reflecting its minimal perturbation on the original text. Infer-DPT delivers only partial privacy gains while caus-18 Downstream QA utility Recovered text utility Mapped text privacy                                                                                                                                                                                                                       
+
+> Dataset Method EM ↑F1 ↑ACC ↑Flu. Loss ↓Sim. ↑BLEU ↑R-1 ↑cdict ↑ddict ↑dtext ↑
+> SQuAD Plain QA 76.42 84.10 94.73 4.202 1.000 1.000 1.000 0.000 0.000 0.000 Pr εε mpt 75.78 84.02 94.70 4.365 1.000 1.000 1.000 0.006 0.142 0.006 InferDPT 68.21 74.04 81.34 5.597 0.737 0.520 0.710 0.172 0.289 0.263 HAS 72.97 82.10 91.84 4.212 0.973 0.939 0.975 0.181 0.408 0.238
+> CROSS-MAP 74.94 83.22 92.98 4.703 0.826 0.586 0.800 0.413 0.753 0.752
+> BioASQ Plain QA 13.48 32.02 96.84 4.313 1.000 1.000 1.000 0.000 0.000 0.000 Pr εε mpt 13.44 31.99 96.81 4.156 1.000 1.000 1.000 0.041 0.497 0.151 InferDPT 8.97 19.88 77.44 4.117 0.709 0.540 0.730 0.094 0.375 0.291 HAS 11.91 28.45 95.21 4.346 0.998 0.958 0.977 0.103 0.553 0.203
+> CROSS-MAP 12.73 30.90 96.10 5.128 0.879 0.610 0.805 0.604 0.858 0.919
+> FinCausal Plain QA 59.27 77.61 81.20 4.712 1.000 1.000 1.000 0.000 0.000 0.000 Pr εε mpt 59.20 77.54 81.15 4.722 1.000 1.000 1.000 0.016 0.150 0.037 InferDPT 58.63 77.10 79.06 4.824 0.964 0.893 0.949 0.054 0.238 0.036 HAS 57.40 75.89 79.24 4.645 0.968 0.921 0.956 0.092 0.294 0.139
+> CROSS-MAP 58.99 77.33 80.61 4.970 0.860 0.733 0.877 0.540 0.710 0.678
+> NarrativeQA Plain QA 21.12 44.21 90.68 4.518 1.000 1.000 1.000 0.000 0.000 0.000 Pr εε mpt 21.07 44.15 90.65 4.681 1.000 1.000 1.000 0.011 0.516 0.117 InferDPT 15.20 38.74 72.12 4.545 0.846 0.910 0.955 0.014 0.251 0.154 HAS 19.61 41.92 87.80 4.512 0.943 0.897 0.954 0.094 0.541 0.341
+> CROSS-MAP 20.49 43.22 89.67 5.138 0.829 0.689 0.863 0.313 0.796 0.880
+
+Table 4: Privacy and utility results across datasets for Plain QA, Pr εε mpt (Chowdhury et al., 2025), InferDPT (Tong et al., 2025b), HAS (Chen et al., 2023b), and CROSS-MAP. The results are reported using Qwen2.5-14B as the base model for both the mapper and the recoverer in CROSS-MAP. An LLAMA-8B model is used for downstream QA. 
+
+ing a substantial utility collapse (e.g., on SQuAD, F1 drops from 84.10 to 74.04), highlighting that perturbation without an explicit recovery mech-anism distorts answer-critical semantics. As a bidirectional framework, HAS attains higher util-ity than InferDPT, but its privacy remains below CROSS-MAP, suggesting that residual semantic cues are still preserved in the mapped text and thus remain exposable to external LLMs. Across all datasets, CROSS-MAP consistently achieves the strongest mapped-text privacy while largely pre-serving downstream QA utility relative to other baselines. For example, on SQuAD, the distance between mapped text and original text increases from HAS’s 0.238 to 0.752 while QA accuracy in-creases from HAS’s 91.84 to 92.98. Similar trends are observed on other datasets. These consistent gains indicate that high downstream utility does not require high similarity between mapped and origi-nal text. In summary, the consistent privacy gains and the near-preserved downstream utility achieved by CROSS-MAP demonstrate that a bidirectional framework with semantic decoupling yields the best privacy-utility trade-off among the compared methods. Table 5 reports LLM-as-a-judge ratings across different methods. The judge rates all metrics on a 1–5 scale, where higher scores in the first two columns indicate better plausibility (Plaus.) and flu-ency (Flu.), whereas lower scores in the last column indicate fewer conspicuous obfuscation artifacts for detectability (Detect.). 
+
+Method Plaus. ↑ Fluency ↑ Detect. ↓
+
+Original text 4.93 4.91 1.06 Pr εε mpt 4.82 4.86 1.18 HAS 4.54 4.61 1.58 InferDPT 3.71 3.94 2.47 CROSS-MAP 4.45 4.52 1.72 
+
+Table 5: LLM-as-a-judge ratings across methods. 
+
+F.2.2 De-anonymization Attacks 
+
+Compared to Plain Text, Pr εε mpt achieves only a marginal reduction in attack success ( −1.7% ) and confidence ( −6.4% ), indicating that limited edits remain insufficient to remove attribute cues. In con-trast, HAS reduces inference accuracy by 34 .1% ,and GPT-AA further reduces it by 40 .7% , accom-panied by lowered certainty. The strongest defense is achieved by CROSS-MAP, where inference ac-curacy drops significantly by 88 .5% . This pattern suggests that the semantic decoupling in CROSS-MAP suppresses attribute cues more thoroughly, leading to both lower attacker accuracy and lower confidence. 
+
+F.2.3 Span Restoration Attacks 
+
+Figure 5 provides direct empirical evidence that posterior sampling succeeds when the protected span remains a high-probability continuation under the attacker’s token-level posterior. The privacy ad-19 CROSS-MAP HAS Plain QA 020 40 60 80 ASR (%)          
+
+> FinCausal 2025 CROSS-MAP HAS Plain QA
+> BioASQ CROSS-MAP HAS Plain QA
+> SQuAD
+> 0.05 0.10 0.15 0.20 Post. Mass
+> ASR@k10 Post. Mass@k10 ASR@k30 Post. Mass@k30 ASR@k50 Post. Mass@k50
+
+Figure 5: Correlation between span restoration accuracy and the attacker’s posterior mass on protected spans. 0.1 0.3 0.5 0.7 0.9       
+
+> ½
+> 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 Sim( x, ^x)
+> SQuAD
+> 0.1 0.3 0.5 0.7 0.9
+> ½
+> Sim( x, ^x)
+> NarrativeQA
+> Base attacker (mean) DPO attacker (mean) DPO attacker ± std
+
+Figure 6: Optimization-based attacker’s restoration rate under different dictionary leakage ratios ρ.
+
+Method Inference Accuracy Inference Certainty Plain Text 0.713 3.366 Pr εε mpt 0.701 3.152 HAS 0.470 2.196 GPT-AA 0.423 2.073 
+
+CROSS-MAP 0.082 1.063 
+
+Table 6: De-anonymization results via LLM attribute in-ference on SynthPAI (Yukhymenko et al., 2024), report-ing attacker inference accuracy and confidence (0-5). 
+
+vantage of CROSS-MAP is therefore attributed to its semantic-decoupling mapping, where direct lex-ical and semantic anchoring between mapped text and the original protected spans is systematically weakened. As a result, the attacker’s posterior over the protected spans is flattened. The true span no longer concentrates probability mass among top-k
+
+candidates, yielding lower posterior mass, equiva-lently higher surprisal, and lower ASR consistently across datasets. 
+
+F.2.4 Optimization-based Attacks 
+
+Table 14 and Table 15 show that restoration be-comes easier as ρ increases for both datasets, and that the DPO-based attacker consistently outper-forms the base attacker without DPO optimization at every ρ. For example, on SQuAD, the DPO-based attacker’s mean similarity score increases from 0.326 to 0.867 as ρ goes from 0.1 to 0.9, with absolute mean gains over the base attacker ranging from 0.039 to 0.094 . This systematic improvement suggests that optimization reliably pushes gener-ations toward better reconstruction, rather than merely benefiting from occasional lucky samples. Qwen2.5-3B is used for both attackers in these two tables. From Figure 6, it can be clearly observed that the restoration similarity rises monotonically with 
+
+ρ. Furthermore, higher leakage is also accompa-nied by larger absolute gains. A possible reason is that higher ρ reveals more dictionary information, sharpening the attacker’s posterior, while DPO fur-ther concentrates probability mass on outputs that yield higher restoration similarity. 
+
+F.2.5 Ablation Studies 
+
+This section details an ablation analysis of key model and deployment factors from multiple per-spectives: input complexity, paraphrase robust-ness, target-domain selection, dictionary coverage, training scale, external LLM capabilities, map-per/recoverer size, and training strategies. 20 Input complexity. Three parse-based metrics are used to measure syntactic complexity: mean de-pendency distance (MDD), maximum dependency-tree depth (max depth), and clauses per sen-tence (clauses/sent.). NarrativeQA has an aver-age MDD, max depth, and clauses per sentence of 2.40 , 12 .8, and 2.95 , respectively. SQuAD has 
+
+2.40 /10 .6/2.26 , BioASQ has 2.41 /7.6/2.03 , and FinCausal has 1.98 /7.7/1.93 .Compared to the example sentence, “Although the defendant had no prior convictions, the judge imposed a harsher sentence because the minor vic-tim suffered irreversible harm” (MDD = 3 .00 ,max depth = 6 , and clauses/sent. = 4 .00 ), the datasets used for evaluation in this paper include multi-clause and long-distance syntactic structures.                            
+
+> Split MDD Max depth Clauses/sent. ACC ↑Flu. Loss ↓
+> Q1 2.16 11.11 2.27 93.62% 4.722 Q2 2.40 10.75 2.34 90.52% 4.687 Q3 2.65 9.85 2.53 93.36% 4.715 Q4 3.24 10.11 2.90 94.42% 4.688
+> Table 7: SQuAD complexity-quartile robustness. Exam-ples are sorted by MDD and split into Q1–Q4, where Q4 is most complex.
+
+Table 7 reports the evaluation of complexity on the SQuAD dataset. The results show that increas-ing syntactic complexity does not monotonically degrade utility or fluency. Q4, the most complex quartile, reaches 94 .42% ACC and a Fluency Loss of 4.688 . This suggests that CROSS-MAP is robust to complex structures. 
+
+Paraphrasing Robustness. Table 8 evaluates CROSS-MAP’s recovery robustness against the paraphrasing of mapped text. The results show that the ACC for SQuAD drops mildly from 0.929 
+
+to 0.877 under WordNet synonym substitution (p = 0 .30 ) and to 0.896 under T5 paraphrasing. Such robustness to paraphrasing is important for third-party LLM APIs, where downstream genera-tion cannot be forced to copy the mapper’s terms exactly.          
+
+> Setting ACC Drop Original output 0.929 –WordNet synonyms 0.877 5.2% T5 paraphrase 0.896 3.3%
+> Table 8: Paraphrase robustness of the recoverer on SQuAD. The recoverer reasons over the dictionary and response jointly, rather than relying on exact string matching.
+
+Domain selection. To investigate the interplay between semantic domain distance, privacy preser-vation, and task utility, we conduct an ablation analysis in Table 9. The within-cluster row aver-ages dtext and ACC over samples mapped between source-target domain pairs in the same cluster. The across-cluster row averages over samples mapped between pairs from different clusters. The results indicate that across-cluster mappings significantly augment dtext from 0.642 to 0.797 , confirming that increased domain divergence strengthens semantic separation. Notably, this substantial privacy gain is achieved with only a minor reduction in utility (a 3.5% decrease in accuracy, shifting from 90 .4% 
+
+to 86 .9% ). This desirable trade-off suggests that the mapping can be executed with high quality de-spite a large semantic distance, provided that there is sufficient structural and relational alignment be-tween the source and target domains to preserve the underlying discourse mechanics.        
+
+> Pairing dtext ACC Within-cluster 0.642 90.4% Across-cluster 0.797 86.9%
+> Table 9: Target-domain distance ablation over 260 source-target pairs. Source and target domains are em-bedded with Sentence-BERT and grouped into semantic-domain clusters.
+
+Table 10 further provides a qualitative case study for domain selection. The same cognitive-development source text is mapped to a far equipment-operations domain and a nearer medical-training domain. Both mappings preserve the key discourse functions: a long-range temporal frame, causal connective, contrastive predication, multi-clause explanation, and comparative grounding. However, the far-domain mapping needs more local reordering to remain natural, while the near-domain mapping can preserve more surface structure. This explains the quantitative pattern in Table 9: larger semantic distance can improve privacy, but the tar-get domain needs enough compatible relational roles to support a fluent mapped passage and en-sure accurate recovery. 
+
+Dictionary coverage. Table 11 ablates recovery behavior as dictionary coverage decreases. Re-covery similarity decreases from 0.860 at approxi-mately 0.8 coverage to 0.816 at approximately 0.5
+
+coverage, and remains 0.788 at approximately 0.2
+
+coverage. The trend is smooth rather than catas-trophic because the recoverer can use the mapped 21 Mapping Text Original: cognitive devel-opment 
+
+Wisdom , or the capacity for insight and judgment that is developed through experience , increases between the ages of fourteen and twenty-five , then levels off. Thus, it is during the adolescence-adulthood transition that individuals acquire the type of wisdom 
+
+typically associated with age. Wisdom is not the same as intelligence : adolescents do not improve substantially on IQ tests because their scores are relative to others in their same age group , and relative standing usually does not change — everyone matures at approximately the same rate in this way. Far domain: equipment operations 
+
+Diagnostic maturity , or the ability to interpret sensor patterns and make maintenance decisions refined through operating hours ,improves between 300 and 1,800 operating hours , then plateaus. Thus, units tend to develop the level of diagnostic maturity 
+
+typically attributed to long service life during the transition from commissioning to routine operation . Diagnostic maturity is not the same as rated capacity : newly commissioned units do not show large gains on standardized bench tests because their results are normalized against comparable models from the same production batch , and relative ranking typically remains stable — most units stabilize at roughly similar rates under similar duty cycles on that metric. Near domain: medical training 
+
+Professional judgment , or the capacity for clinical insight and decision-making that is developed through supervised practice ,increases between the first and final years of training , then levels off. Thus, it is during the trainee-practitioner transition that clinicians acquire the type of professional judgment typically associated with seniority. Professional judgment is not the same as 
+
+medical knowledge : trainees do not improve substantially on standardized exams because their scores are relative to others in their 
+
+same training cohort , and relative standing usually does not change — everyone advances at approximately the same rate in this way. 
+
+Table 10: Domain-selection case study. Bold spans mark key source entities and their mapped counterparts. 
+
+response and task context to infer some missing links. However, the ACC drop from 91 .2% to 
+
+86 .2% also shows that the dictionary is not op-tional. It is the mechanism that keeps semantic decoupling recoverable for downstream use. 
+
+Dictionary coverage Recovery Sim. ACC 
+
+cdict ≈ 0.8 0.860 91.2% 
+
+cdict ≈ 0.5 0.816 88.7% 
+
+cdict ≈ 0.2 0.788 86.2% 
+
+Table 11: Dictionary-coverage ablation on SQuAD. 
+
+Training scale. Table 12 ablates SFT data size for the 14B model. Moving from the base model to 200 and 500 SFT examples already improves both privacy distance and utility, indicating that the desired behavior can be learned from a relatively small synthetic set. The largest utility gain appears by 700 examples, where ACC reaches 94 .59 and recovery similarity reaches 0.945 . Additional data from 1000 to 2000 examples yields only marginal changes in dtext and slightly lower recovery simi-larity, suggesting that later gains are dominated by DPO and sampling strategy rather than by simply scaling SFT data. 
+
+Checkpoint # samples dtext Sim. / ACC Base 0 0.541 0.901 / 88.96 SFT-200 200 0.634 0.912 / 90.38 SFT-500 500 0.651 0.933 / 92.57 SFT-700 700 0.663 0.945 / 94.59 SFT-1000 1000 0.667 0.943 / 94.34 SFT-1500 1500 0.670 0.940 / 94.35 SFT-2000 2000 0.673 0.937 / 94.51 
+
+Table 12: SFT training-data scaling study. Gains largely saturate around 700–1000 samples. 
+
+External LLMs. Table 13 compares local-only inference, unprotected external-LLM access, and external-LLM access through CROSS-MAP. The SQuAD rows use a 3B local mapper/recoverer and a Qwen-2.5-14B model as the external LLM, show-ing that CROSS-MAP remains useful even when the external model is a local open-weight model rather than a commercial API. The remaining rows use GPT-5 as the external LLM. In both regimes, CROSS-MAP retains most of the external model’s utility while keeping original-domain sensitive con-tent local. 0.45 0.50 0.55 0.60 0.65 0.70 0.75 0.80 
+
+> dtext (x; y )
+> 70 75 80 85 90 95 ACC
+> DPO_1 DPO_2 DPO_3 SFT DPO_1 DPO_2 DPO_3 SFT DPO_1 DPO_2 DPO_3 SFT
+> 14B model 7B model 3B model
+
+Figure 7: Ablation study of model scale and train-ing objectives on utility–privacy trade-off. Dashed lines connect checkpoints within the same model size. DPO_ 3, DPO_ 2, and DPO_ 1 denote DPO checkpoints from epochs 1, 3, and 5, respectively, showing increas-ingly aggressive preference optimization toward privacy-oriented mapping. 
+
+Model Size and Training Strategy. Table 16 ab-lates training strategy (SFT-only vs. DPO) and map-per / recoverer size. Different DPO variants provide adjustable privacy-utility trade-offs for each model size. For the 14B model, as the DPO variant moves from DPO 3 → DPO 2 → DPO 1, privacy distances increase substantially, at the cost of slightly re-duced QA utility. The strongest privacy setting 22 DPO 1 (14B) raises dtext to 0.752 while keeping ACC at 92 .98 , i.e., only a −1.85% drop from Plain QA ( 94 .73 ). The SFT-only model provides weaker privacy than DPO 1 and a closer approximation of the plain QA quality. However, SFT-only exhibits substan-tially worse JSON-structure validity rjson than DPO variants, indicating that preference optimization also stabilizes format consistency, which is criti-cal for reliable mapping and recovery. Figure 7 visualizes the same model-size and training-stage trade-off, with DPO checkpoints moving toward stronger privacy at small utility cost. 23 Task: Privacy-Preserving Mapping. Input: Original Prompt: {original_prompt} Instructions: 1. Choose a non-sensitive target domain and provide a professional reason for your choice. 2. Create a 1-to-1 mapping dictionary covering key entities, actions, numbers, and concepts from the original prompt. 3. Rewrite the original prompt into the chosen target domain. Output Format: JSON object containing: - "theme_selection_logic": "Reason for choosing the theme.", - "theme": "The target domain name.", - "dictionary": {{ "orig_term": "mapped_term", ... }}, - "mapped_prompt": "The full mapped prompt..." CRITICAL REQUIREMENT: 1. For privacy, do NOT use simple synonym replacement. Use cross-domain transformation. 2. For restoration, all replacements must be kept in the dictionary. 3. Any numbers MUST be mapped to contextually reasonable different numbers and the mapping must be kept in the dictionary. 4. Return ONLY valid JSON. Mapper Prompt Figure 8: Mapper prompt. Recoverer Prompt Task: Privacy-Preserving Restoration. Input: Mapped Prompt: {mapped_prompt} Mapped Response: {mapped response} Dictionary: {dictionary} Instructions: 1. Using the provided Dictionary, restore the Mapped Prompt and Mapped Response back to their original domain. 2. The goal is to recover the original meaning and professional tone. Output Format: JSON object containing: - "restored_prompt": "The restored prompt in the original domain...", - “restored_response”: ”The restored response in the original domain..." Return ONLY valid JSON. 
+
+Figure 9: Recoverer prompt. 
+
+24 Setting Dataset Model / pipeline EM F1 Local only SQuAD Qwen-2.5-3B local 33.82 42.77 External, no protection SQuAD Qwen-2.5-14B external 54.28 62.51 CROSS-MAP SQuAD 3B mapper/recoverer + 14B external 47.71 55.96 Local only BioASQ Qwen-2.5-14B local 12.63 23.35 External, no protection BioASQ GPT-5 external 24.98 46.43 CROSS-MAP BioASQ 14B mapper/recoverer + GPT-5 external 22.36 44.57 Local only FinCausal Qwen-2.5-14B local 48.69 60.99 External, no protection FinCausal GPT-5 external 82.32 91.74 CROSS-MAP FinCausal 14B mapper/recoverer + GPT-5 external 81.57 90.26 Local only NarrativeQA Qwen-2.5-14B local 16.72 39.91 External, no protection NarrativeQA GPT-5 external 48.75 72.94 CROSS-MAP NarrativeQA 14B mapper/recoverer + GPT-5 external 47.12 71.27 
+
+Table 13: External-LLM ablation. CROSS-MAP preserves most of the stronger external model’s utility while keeping original-domain sensitive content local. 
+
+ρ Base attacker (mean) DPO attacker (mean) Gain (mean) DPO attacker (best) Std. (mean) 0.1 0.287 0.326 0.039 0.397 0.033 0.3 0.373 0.423 0.050 0.494 0.036 0.5 0.536 0.606 0.070 0.679 0.040 0.7 0.673 0.758 0.085 0.831 0.043 0.9 0.773 0.867 0.094 0.935 0.046 
+
+Table 14: Performance of optimization-based white-box attacker on SQuAD, measuring similarity between recon-structed text and original text across leakage ratios ρ.
+
+ρ Base attacker (mean) DPO attacker (mean) Gain (mean) DPO attacker (best) Std. (mean) 0.1 0.187 0.242 0.055 0.295 0.039 0.3 0.286 0.351 0.065 0.418 0.045 0.5 0.447 0.525 0.078 0.607 0.049 0.7 0.602 0.687 0.085 0.772 0.051 0.9 0.694 0.783 0.089 0.832 0.046 
+
+Table 15: Performance of optimization-based white-box attack on NarrativeQA, measuring similarity between reconstructed text and original text across leakage ratios ρ.
+
+Downstream QA utility Mapping quality 
+
+Method EM F1 ACC Sim. ddict dtext rjson 
+
+Plain QA 76.4 84.10 94.73 1.000 0.000 0.000 1.000 
+
+DPO_1 (14B) 74.94 83.22 92.98 0.826 0.753 0.752 1.000 
+
+DPO_2 (14B) 75.30 83.31 94.21 0.892 0.711 0.735 1.000 DPO_3 (14B) 75.72 83.75 94.34 0.898 0.704 0.698 1.000 
+
+SFT-only (14B) 75.88 83.82 94.62 0.948 0.612 0.668 0.936 
+
+Base Model (14B) 69.85 78.90 88.96 0.901 0.566 0.541 0.988 
+
+DPO_1 (7B) 70.21 81.88 84.20 0.829 0.758 0.748 1.000 
+
+DPO_2 (7B) 70.74 82.31 84.98 0.844 0.736 0.719 1.000 DPO_3 (7B) 71.86 83.05 85.65 0.861 0.708 0.668 1.000 
+
+SFT-only (7B) 71.20 82.74 86.08 0.901 0.604 0.582 0.918 
+
+Base Model (7B) 62.14 76.82 73.44 0.872 0.522 0.446 0.972 
+
+DPO_1 (3B) 54.21 69.35 68.95 0.775 0.624 0.616 1.000 
+
+DPO_2 (3B) 54.88 69.87 69.88 0.788 0.603 0.586 1.000 DPO_3 (3B) 56.42 70.96 70.58 0.803 0.575 0.535 1.000 
+
+SFT-only (3B) 55.69 70.34 71.14 0.846 0.401 0.472 0.782 
+
+Base Model (3B) 46.10 64.88 60.73 0.781 0.365 0.322 0.958 
+
+Table 16: Ablation study on SQuAD, comparing DPO-tuned and SFT-only models of different sizes in terms of QA utility, privacy distances, and JSON-structure validity. LLAMA-8B model is used for downstream QA. 
+
+25 Method Original text Mapped text Recovered text CROSS-MAP Fiscal pressures on Government as a result of reduced revenues due to lower oil prices is evident in the increasing number of audits being undertaken to identify areas of non-compliance. The Group remains committed to maintaining the highest levels of compliance and works closely with local regulatory authorities. Operational strain on the hospital network as a result of declining patient volume due to reduced insurance reimbursements is evident in the increasing number of quality assurance reviews being undertaken to identify deviations from clinical protocols. The hospital network remains committed to adhering strictly to regulatory standards and works closely with health department oversight bodies. Fiscal pressures on the Government as a result of reduced revenues due to lower oil prices is evident in the increasing number of audits being undertaken to identify non-compliance with regulatory standards. The Government remains committed to maintaining the highest levels of compliance and works closely with local regulatory authorities. HAS (Chen et al., 2023b) Fiscal pressures on Government as a result of reduced revenues due to lower oil prices is evident in the increasing number of audits being undertaken to identify areas of non-compliance. The Group remains committed to maintaining the highest levels of compliance and works closely with local regulatory authorities. Fiscal pressures on Administration as a result of reduced revenues due to lower oil prices is evident in the increasing number of audits being undertaken to identify areas of non-compliance. The Committee remains committed to maintaining the highest levels of compliance and works closely with local regulatory authorities. Fiscal pressures on Government as a result of reduced revenues due to lower oil prices is evident in the increasing number of audits being undertaken to identify areas of non-compliance. The Committee remains committed to maintaining the highest levels of compliance and works closely with local regulatory authorities. InferDPT (Tong et al., 2025b) In 2018 the majority of employees across the Group have received average salary increases ranging from 2.0 %–3.25 %,dependent on geographical location with the principal exception being those employees based in Brazil, Latin America and China where, due to inflation, current market salary increases are higher. In 2019 the majority of employees across the Company have received average salary rises ranging from 2.0 %–3.25 %,dependent on geographical location with the principal exception being those employees based in Brazil, Latin America and China where, due to inflation, current market salary rises are higher. In 2019 the majority of employees across the Company have received average salary rises ranging from 2.0 %–3.25 %,dependent on geographical location with the principal exception being those employees based in Brazil, Latin America and China where, due to inflation, current market salary rises are higher. Pr εε mpt (Chowd-hury et al., 2025) The Committee also reviewed the impact of the reduction in US federal tax rates as a result of tax reform in the US, which resulted in a reduction of deferred tax balances of 617 million. The Committee also reviewed the impact of the reduction in US federal tax rates as a result of tax reform in the US, which resulted in a reduction of deferred tax balances of 593 million. The Committee also reviewed the impact of the reduction in US federal tax rates as a result of tax reform in the US, which resulted in a reduction of deferred tax balances of 617 million. 
+
+Table 17: Examples of different mapping methods. 
+
+26
