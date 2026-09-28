@@ -6,37 +6,49 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-27
-- 运行时间：2026-09-27 22:05:00 UTC
+- 最新运行日期：2026-09-28
+- 运行时间：2026-09-28 23:31:40 UTC
 - 运行状态：成功
-- 本次总论文数：5
-- 精读区：1
-- 速读区：4
+- 本次总论文数：9
+- 精读区：6
+- 速读区：3
 
 ### 今日简报（AI）
-今日精选 5 篇 AI 前沿论文，深度剖析大模型知识编辑与去学习中的 Token 机制隐患。
-重点关注 Tokenization 对模型知识编辑的干扰，以及基于多样性引导的 LLM 应用测试方法。
-建议开发者警惕模型内部的 Token 记忆偏差，并尝试将安全过滤机制融入强化学习以提升机器人策略。
-- 详情：[/202609/27/README](/202609/27/README)
+今日聚焦 AI 安全前沿，深度解析扩散模型越狱机制与邮件智能体攻击链防御。
+重点关注扩散模型能量景观分析及邮件智能体攻击链建模，揭示模型安全漏洞的深层成因。
+建议优先研读越狱机制分析论文，以提升对大模型安全边界与防御策略的认知。
+- 详情：[/202609/28/README](/202609/28/README)
 
 ### 精读区论文标签
-1. [The Tokens Remember: When Tokenization Bypasses Knowledge Editing and Unlearning](/202609/27/2609.29045v1-the-tokens-remember-when-tokenization-bypasses-knowledge-editing-and-unlearning)  
+1. [Why Jailbreaks Succeed in Diffusion Language Models: An Energy Landscape Analysis](/202609/28/2609.30841v1-why-jailbreaks-succeed-in-diffusion-language-models-an-energy-landscape-analysis)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：分析扩散大语言模型中越狱成功的原因及安全对齐
+2. [Prompt Injection Detection for Email Agents Through Attack Chain Modeling](/202609/28/2609.30657v1-prompt-injection-detection-for-email-agents-through-attack-chain-modeling)  
    标签：评分：8.0/10、query:llm
-   evidence：分词方式绕过大语言模型的知识擦除
+   evidence：大模型智能体的提示注入检测与缓解
+3. [AGATE: Provenance-Based Runtime Defense Against Compositional Attacks on LLM Agents](/202609/28/2609.30830v1-agate-provenance-based-runtime-defense-against-compositional-attacks-on-llm-agents)  
+   标签：评分：8.0/10、query:llm
+   evidence：针对大语言模型智能体组合攻击的运行时防御
+4. [TempQ-Jail: Query-Constrained Candidate Ranking for Text-to-Video Jailbreak Attacks](/202609/28/2609.31032v1-tempq-jail-query-constrained-candidate-ranking-for-text-to-video-jailbreak-attacks)  
+   标签：评分：8.0/10、query:llm
+   evidence：文本到视频的越狱攻击与安全门绕过
+5. [AuthGuard-R: Safety-Compliant Mission Hijacking and Dual-Gate Defense for LLM-Controlled Robots](/202609/28/2609.31110v1-authguard-r-safety-compliant-mission-hijacking-and-dual-gate-defense-for-llm-controlled-robots)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：防御 LLM 控制机器人中的任务劫持和恶意指令
+6. [Monitor Jailbreaking: Evading Chain-of-Thought Monitoring Without Encoded Reasoning](/202609/28/2609.31121v1-monitor-jailbreaking-evading-chain-of-thought-monitoring-without-encoded-reasoning)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：规避思维链监控安全技术
 
 ### 速读区论文标签
-1. [Diversity-Guided Search-Based Testing of Large Language Model Applications](/202609/27/2609.23209v1-diversity-guided-search-based-testing-of-large-language-model-applications)  
+1. [MetaPermit: Scalable and Auditable Access Control for AI Agents via LLM-Inferred Meta-Attributes](/202609/28/2609.31039v1-metapermit-scalable-and-auditable-access-control-for-ai-agents-via-llm-inferred-meta-attributes)  
+   标签：评分：8.0/10、query:llm
+   evidence：间接提示注入（IPI）攻击的缓解策略
+2. [Runtime Authorization Consistency Checking for MCP-based Agentic Workflows](/202609/28/2609.23498v1-runtime-authorization-consistency-checking-for-mcp-based-agentic-workflows)  
    标签：评分：7.0/10、query:llm
-   evidence：用于识别有害响应的大模型应用测试框架
-2. [LLMs as Linguistic Chameleons: Decoupling Semantics and Structure for Privacy-Preserving Communication](/202609/27/2609.23193v1-llms-as-linguistic-chameleons-decoupling-semantics-and-structure-for-privacy-preserving-communication)  
-   标签：评分：6.0/10、query:jb-def
-   evidence：大模型API的隐私保护通信
-3. [Turning Safety into Competence: Minimally Exploitable Robot Policies via Safety-Filtered Reinforcement Learning](/202609/27/2609.27312v1-turning-safety-into-competence-minimally-exploitable-robot-policies-via-safety-filtered-reinforcement-learning)  
-   标签：评分：6.0/10、query:jb-def
-   evidence：安全过滤强化学习与鲁棒安全过滤器
-4. [Who Is Behind the Harness? Fingerprinting LLMs through Agentic Behavior](/202609/27/2609.28559v1-who-is-behind-the-harness-fingerprinting-llms-through-agentic-behavior)  
-   标签：评分：6.0/10、query:llm
-   evidence：通过安全相关决策对大模型进行指纹识别
+   evidence：智能体工作流的运行时授权一致性检查
+3. [Safety Nudges: User-Facing Interventions for Real-Time AI Risk Awareness](/202609/28/2609.26865v2-safety-nudges-user-facing-interventions-for-real-time-ai-risk-awareness)  
+   标签：评分：7.0/10、query:jb-def
+   evidence：面向用户的实时AI风险意识干预措施
 
 
 <div class="dpr-home-promo-card">
