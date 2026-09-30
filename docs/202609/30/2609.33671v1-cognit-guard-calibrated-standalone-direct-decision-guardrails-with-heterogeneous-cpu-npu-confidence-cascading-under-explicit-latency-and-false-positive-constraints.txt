@@ -1,0 +1,500 @@
+Title: COGNIT-Guard: Calibrated Standalone Direct-Decision Guardrails with Heterogeneous CPU-NPU Confidence Cascading under Explicit Latency and False-Positive Constraints
+
+URL Source: https://arxiv.org/pdf/2609.33671v1
+
+Published Time: Tue, 29 Sep 2026 02:16:53 GMT
+
+Number of Pages: 7
+
+Markdown Content:
+# COGNIT-Guard: Calibrated Standalone Direct-Decision Guardrails with Heterogeneous CPU–NPU Confidence Cascading under Explicit Latency and False-Positive Constraints 
+
+Hao Chen 
+
+School of Cyber Security, Guangdong Polytechnic Normal University, Guangzhou, China Email: moyuan@stu.gpnu.edu.cn 
+
+Abstract —A fundamental systems question for foundation-model safety gateways is when a model must generate tokens and when it should directly output a calibrated decision. We study calibrated standalone direct-decision foundation models as a serving primitive for real-time pre-ingestion safety guardrails, jointly addressing probability calibration, dual-use false-positive control, and heterogeneous CPU–NPU routing under explicit la-tency Service Level Objectives (SLOs). Production guardrails must screen user prompts prior to target-LLM prefill with low false-alarm rates on legitimate compliance inquiries; however, shallow statistical classifiers are brittle to syntactic variation, intrinsic hidden-state probes require tight coupling to a specific target LLM, and many generative guard models incur substantially higher latency than lightweight encoders or probes while struggling with dual-use false positives. We present COGNIT-Guard, a standalone pre-ingestion guardrail that couples a validation-calibrated CPU fast gatekeeper path with confidence-gated escalation to an NPU-resident 322M bidirectional direct-decision model (Laya-322M) under an asymmetric false-positive penalty and explicit latency constraint. On the strict clean unseen DUCS-Bench test split (N = 607 ), COGNIT-Guard achieves 98.85% accuracy (paired McNemar p = 1 .19 × 10 −4 vs. ML), reduces the benign false-positive rate (FPR) to 0.42% ( 1/238 ; two-sided Fisher’s exact 
+
+p = 8 .23 × 10 −4 vs. ML and p = 2 .78 × 10 −28 vs. zero-shot), and attains an ECE of 1.12% and Brier score of 0.0104. On Huawei Ascend 910C NPUs, pure NPU inference runs in 21.77 ms mean latency (P95: 23.44 ms, 45.90 QPS), while the live serial CPU–NPU cascade ( θ∗ 
+
+> deploy
+
+= 0.70 ) achieves 41.63 ms mean end-to-end latency (P50: 39.47 ms, 99.23% accuracy, 0.00% FPR). Cross-domain evaluation on a stratified 2,100-question SafetyBench-ZH benchmark and a controlled comparison against a concurrent bi-encoder direct-decision baseline (CLM-8B) further disentangle in-domain specialization gain, out-of-distribution (OOD) alignment tax ( 60 .33% → 56 .81% on Laya; 55 .10% on domain CLM-8B), and experience replay rehearsal recovery, restoring OOD accuracy to 64.10%–65.05% while reaching 99.67%–99.84% in-domain accuracy with 0.00%–0.42% FPR. 
+
+Code, evaluation scripts, and the DUCS-Bench release are available at https://github.com/moyuan10086/cascaded-guardrail-npu. Index Terms —Standalone Safety Guardrail, Direct-Decision Foundation Model, Dual-Use False-Positive Control, Calibrated Confidence Cascade, Alignment Tax, Huawei Ascend 910C NPU. 
+
+I. I NTRODUCTION 
+
+Real-time safety guardrails act as the synchronous first line of defense for production Large Language Model (LLM) services, screening external prompts before target-model prefill and token streaming begin [1], [11]. Operating as a standalone pre-ingestion guardrail —decoupled from the downstream serving LLM’s weights and KV cache—requires simultaneously satis-fying four production constraints: (1) semantic comprehension 
+
+of camouflaged prompts, (2) dual-use false-positive control on benign queries containing sensitive terminology, (3) posterior probability calibration for risk-aware routing, and (4) explicit latency SLO compliance (typically < 50 ms). Existing guardrail designs leave a critical gap under these joint production serving requirements: 1) Shallow Statistical Classifiers : Pipelines combining TF-IDF features with tree ensembles (e.g., XGBoost [12]) run in 10 .50 –17 .1 ms on pre-cached sparse vectors, but end-to-end text segmentation and corpus similarity match-ing raise CPU latency to 38 .91 ms in fast gatekeeper mode and 85 .36 ms (P95: 164 .24 ms) with diagnostic evidence retrieval. Moreover, bag-of-words features pro-duce poorly calibrated posteriors (ECE = 13 .11% ) and degrade sharply out of distribution ( 53 .29% accuracy on SafetyBench-ZH). 2) Autoregressive Guard Models & Intrinsic Hidden-State Probes : Many generative guard models (e.g., Llama-Guard [1], ShieldGemma [3], WildGuard [2]) incur substantially higher latency than lightweight en-coders or probes because they decode safety labels through 7B–70B causal backbones. Recent intrinsic probing frameworks (e.g., ShieldHead [4] and recent preprints such as SingProbe [5] and Khatri et al. [6]) reduce overhead by attaching classification probes to a target LLM’s internal activations during decoding. However, intrinsic probes are tightly coupled to a specific target LLM and require running target-model prefill first, preventing their use as a model-agnostic, standalone pre-ingestion gateway in front of heterogeneous or API-hosted LLMs. Beyond serving architecture, standalone guardrails face a critical operational failure mode in enterprise and regula-tory domains: dual-use false positives (closely related to exaggerated safety or over-refusal in assistant models [13], [14]). When users submit legitimate statutory or compliance inquiries containing high-risk keywords (e.g., “ Does posting radical slogans on foreign platforms constitute a crime under Article 105 of the Criminal Law? ”), zero-shot models exhibit keyword-associated false positives that are consistent with lexical-prior-dominated decision behavior, yielding a 35 .71% 
+
+false-positive rate ( 85 /238 ) on a zero-shot cross-encoder direct-arXiv:2609.33671v1 [cs.CR] 27 Sep 2026 TABLE I TAXONOMY AND ARCHITECTURAL COMPARISON OF CONTEMPORARY LLM S AFETY GUARDRAIL PARADIGMS ACROSS SERVING DIMENSIONS .                                                                       
+
+> System / Guardrail Family Moderation Paradigm Standalone Pre-Ingestion Target-LLM Decoupled Mean Latency Dual-Use FP Control / Calibration Heterogeneous Routing / Hardware
+> Llama-Guard 3 [1] / WildGuard [2] / ShieldGemma [3] Autoregressive Guard (7B–70B) Yes Yes ∼200 –600 ms Uncalibrated Token Logits ( 7.2% –12 .4% XSTest FPR) No (Single GPU Tier) ShieldHead [4] / SingProbe [5] / Khatri et al. [6] Intrinsic Hidden-State Probe No (Requires LLM Prefill) No (Coupled to Base LLM) ∼45 –90 ms (Prefill) Uncalibrated on Dual-Use Compliance No (Co-located on Target GPU) GLiNER Guard [7] / SingGuard [8] / FlexGuard [9] Single-Pass Encoder / Risk Scorer Yes Yes ∼35 –50 ms Continuous Score ( 4.8% XSTest FPR) No (Single Accelerator Tier) CLM-8B (Bi-Encoder Direct Baseline) [10] Disaggregated Bi-Encoder Head Yes Yes 45 .78 ms ( 1-Str.) / 6.64 ms (Batch) / 0.60 ms (Arena) §90 .34% (Zero-Shot) →0.00% (Rehearsal, 0.86% ECE) HBM VectorArena (Ascend 910C) Traditional ML Baseline TF-IDF + XGBoost ( <5M) Yes Yes 85 .36 ms (Diag.) / 38 .91 ms (Fast CPU) †Poorly Calibrated ( 13 .11% ECE, 5.88% DUCS FPR) CPU Only (Xeon CPU)
+> COGNIT-Guard (Ours) Calibrated Direct Cascade (322M) Yes Yes 14.27 ms (Offline) / 21.77 ms (NPU) / 41.63 ms (Live E2E) ‡0.00%–0.42% DUCS FPR (1.12% ECE) Calibrated CPU–NPU Cascade (Ascend 910C)
+> †
+
+Standalone Diagnostic CPU mode ( include_evidence=True , 85 .36 ms) executes 2 TF-IDF kNN scans ( 38 .9 ms), XGBoost traversal ( 17 .1 ms), and a 3rd corpus kNN scan in _build_evidence (29 .3 ms); Live Gatekeeper Fast CPU mode ( include_evidence=False , 38 .91 ms on DUCS-Bench, 22 .79 ms on SafetyBench-ZH) disables evidence retrieval; isolated tree lookup on cached features runs in 10 .50 ms. ‡ Reports Offline Cascade model compute ( θ∗ 
+
+> offline
+
+= 0 .80 : 14 .27 ms), Pure NPU path ( 21 .77 ms), and Live Serial Cascade server E2E ( θ∗ 
+
+> deploy
+
+= 0 .70 : 41 .63 ms mean, 39 .47 ms P50). §Measured on Ascend 910C: uncached single-stream ( 45 .78 ms), batched pooling ( B = 64 :
+
+6.64 ms/item), and HBM VectorArena cache hit ( 0.60 ms P50). 
+
+decision model [15] and 90 .34% (215 /238 ) on a zero-shot bi-encoder contrastive baseline [10] on our Dual-Use Compliance Safety Benchmark (DUCS-Bench). Conversely, naive domain specialization on compliance corpora introduces a pronounced 
+
+alignment tax —improving in-domain accuracy while degrad-ing general out-of-distribution (OOD) safety categories unless counterbalanced by rehearsal regularization. Rather than claiming to invent non-autoregressive deci-sion models or be the first to study over-refusal, we study calibrated standalone direct-decision foundation models as a serving primitive for real-time guardrails under explicit latency and false-positive constraints . Building on recent non-autoregressive Decision Foundation Models (DFMs) [10], [15]–[17], we present COGNIT-Guard , which pairs domain-calibrated direct-decision projection with a validation-calibrated heterogeneous CPU–NPU confidence cascade on Huawei Ascend 910C NPUs. Unlike heuristic cascades that route solely by raw classifier scores, our calibrated routing jointly incorporates posterior calibration, validation-selected thresholds, an asymmetric false-positive penalty, and an explicit latency SLO constraint. 
+
+Contributions :
+
+• Standalone Direct-Decision Guardrail Formulation & Controlled Cross- vs. Bi-Encoder Study : We for-mulate standalone pre-ingestion safety gating under ex-plicit latency and false-positive constraints, systemati-cally comparing a 322M cross-encoder direct-decision model (Laya-322M [15]) against a concurrent bi-encoder contrastive baseline (CLM-8B [10]) on Huawei Ascend 910C. We show that zero-shot models exhibit severe keyword-associated false positives on dual-use queries (35 .71% FPR on cross-encoder Laya; 90 .34% FPR on bi-encoder CLM-8B lacking cross-attention across inquiry and keyword tokens). 
+
+• Posterior Calibration & Dual-Use False-Positive Con-trol : Through supervised boundary adaptation on DUCS-Bench ( N = 607 strict clean unseen test split), COGNIT-Guard achieves 98.85% accuracy ( 600 /607 , +3 .46% over ML, paired McNemar p = 1 .19 × 10 −4, 95% Wilson CI: 
+
+[97 .64% , 99 .44%] ), reduces benign FPR to 0.42% ( 1/238 
+
+on Laya-322M; two-sided Fisher’s exact p = 8 .23 × 10 −4
+
+vs. ML) and 0.00% ( 0/238 on CLM-8B head adaptation in 2.81 –3.68 s), and produces well-calibrated posteriors (ECE = 0.83% –1.12% , Brier = 0.0019 –0.0104 vs. 
+
+13 .11% and 0.0525 for ML). 
+
+• Calibrated CPU–NPU Routing & Stage-by-Stage Latency Deconstruction : We formulate heterogeneous routing via posterior calibration, a validation-selected threshold ( θ∗
+
+deploy = 0 .70 ) on a leak-free 3-way split, an asymmetric FPR penalty, and an explicit latency SLO. We deconstruct CPU execution across diagnostic (85 .36 ms), live fast gatekeeper ( 38 .91 ms), and cached-feature ( 10 .50 ms) modes, demonstrating a live serial cascade that settles 94 .6% (123 /130 ) of queries on CPU and 5.4% (7/130 ) on NPU at 41 .63 ms mean latency (P50: 39 .47 ms, P95: 76 .25 ms) with 99.23% accuracy and 0.00% FPR. 
+
+• Ascend 910C Deployment & Alignment Tax Disentan-glement : Enforcing persistent on-chip HBM residency on Huawei Ascend 910C yields 21.77 ms single-query latency on Laya-322M ( 2.21 × over cold-start) and 6.64 ms/item batched throughput (150 .6 QPS) or 0.60 ms HBM 
+
+VectorArena lookup on CLM-8B. Across a stratified 2,100-question SafetyBench-ZH benchmark, we explicitly disentangle in-domain specialization gain , OOD degrada-tion (alignment tax: 60 .33% → 56 .81% on Laya; 55 .10% 
+
+on domain CLM-8B) , and experience replay rehearsal recovery , restoring OOD accuracy to 64.10%–65.05% while reaching 99.67%–99.84% in-domain accuracy. II. R ELATED WORK 
+
+Recent work has rapidly expanded LLM safety moderation and over-refusal mitigation; however, the design of calibrated, model-agnostic standalone guardrails under explicit CPU–NPU latency and false-positive constraints remains underexplored. We organize related work into four categories (Table I). 
+
+A. Autoregressive Guard Models & Exaggerated Safety 
+
+Instruction-tuned generative safeguards such as Llama-Guard [1], ShieldGemma [3], and WildGuard [2] cast content moderation as autoregressive token generation over 7B–70B causal backbones. While flexible across taxonomies, many generative guard models incur substantially higher latency than lightweight encoders or probes and output uncalibrated token logits. Furthermore, benchmarks such as XSTest [13] and OR-Bench [14] show that safety-aligned generative mod-els frequently suffer from lexical over-sensitivity on benign prompts containing sensitive keywords. 
+
+B. Hidden-State & Intrinsic Safety Probing 
+
+To avoid running a separate multi-billion-parameter genera-tive guard model, a growing line of work probes the internal activations of the target LLM itself. ShieldHead [4] attaches a classification head to the final hidden state of a 7B–8B LLM during decoding. Concurrent technical reports and recent preprints have further scaled this paradigm: SingProbe [5] (arXiv:2608.30703 ) introduces an open intrinsic guardrail stack reusing base-LLM decoding states for streaming risk monitoring, Khatri et al. [6] ( arXiv:2609.19472 ) train lightweight MLP probes on LLaMA-3.1-8B latent states, and AEGIS [18] ( arXiv:2608.22248 ) projects multi-layer latent instruction manifolds to mitigate over-refusal under indirect prompt injection. Key Distinction : Intrinsic probes are tightly coupled to a specific target LLM’s internal hidden states and cannot screen traffic before target-model prefill or protect closed-source/heterogeneous downstream APIs. In contrast, COGNIT-Guard is a standalone pre-ingestion guardrail that filters inputs prior to target-LLM ingestion. 
+
+C. Encoder & Direct-Decision Guard Models 
+
+Standalone single-pass guardrails replace iterative decoding with direct representation projection. GLiNER Guard [7] uses bidirectional encoders for PII and safety tagging, SingGuard [8] provides policy-adaptive moderation at ∼ 50 ms, and the recent preprint FlexGuard [9] ( arXiv:2602.23636 ) learns continuous risk scores for strictness-adaptive moderation. More broadly, System-One Decision Foundation Models (DFMs) now span two architectural families: (1) cross-encoder DFMs such as Jev [16] and Laya [15], [17], which jointly encode state and criteria with full token-level cross-attention before projecting onto typed softmax heads; and (2) bi-encoder contrastive DFMs ,exemplified by the concurrent Stanford × NVIDIA technical report on Contrastive Language Models (CLM) [10], which independently project state and candidate action embeddings (zq = Norm (fθ (hs)) , za = Norm (gϕ(ha)) ) and cache action vectors in an on-chip VectorArena . We adopt Laya-322M as our primary NPU direct-decision engine and evaluate CLM-8B as a concurrent bi-encoder architectural baseline under matched training and evaluation protocols. 
+
+D. Calibration & Heterogeneous Cascaded Serving 
+
+Cascaded serving frameworks such as FrugalGPT [19] and Reflex-Guard [20] route easy inputs to inexpensive classifiers and escalate uncertain cases to larger models. However, prior safety cascades rarely address posterior miscalibration, asymmetric dual-use false-positive penalties, or the domain-specialization alignment tax across heterogeneous CPU–NPU hardware. COGNIT-Guard bridges this gap by grounding CPU– NPU escalation in validation-calibrated posteriors and explicit SLO-constrained risk minimization. III. S YSTEM ARCHITECTURE & M ETHODOLOGY 
+
+As illustrated in Fig. 1, COGNIT-Guard structures standalone pre-ingestion moderation into four stages: (a) dual-use input and directive preparation, (b) lightweight CPU gatekeeper screening and calibrated confidence gating, (c) persistent Ascend 910C NPU escalation for ambiguous queries, and (d) calibrated posterior projection. 
+
+A. Problem Formulation: Dual-Use False-Positive Control 
+
+Let an input prompt be x = ( w1, w 2, . . . , w L) ∈ X with binary safety label y ∈ { 0, 1} (y = 0 : benign, y = 1 : violation). In dual-use compliance scenarios, x frequently pairs sensitive lexical entities K ⊂ V (e.g., penal code articles, regulated substances, extremist terminology) with legitimate epistemic inquiry markers E ⊂ V (e.g., “ does this constitute a crime under ”, “ statutory criteria for ”). To illustrate why un-adapted safety models suffer from elevated false alarms on such inputs, we write a stylized log-odds surrogate ( intended strictly as a conceptual heuristic rather than a mechanistic claim about internal transformer circuits ). Zero-shot models exhibit keyword-associated false positives that are consistent with lexical-prior-dominated deci-sion behavior: 
+
+Pconcept (y = 1 | x) ≈ σ X
+
+> w∈K∩ x
+
+αw − X
+
+> w∈E∩ x
+
+βw
+
+!
+
+(1) where αw > 0 reflects heuristic sensitivity to high-risk keywords and βw > 0 reflects contextual inquiry mitigation. Prior to domain adaptation on dual-use syntax, P αw ≫ P βw,consistent with the high zero-shot false-positive rate observed on benign legal consultations: FPR zero = P (ˆ y = 1 | y = 0) = 35 .71% (85 /238) (2) To jointly attend across sensitive lexical entities and benign inquiring syntax, COGNIT-Guard employs a bidirectional transformer encoder Φθ (322M parameters; throughout this paper, “direct-decision” or “non-autoregressive” refers to single-pass decision projection over encoder states without iterative token decoding) to map (x, q ) into a contextual representation 
+
+h = Φ θ (x, q ) ∈ Rd, where q denotes the safety audit directive. A typed linear decision head Wd ∈ R2×d projects h directly into posterior probabilities: 
+
+Pθ (y = c | x, q ) = exp( w⊤ 
+
+> c
+
+h + bc)
+
+P 
+
+> c′∈{ 0,1}
+
+exp( w⊤ 
+
+> c′
+
+h + bc′ ) (3) We quantify posterior reliability using the Brier score Brier =
+
+> 1
+> N
+
+PNi=1 (Pθ (yi = 1 | xi, q ) − yi)2 and M -bin Expected Calibration Error (ECE, M = 15 ): ECE =
+
+> M
+
+X
+
+> m=1
+
+|Bm|
+
+N acc (Bm) − conf (Bm) (4) Supervised adaptation over dual-use boundary pairs conditions bidirectional attention across E × K , suppressing keyword-triggered false alarms while yielding well-calibrated posteriors. 
+
+B. Calibrated Confidence Cascading under Explicit Latency SLOs 
+
+Rather than routing queries via ad-hoc heuristic scores, we formulate heterogeneous CPU–NPU cascading as cost-sensitive risk minimization combining posterior calibration, a validation-selected threshold, an asymmetric false-positive penalty, and an explicit latency SLO constraint. Let Mfast denote the CPU fast gatekeeper producing posterior 
+
+Pfast (y | x) in time TCPU , and Mdeep denote the NPU-resident DFM producing calibrated posterior Pdeep (y | x)
+
+with escalation overhead Tdispatch + TNPU . Defining fast-path confidence as: 
+
+c(x) = max  
+
+> c∈{ 0,1}
+
+Pfast (y = c | x) (5) for gating threshold θ ∈ [0 .5, 1.0] , the cascaded decision rule 
+
+ˆy(x; θ) and per-query latency T (x; θ) are: 
+
+ˆy(x; θ) = 
+
+(
+
+arg max c Pfast (c | x), if c(x) ≥ θ
+
+arg max c Pdeep (c | x), if c(x) < θ (6) 
+
+T (x; θ) = TCPU + I[c(x) < θ ] · (Tdispatch + TNPU ) (7) (a) Stage 1: Dual-Use Input Space                                                           
+
+> : Semantic-Heavy Query Dual-Stream Features
+> (b) Stage 2: Fast CPU Gatekeeper
+> Live Fast Mode (38.91 ms) Confidence Gating *
+> (c) Stage 3: Resident NPU DFM Engine
+> Huawei Ascend 910C HBM 322M Bidirectional DFM
+> (d) Stage 4: Calibrated Decision Gateway
+> Posterior Calibration Synchronous Verdict
+> 1. Dual-Use Compliance Query x
+> "Does posting radical slogans on foreign platforms constitute a crime under Art. 105?"
+> 2. Safety Audit Directive q
+> q = [Audit: Dual-Use Compliance & Safety]
+> Zero-Shot Unadapted FPR: 35.71% (85/238)
+> 3. Dual-Path Feature & Token Prep
+> Fast Gate: Regex + Char N-gram TF-IDF (Live Mode B: Evidence kNN Disabled)
+> Deep DFM: Subword BPE Token IDs
+> 1. Fast CPU Gatekeeper fast
+> Regex Short-Circuit + Tree/Ridge Ensemble
+> pfast = [ Pfast (y= 0 x), Pfast (y= 1 x)]
+> Live Mode B: 38.91 ms (vs. 85.36 ms Diag. Mode A)
+> 2. Maximum Posterior Confidence
+> c(x) = max
+> c{0, 1}
+> Pfast (y=cx)
+> 1. Ambiguous Query Escalation & IPC
+> Zero Host-to-Device Weight Loading
+> PCIe Tensor Copy: 0.82 ms (Live HTTP/IPC: 28.8 ms)
+> 2. Ascend 910C NPU Execution (64 GB HBM)
+> 3. Contextual Latent Vector h=(x,q)d1. Non-Autoregressive Decision Head
+> pdeep = Softmax( Wdh+b)
+> Single Forward Pass ( (1) Output Projection)
+> 2. Posterior Calibration & FPR Audit
+> Unseen ECE = 1.12% Brier = 0.0104
+> FPR: 0.42% (1/238, Fisher p= 8.23 × 10 4)
+> 3. Synchronous Gateway Verdict
+> y{PASS (0), INTERCEPT (1)}
+> Unseen Acc: 98.85% Cascade Acc: 99.23%
+> Live E2E: 41.63 ms (P50: 39.47 ms) NPU: 21.77 ms
+> Sensitive
+> "radical slogans"
+> Inquiry
+> "constitute a crime"
+> Is c(x)*?
+> (*deploy = 0.70 on Val)
+> Persistent On-Chip HBM Weight Residency + Warm Streams
+> Bidirectional DFM Encoder (x,q)(Laya 322M)
+> Relational Attention Binding: (21.77 ms Mean)
+> c(x) < *
+> Escalate 5.4%
+> High-Confidence CPU Fast Path ( c(x)*deploy ): 94.6% (123/130) Queries Settled on CPU (38.91 ms Mean, 0.00% Live FPR)
+
+Fig. 1. System Architecture of COGNIT-Guard: Standalone pre-ingestion guardrail combining (a) dual-use query and directive preparation, (b) live fast CPU gatekeeper filtering ( 38 .91 ms mean) with validation-calibrated threshold gating ( θ∗
+
+deploy = 0 .70 ), (c) persistent Huawei Ascend 910C on-chip HBM execution (21 .77 ms mean), and (d) calibrated direct-decision projection for dual-use false-positive control. 
+
+Algorithm 1 COGNIT-Guard Calibrated Cascaded Serving 
+
+Require: Input query x, Audit directive q, Fast CPU gatekeeper Mfast , Deep NPU DFM Mdeep , Validation-calibrated threshold θ∗.
+
+Ensure: Safety decision ˆy ∈ {0, 1}, Routing trace ρ ∈{CPU , NPU }.
+
+1: Compute fast posteriors ( evidence=False ): pfast ←Mfast (x)
+
+2: Fast confidence: c(x) ← max( pfast [0] , pfast [1]) 
+
+3: if c(x) ≥ θ∗ then 
+
+4: ˆy ← arg max c pfast [c]; ρ ← CPU {Settled on CPU fast path }
+
+5: else 
+
+6: Escalate query payload to resident Ascend 910C NPU 
+
+7: Latent representation: h ← Φθ (x, q )
+
+8: Calibrated posterior: pdeep ← Softmax (Wdh + b)
+
+9: ˆy ← arg max c pdeep [c]; ρ ← NPU {Resolved on NPU deep path }
+
+10: end if 
+
+11: return ˆy, ρ 
+
+Incorporating an asymmetric false-positive penalty γ > 1 to protect benign dual-use traffic, the validation-selected threshold 
+
+θ∗ solves: 
+
+min 
+
+θ∈[0 .5,1.0] R(θ) = Eℓ0−1(y, ˆy(x; θ)) + γ · I[y = 0 , ˆy(x; θ) = 1] 
+
+s.t. E[T (x; θ)] ≤ TSLO 
+
+(8) Sweeping θ traces the latency–accuracy Pareto frontier, with 
+
+θ∗ selected strictly on the held-out validation split. 
+
+C. Hardware-Aware Deployment and Optimization on Ascend 910C 
+
+We deploy the 322M DFM on a Huawei Ascend 910C NPU (64 GB HBM, CANN 8.0 runtime, torch_npu 2.1, FP16 precision) with three serving optimizations: 
+
+• Persistent On-Chip HBM Residency : All 322M encoder weights and typed decision heads remain pinned in on-chip High-Bandwidth Memory (HBM), eliminating host-to-device weight transfers across requests (reducing per-query PCIe tensor copy to 0.82 ms). 
+
+• Stream Warm-Up & Explicit Synchronization :Pre-allocating operator workspaces over 20 warm-up iterations and bracketing forward passes with 
+
+torch.npu.synchronize() eliminate cold-start graph compilation jitter, yielding 21 .77 ms mean latency (P50: 21 .53 ms, P95: 23 .44 ms). 
+
+• Matrix Cube Execution : Bidirectional self-attention executes on Ascend Cube matrix units, sustaining 45 .90 
+
+QPS at B = 1 (3.92 × higher throughput than diagnostic CPU). IV. E XPERIMENTS AND EMPIRICAL RESULTS 
+
+A. Dataset Construction, Implementation Details & Protocols 
+
+DUCS-Bench Construction & Leak-Free Deduplication :We curate the Dual-Use Compliance Safety Benchmark (DUCS-Bench) from Chinese statutory consultations, enterprise compliance inquiries, and adversarial red-team prompts, total-ing 3,663 raw annotated items across penal code inquiries, reg-ulatory compliance, and camouflaged attacks. Each prompt was independently labeled by two domain annotators ( 0=benign compliance , 1=safety violation ; inter-annotator Co-hen’s κ = 0 .91 , with disagreements resolved by a third senior reviewer). Exact SHA-256 text normalization deduplicates the 3,663 raw entries to 3,551 unique prompts and identifies 28 violation prompts that overlapped between initial train and test files. Removing these 28 overlaps ( seed=42 ) defines two evaluation tracks: (1) Strict Clean Unseen Test Track (N = 607 ): 238 benign compliance queries and 369 violations with zero train overlap. Because 1 false alarm on Nsafe = 238 
+
+equals a discrete 0.42% step, we report 95% Wilson score confidence intervals alongside two-sided Fisher’s exact tests; (2) Full Benchmark Track ( N = 635 ): retains all 635 binary test items for historical continuity. 
+
+3-Way Split & Live Cascade Profiling Protocol : For leak-free cascade calibration, the 3,551 unique items are partitioned 0.0 0.2 0.4 0.6 0.8 1.0                 
+
+> False Positive Rate (FPR)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> True Positive Rate (TPR)
+> (a) Receiver Operating Characteristic
+> COGNIT-Guard (AUC = 0.9973) Traditional ML (AUC = 0.9802) Zero-Shot DFM (AUC = 0.8274)
+> 0.0 0.2 0.4 0.6 0.8 1.0
+> Recall
+> 0.70 0.75 0.80 0.85 0.90 0.95 1.00
+> Precision
+> (b) Precision-Recall Dynamics
+> COGNIT-Guard (AP = 0.9983) Traditional ML (AP = 0.9891) Zero-Shot DFM (AP = 0.8632)
+> 10 20 30 40 50 60 70 80 90
+> Average Latency across Execution Modes (ms)
+> 95 96 97 98 99
+> System Accuracy (%)  *offline = 0.80
+> Acc: 98.58% | 14.27 ms (33.7% NPU Offload) Live E2E ( *deploy = 0.70 )
+> Acc: 99.23% | 41.63 ms
+> Diag. CPU Mode A Acc: 95.59% | 85.36 ms
+> (c) Latency-Accuracy Pareto Frontier
+> Offline Cascade Compute Pure NPU Path (21.8 ms) Live Cascade E2E (41.6 ms) Diag. CPU Mode A (85.4 ms)
+> 10 20 30 40 50 60
+> NPU Offload Ratio (%)
+
+Fig. 2. Evaluation Dynamics across Guardrail Paradigms: (a) Receiver Operating Characteristic (ROC) curves, (b) Precision-Recall (PR) curves, and (c) Latency-Accuracy Pareto Frontier comparing the offline model-compute sweep ( θ∗
+
+offline = 0 .80 at 14 .27 ms), pure NPU path ( 21 .77 ms), live serial cascade E2E ( θ∗
+
+deploy = 0 .70 at 41 .63 ms, 99 .23% accuracy), and standalone diagnostic CPU Mode A ( 85 .36 ms). 
+
+(seed=42 ) into Train (70%, N = 2 , 485 ), Validation (15%, 
+
+N = 533 ), and Held-Out Test (15%, N = 533 , containing 460 binary compliance items and 73 non-binary open inquiries). Gating threshold θ∗
+
+deploy = 0.70 is tuned exclusively on Validation. To profile synchronous wall-clock cascade latency without client-queue distortion, a stratified 150-item test sample was executed live; excluding 20 non-binary open inquiries yields the N = 130 binary live slice ( 82 violations, 48 benign). 
+
+SafetyBench-ZH 2,100-Question Protocol & Implemen-tation Details : For OOD evaluation on SafetyBench-ZH [21], we sample ( seed=42 ) exactly 300 questions from each of the 7 official hazard categories in the 11,435-question corpus (7 × 300 = 2 , 100 : 694 unsafe, 1, 406 safe), mapping multiple-choice items into binary prompt-level guardrail decisions (safe vs. unsafe ) with zero overlap against our N = 458 
+
+experience replay rehearsal pool. Published English XSTest 
+
+[13] ( N = 450 : 250 safe, 200 unsafe) results are reported for cross-literature reference. All experiments run on an Intel Xeon CPU @ 2.60 GHz (32 GB RAM) and a Huawei Ascend 910C NPU (64 GB HBM, CANN 8.0, torch_npu 2.1, B = 1 , 20 warm-up runs, explicit stream synchronization). 
+
+B. Main Empirical Results on In-Domain Benchmarks 
+
+Table II reports performance across both the strict clean unseen partition ( N = 607 ) and the full track ( N = 635 ). 
+
+TABLE II EMPIRICAL COMPARISON ACROSS GUARDRAIL PARADIGMS UNDER CLEAN 
+
+UNSEEN (N = 607 ) AND FULL (N = 635 ) T RACKS († DIAGNOSTIC VS .LIVE GATEKEEPER CPU MODES DETAILED IN TABLE III).                                                                                
+
+> Evaluation Metric Traditional ML Zero-Shot DFM COGNIT-Guard (Ours)
+> Strict Clean Unseen Partition ( N= 607 :238 Benign, 369 Violations)
+> Accuracy 95.39% (579/607) 76.61% (465/607) 98.85% (600/607)
+> [95% Wilson CI] [93.38%, 96.81%] [73.08%, 79.82%] [97.64%, 99.44%]
+> Paired McNemar (Acc.) Baseline p < 0.001 p= 1 .19 ×10 −4(***)
+> False Positive Rate (FPR) 5.88% (14/238) 35.71% (85/238) 0.42% (1/238)
+> [95% Wilson CI] [3.52%, 9.61%] [29.88%, 41.98%] [0.07%, 2.34%]
+> Fisher’s Exact Test (FPR) p= 8 .23 ×10 −4p= 2 .78 ×10 −28 Reference (Ours)
+> False Negative Rate (FNR) 3.79% (14/369) 15.45% (57/369) 1.63% (6/369)
+> Precision / Recall / F1 96.21 / 96.21 / 96.21% 78.59 / 84.55 / 81.46% 99.73 / 98.37 / 99.05%
+> Brier Score / ECE 0.0525 / 13.11% 0.1654 / 5.38% 0.0104 / 1.12%
+> Full Benchmark Track ( N= 635 :238 Benign, 397 Violations)
+> Accuracy 95.59% (607/635) 77.01% (489/635) 98.90% (628/635)
+> False Positive Rate (FPR) 5.88% (14/238) 35.71% (85/238) 0.42% (1/238)
+> False Negative Rate (FNR) 3.53% (14/397) 15.37% (61/397) 1.51% (6/397)
+> Precision / Recall / F1 96.47 / 96.47 / 96.47% 79.81 / 84.63 / 82.15% 99.74 / 98.49 / 99.11%
+> Brier Score / ECE 0.0515 / 13.16% 0.1630 / 5.81% 0.0100 / 1.07%
+> Serving Efficiency & Latency across Execution Paths ( B= 1 , Warm Synchronized)
+> Mean Latency 85.36 ms (Diag.) / 38.91 ms (Fast) †22.88 ms (NPU) 21.77 ms (NPU)
+> P50 Latency 77.19 ms / 38.12 ms 22.31 ms 21.53 ms
+> P95 Tail Latency 164.24 ms / 54.80 ms 24.83 ms 23.44 ms
+> Throughput (QPS) 11.72 / 25.70 req/s 43.68 req/s 45.90 req/s
+
+The empirical results highlight three findings: 
+
+• Statistically Significant Discrimination Gain : On unseen data ( N = 607 ), COGNIT-Guard reaches 98.85% accu-racy ( 600 /607 , +3 .46% over ML), validated by paired McNemar’s test ( χ2 = 14 .81 , p = 1 .19 × 10 −4). 
+
+• Dual-Use False-Positive Control & Calibration : On the benign compliance subset ( Nsafe = 238 ), COGNIT-Guard lowers FPR from 35.71% ( 85 /238 ) to 0.42% ( 1/238 ), a 98.8% relative reduction vs. zero-shot (two-sided Fisher’s exact p = 2 .78 × 10 −28 ) and a 92.9% relative reduction vs. ML (14 /238 , Fisher’s exact p = 8 .23 ×
+
+10 −4), with disjoint 95% Wilson CIs ( [0 .07% , 2.34%] vs. 
+
+[3 .52% , 9.61%] ). Brier score improves to 0.0104 and 15-bin ECE to 1.12% (vs. 13 .11% ML). 
+
+• Sensitivity to Keyword Perturbations : Controlled prompt perturbations align with our conceptual heuristic: holding sensitive keywords K fixed while varying inquiry markers E leaves zero-shot risk elevated ( P (y = 1) >
+
+0.88 ), whereas COGNIT-Guard suppresses benign inquiry posteriors to 0.003 while maintaining 0.992 on attacks; conversely, inserting penal terms into neutral inquiries inflates zero-shot false alarms by +84 .2% vs. < 0.02 for COGNIT-Guard. 
+
+C. Ablation Study 1: Cross-Encoder vs. Concurrent Bi-Encoder Direct-Decision Baseline 
+
+As shown in Fig. 2(a)–(b), COGNIT-Guard achieves an ROC-AUC of 0.9973 and PR-AUC of 0.9983 on Laya-322M, outperforming traditional ML (ROC-AUC 0.9802, PR-AUC 0.9891) and zero-shot Laya-322M (ROC-AUC 0.8274, PR-AUC 0.8632). To examine how our findings compare across direct-decision architectural families, we evaluate the concurrent bi-encoder 
+
+CLM-8B baseline [10] ( Qwen3-8B pooling encoder + 73MB SwiGLU residual dual-tower heads, 4096 → 1536 → 512 ) on Ascend 910C under identical data splits: 
+
+• Zero-Shot Bi-Encoder Vulnerability on Dual-Use Queries : Because a bi-encoder encodes the user prompt and safety criteria into separate vectors without token-level cross-attention across E × K , zero-shot CLM-8B exhibits even stronger keyword-associated false positives than zero-shot cross-encoder Laya, yielding a 90.34% FPR (215 /238 , 64 .25% accuracy, ROC-AUC = 0 .6944 ,ECE = 24 .29% ) on Clean-607. 
+
+• Lightweight Projection-Head Adaptation : Freezing the Qwen3-8B backbone and adapting only the 73MB dual-tower projection heads on Ascend 910C takes TABLE III OFFLINE THRESHOLD SWEEP (N = 635 ) AND STAGE -BY -S TAGE LATENCY 
+
+DECONSTRUCTION OF CPU & L IVE CASCADE PATHS (N = 130 ).                                                                                                
+
+> Configuration / Execution Stage NPU Ratio System Acc. FPR Mean Latency P50 / P95 Lat.
+> Part A: Offline Model-Compute Sweep ( E[Tmodel ],N= 635 , Pre-Extracted Cached Features)
+> Pure NPU Path ( θ= 1 .00 )100.0% 98.90% 0.42% 21.76 ms 21.53 / 23.58 ms Cascade ( θ= 0 .90 )61.3% 98.58% 0.00% 17.40 ms 17.10 / 22.71 ms
+> Cascade ( θ∗
+> offline = 0 .80 )33.7% 98.58% 0.00% 14.27 ms 10.50 / 21.83 ms
+> Cascade ( θ= 0 .70 )8.3% 97.32% 2.52% 11.47 ms 10.50 / 21.49 ms Mode C: Cached-Feature Tree ( θ= 0 .50 )0.0% 97.17% 2.52% 10.50 ms 10.50 / 10.50 ms
+> Part B: Physical Wall-Clock CPU & Live Serial Cascade Breakdown ( N= 130 ,θ∗
+> deploy = 0 .70 )
+> Mode A: Standalone Diagnostic CPU ( evidence=True )0.0% 95.39% 5.88% 85.36 ms 77.19 / 164.24 ms
+> – Parsing + Regex + 2 ×TF-IDF kNN + XGBoost –––56.06 ms –
+> – 3rd Corpus kNN Scan + Top-KEvidence JSON –––29.30 ms –Mode B: CPU-Settled Fast Path ( 123 /130 ,evidence=False )0.0% 96.92% 2.08% 38.91 ms 38.12 / 54.80 ms Escalated NPU Path ( 7/130 : Fast CPU + IPC + NPU) 100.0% 100.0% 0.00% 89.48 ms 88.20 / 96.20 ms
+> – Stage-1 Fast CPU Screening & Gating ( c(x)< θ ∗)–––38.91 ms –
+> – Unbatched Local HTTP/IPC + H2D Dispatch ( 0.82 ms) –––28.80 ms –
+> – Stage-3 Resident Ascend 910C DFM Forward Pass –––21.77 ms –
+> Live Serial Cascade Total ( θ∗
+> deploy = 0 .70 :123 CPU + 7NPU) 5.38% 99.23% 0.00% 41.63 ms 39.47 / 76.25 ms
+
+2.81 s (Zero-FPR setting: lr = 2 × 10 −4, 8 epochs) to 
+
+3.73 s (Best-Acc setting: lr = 3 × 10 −4, 12 epochs), reaching 98.35% accuracy with 0.00% FPR (0/238 ,ROC-AUC = 0 .9995 ) and 98.85% accuracy (600 /607 ,ECE = 0 .83% , Brier = 0 .0091 , ROC-AUC = 0 .9996 ), respectively. This confirms that both cross-encoder and bi-encoder direct-decision families require boundary-aware calibration to control dual-use false positives, while trading off single-stream backbone size (322M vs. 8B) against head adaptation speed ( 34 .55 s vs. 2.81 –3.73 s). 
+
+D. Ablation Study 2: Calibrated Confidence Routing & Latency Deconstruction 
+
+Table III presents both the offline threshold sweep across 
+
+θ ∈ [0 .50 , 1.00] on N = 635 (measuring cached-feature model compute E[Tmodel ], with offline Pareto knee θ∗
+
+offline = 0 .80 at 
+
+14 .27 ms) and the stage-by-stage wall-clock latency decon-struction of our CPU and live cascade modes ( N = 130 ). 
+
+a) Reconciling Diagnostic vs. Live Gatekeeper CPU Latency: As itemized in Table III (Part B), our imple-mentation distinguishes three CPU modes: (1) Mode A(Standalone Diagnostic CPU, 85 .36 ms) : Enabled when 
+
+include_evidence=True for human-in-the-loop auditing; it executes regex + two TF-IDF kNN scans ( 38 .9 ms), XGBoost traversal ( 17 .1 ms), plus a third corpus-wide kNN scan in 
+
+_build_evidence to serialize top-K training matches (29 .3 ms, totaling 68 .2 ms non-tree overhead + 17 .1 ms XGBoost = 85 .36 ms). (2) Mode B (Live Gatekeeper Fast CPU, 38 .91 ms) : Used as Mfast in synchronous cascading (include_evidence=False with regex short-circuiting), omitting the third kNN scan to run in 38 .91 ms mean (P50: 
+
+38 .12 ms, P95: 54 .80 ms on DUCS-Bench; 22 .79 ms on shorter SafetyBench-ZH items). (3) Mode C (Cached-Feature Tree, 
+
+10 .50 ms) : Isolated tree lookup in offline sweeps. In live deployment ( N = 130 , validation-calibrated θ∗
+
+deploy = 0 .70 ), 
+
+94 .62% (123 /130 ) of queries settle on Mode B ( 38 .91 ms) and 5.38% (7/130 ) escalate to Ascend 910C ( 89 .48 ms total: 
+
+38 .91 ms Fast CPU + 28 .80 ms IPC/dispatch + 21 .77 ms NPU). Exact expectation gives E[Tserver ] = 0 .9462 × 38 .91 + 0 .0538 ×
+
+89 .48 = 41 .63 ms (P50: 39.47 ms , P95: 76.25 ms ), achieving 
+
+99.23% accuracy (129 /130 ) and 0.00% FPR (0/48 ). 
+
+E. Ablation Study 3: Hardware Memory Residency & Disag-gregated VectorArena Caching 
+
+Table IV isolates hardware-aware execution optimiza-tions on Ascend 910C. Persistent on-chip HBM resi-dency and pre-warmed streams cut Laya-322M single-query latency by 54.8% ( 48 .20 → 21 .77 ms). Compar-ing against CLM-8B’s pre-allocated HBM VectorArena 
+
+(torch.npu.mem_get_info ) highlights a clear serving trade-off: Laya-322M delivers 2.10 × lower uncached single-stream latency ( 21 .77 ms vs. 45 .78 ms) with a 25 × smaller memory footprint, whereas pinning static policy vectors in CLM-8B’s HBM VectorArena enables 6.64 ms/item batched throughput ( 150 .6 QPS at B = 64 ) and 0.60 ms P50 lookup on repeated states. 
+
+TABLE IV ABLATION OF HARDWARE MEMORY RESIDENCY AND DISAGGREGATED 
+
+VECTOR ARENA CACHING ON HUAWEI ASCEND 910C.                                   
+
+> Execution Strategy (Ascend 910C) Mean Latency P95 Latency Cold-Start / Alloc Overhead Speedup / Throughput
+> Laya-322M: Cold-Start Unpinned Execution 48.20 ms 62.50 ms 14.80 ms 1.00 ×(20.7 QPS) Laya-322M: Pre-Allocated Memory Buffer 32.40 ms 41.10 ms 6.20 ms 1.49 ×(30.9 QPS)
+> Laya-322M: Warm On-Chip HBM Residency (Ours) 21.77 ms 23.44 ms 0.00 ms 2.21 ×(45.9 QPS)
+> CLM-8B Baseline: Uncached Single-Stream ( B= 1 )45.78 ms 48.51 ms 0.00 ms 21.8 QPS ( B= 1 )CLM-8B Baseline: Batched ( B= 64 ) / HBM VectorArena 6.64 / 0.60 ms 7.12 / 0.89 ms 0.00 ms 150.6 / >1000 QPS
+
+F. Cross-Benchmark Generalization & Disentangling the Spe-cialization Alignment Tax 
+
+Table V evaluates OOD generalization on the stratified 2,100-question SafetyBench-ZH [21] ( 694 unsafe, 1, 406 
+
+safe) alongside in-domain DUCS-Bench (Nsafe = 238 ) and published English XSTest [13] ( Nsafe = 250 ) baselines. 
+
+TABLE V CROSS -B ENCHMARK EVALUATION DISENTANGLING IN-D OMAIN 
+
+SPECIALIZATION , OOD A LIGNMENT TAX , AND REHEARSAL RECOVERY ON SAFETY BENCH -ZH ( N = 2 , 100 ), DUCS-B ENCH (NSAFE = 238 ), AND 
+
+XST EST (EN).                                                                        
+
+> System / Evaluated Model SafetyBench Acc. SafetyBench FPR DUCS FPR (ZH) XSTest FPR (EN) Mean Latency
+> GPT-4 (Zero-Shot) [21] 89.10% ∼10 .5% –18.40% (46/250) >400 ms (API) Llama-2-70B-Chat [21] 68.70% ∼21 .3% –41.60% (104/250) >500 ms (GPU) WildGuard (7B Decoder) [2] –––7.20% (18/250) >200 ms (GPU) SingGuard (Lightweight) [8] –––4.80% (12/250) ∼50 ms (GPU) Traditional ML (Fast CPU Mode) 53.29% (1119/2100) 37.98% (534/1406) 5.88% (14/238) –22.79 ms (CPU) Zero-Shot Cross-Enc. DFM (Laya-322M) 60.33% (1267/2100) 24.68% (347/1406) 35.71% (85/238) –44.85 ms (NPU) Zero-Shot Bi-Enc. Baseline (CLM-8B) [10] 36.38% (764/2100) 92.82% (1305/1406) 90.34% (215/238) –45.78 ms (NPU) Pure Domain Cross-Enc. (Laya-322M) 56.81% (1193/2100) 27.03% (380/1406) 0.42% (1/238) –21.37 ms (NPU) Pure Domain Bi-Enc. (CLM-8B Head) 55.10% (1157/2100) 40.75% (573/1406) 1.68% / 0.00% †–6.64 ms (Batch)
+> COGNIT-Guard (Rehearsal Laya-322M) 65.05% (1366/2100) 19.84% (279/1406) 0.42% (1/238) –21.77–38.89 ms Rehearsal Bi-Enc. Baseline (CLM-8B) 64.10% (1346/2100) 24.82% (349/1406) 0.00% (0/238) –6.64 / 45.78 ms
+
+†Pure domain CLM-8B achieves 1.68% FPR ( 98 .85% Acc) in Best-Acc mode (3.73 s) and 0.00% FPR ( 98 .35% Acc) in Zero-FPR mode ( 2.81 s); Rehearsal CLM-8B ( 3.68 s) reaches 99 .84% Clean-607 accuracy ( 606 /607 ) with 0.00% FPR (0/238 ) and 1.0000 ROC-AUC. 
+
+a) Three-Stage Dynamics of Specialization Alignment Tax and Rehearsal Recovery: A central empirical finding of our study is that adapting direct-decision guardrails to dual-use compliance data exhibits a three-part trade-off across both cross-encoder and bi-encoder architectures: (1) In-Domain Spe-cialization Gain : Pure compliance fine-tuning slashes DUCS-Bench FPR from 35 .71% to 0.42% on Laya-322M ( 98 .85% 
+
+Acc) and from 90 .34% to 0.00% –1.68% on CLM-8B ( 98 .35% –
+
+98 .85% Acc), while boosting related statutory categories on SafetyBench-ZH ( Illegal Activities : 59 .33% → 65 .33% ;
+
+Mental Health : 67 .67% → 71 .67% ). (2) Out-of-Distribution Degradation (Alignment Tax) : However, training exclusively on formal compliance pairs shifts the decision boundary away from colloquial abuse, reducing overall SafetyBench-ZH accuracy from 60 .33% to 56 .81% on Laya-322M ( Offen-siveness : 55 .33% → 46 .67% ) and yielding 55 .10% overall (Offensiveness : 42 .00% ) on pure domain CLM-8B. (3) Re-hearsal Recovery : Mixing a disjoint 15.56% experience replay slice ( N = 458 ) during adaptation eliminates this alignment tax, recovering SafetyBench-ZH OOD accuracy to 65.05% 
+
+(+8 .24% , Offensiveness : 64 .67% ) on Laya-322M ( 41 .85 s) and 64.10% (+9 .00% , Offensiveness : 69.00% , +27 .00% ) on CLM-8B ( 3.68 s), while simultaneously improving Clean-607 in-domain accuracy to 99.67% (605 /607 , 0.42% FPR) on Laya-322M and 99.84% (606 /607 , 0.00% FPR [0/238 ], ECE = 0 .86% , Brier = 0 .0019 , ROC-AUC = 1 .0000 ) on CLM-8B. G. Qualitative Taxonomy of Remaining Failures 
+
+Remaining edge errors cluster into three boundary regimes: (1) Regulatory Inquiries with Dense Anti-Monopoly Lexicons 
+
+(resolved by CLM-8B’s 4096-dim representation); (2) Academic Camouflage of Disinformation Vectors ; and (3) Borderline Commercial Health Claims .V. C ONCLUSION , A VAILABILITY & E THICS 
+
+We studied calibrated standalone direct-decision foundation models as a serving primitive for real-time pre-ingestion safety guardrails under explicit latency and false-positive constraints. By coupling validation-calibrated posterior routing across heterogeneous CPU–NPU tiers with experience replay rehearsal on Huawei Ascend 910C, COGNIT-Guard achieves 98.85%– 99.84% accuracy on unseen dual-use compliance queries (N = 607 ) with 0.00%–0.42% benign FPR ( 0.83% –1.12% 
+
+ECE) at 21.77 ms pure NPU latency and 41.63 ms live cascaded server latency, while overcoming the domain-specialization alignment tax on SafetyBench-ZH. 
+
+Code, Data, Ethics & Acknowledgments : Source code, con-figs, latency scripts, and anonymized DUCS-Bench manifests (with SHA-256 dedup hashes and split seeds) are available at https://github.com/moyuan10086/cascaded-guardrail-npu; exter-nal benchmarks (SafetyBench-ZH, XSTest) are referenced via sample IDs per original licenses. All compliance prompts were anonymized for defensive safety research and do not constitute legal advice. We thank the laboratory at the Shenzhen Research Institute of Big Data (SRIBD) for providing Huawei Ascend 910C NPU computing resources. REFERENCES 
+
+[1] H. Inan, K. Upasani, J. Chi, R. Rungta, K. Iyer, Y. Mao, M. Tontchev, Q. Zheng, Y. Bitton, S. Pasupuleti et al. , “Llama guard: Llm-based input-output safeguard for human-ai conversations,” arXiv preprint arXiv:2312.06674 , 2023. [2] S. Han, K.-R. Kim, M.-J. Lee, D. Kim, M. Cho, and J. Thorne, “Wildguard: Open one-stop moderation tools for safety risks, jailbreaks, and refusals of llms,” in Advances in Neural Information Processing Systems (NeurIPS) , vol. 37, 2024. [3] W. Zeng, Y. Liu, R. Mullins, L. Peran, J. Fernandez, H. Harkous, K. Narasimhan, D. Proud, P. Kumar, B. Radharapu et al. , “Shieldgemma: Generative ai content moderation based on gemma,” arXiv preprint arXiv:2407.21772 , 2024. [4] K. Xuan et al. , “ShieldHead: Decoding-time safeguard for large language models,” in 
+
+Findings of the Association for Computational Linguistics: ACL 2025 , 2025, pp. 15 582– 15 598. [5] Sing Team, “SingProbe technical report: An open intrinsic guardrail framework for generation-time monitoring of LLMs,” arXiv preprint arXiv:2608.30703 , 2026. [6] A. Khatri, C. Prabhu, O. Neogi et al. , “Safety beyond the interface: Detecting harm via latent states in large language models,” arXiv preprint arXiv:2609.19472 , 2026. [7] GLiNER Team, “GLiNER guard: Unified encoder family for production LLM safety and privacy,” arXiv preprint arXiv:2605.05277 , 2026. [8] W. Tan, L. Ding, M. Fang, Y. Liu, S. Shi, and D. Tao, “Singguard: An efficient decision model for large language model guardrails,” arXiv preprint arXiv:2606.22873 , 2026. [9] Z. Ding, J. Li, Z. Lu, and J. Shi, “FlexGuard: Continuous risk scoring for strictness-adaptive LLM content moderation,” arXiv preprint arXiv:2602.23636 , 2026. [10] J. Kwok, H. Kang, T. Suresh, J. Saad-Falcon, M. Pavone, C. R´ e, and A. Mirho-seini, “Contrastive language models: A system one model for fast and generalizable decision-making,” Stanford University & NVIDIA Research Technical Report, 2026, https://contrastive-lm.notion.site ( CLM-v0.1-8B ). [11] T. Rebedea, R. Dinu, M. N. Sreedhar, C. Parisien, and J. Cohen, “Nemo guardrails: A toolkit for controllable and safe llm applications,” in Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing: System Demonstrations , 2023, pp. 431–445. [12] T. Chen and C. Guestrin, “Xgboost: A scalable tree boosting system,” in Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining , 2016, pp. 785–794. [13] P. R¨ ottger, H. R. Kirk, B. Vidgen, G. Attanasio, F. Bianchi, and D. Hovy, “Xstest: A test suite for identifying exaggerated safety behaviours in large language models,” in 
+
+Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (NAACL-HLT) , 2024, pp. 4077–4097. [14] J. Cui, W.-L. Chiang, I. Stoica, and C.-J. Hsieh, “OR-Bench: An over-refusal benchmark for large language models,” in Proceedings of the International Conference on Machine Learning (ICML) , 2025, arXiv:2405.20947. [15] ConvAI Innovations, “Laya: An open-source non-autoregressive decision foundation model with calibrated typed decision heads,” https://huggingface.co/convaiinnovations/ laya, 2026, open-weights release (322M, revision main ), accessed Sept. 2026. [16] D. Almeida and TypeSafe AI Team, “Jev: A non-autoregressive system one decision foundation model for structured probabilistic reasoning,” TypeSafe AI Technical Report ,2026. [17] W. Mizore, “Laya-mlx: Hardware-accelerated decision model engine and interactive playground,” https://github.com/mizorewww/laya-mlx, 2026, gitHub repository (v0.2), accessed Sept. 2026. [18] J. Chen, R. Yin, X. Li, Q. Ma et al. , “Beyond over-refusal: Defending indirect prompt injection via latent instruction manifolds,” arXiv preprint arXiv:2608.22248 , 2026. [19] L. Chen, M. Zaharia, and J. Zou, “Frugalgpt: How to use large language models while reducing cost and latency,” in Advances in Neural Information Processing Systems (NeurIPS) , vol. 36, 2023, pp. 21 508–21 532. [20] B. Zhang, C. Liu, Z. Wang, and M. Sun, “Reflex-guard: Lightweight and low-latency safety moderation for real-time llm serving,” arXiv preprint arXiv:2408.09871 , 2024. [21] Z. Zhang, X. Lei, X. Zou, Y. Zheng, H. Chen, J. Wu, R. Wang, Y. Sun, J. Xu, and M. Huang, “Safetybench: Evaluating the safety of large language models with multiple choice questions,” arXiv preprint arXiv:2309.07045 , 2024.

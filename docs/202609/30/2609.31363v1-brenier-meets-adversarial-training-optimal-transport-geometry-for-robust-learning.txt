@@ -1,0 +1,2688 @@
+Title: Brenier Meets Adversarial Training: Optimal Transport Geometry for Robust Learning
+
+URL Source: https://arxiv.org/pdf/2609.31363v1
+
+Published Time: Mon, 28 Sep 2026 01:31:27 GMT
+
+Number of Pages: 44
+
+Markdown Content:
+# Brenier Meets Adversarial Training: Optimal Transport Geometry for Robust Learning 
+
+Alireza Abdollahpoorrostam ⋆, 1 Ehsan Sharifian ⋆, 1 Buse S ¸ en ⋆, 1
+
+Marco Cuturi 2 Daniel Kuhn 1
+
+> 1
+
+EPFL 2Apple 
+
+§ Code 
+
+## Abstract 
+
+Distributionally robust optimization (DRO) provides a principled framework for learning under distribution shift, but its practical use is hindered by the difficulty of evaluating worst-case risks for nonconvex loss functions. We study a penalized DRO formulation in which the adversary may choose any distribution but incurs a Wasserstein penalty for deviating from the empirical distribution. We show that the adversary’s problem can be reformulated as an optimization problem over transport maps that push empirical samples to adversarial ones, and we prove that optimal maps are cyclically monotone. We also show that standard adversarial training— based on per-sample local optimization—violates cyclical monotonicity and wastes transport costs unless the adversary is severely restricted. We propose two remedies. First, we introduce multi-start particle ascent, which alternates parallel gradient ascent with reassignment to enforce cyclical monotonicity across samples. Second, we parameterize adversarial maps as gradients of input-convex neural networks, which guarantees cyclical monotonicity by construction. Experiments on robust regression, image classification, and robust control show that our methods consistently outperform standard adversarial training and state-of-the-art baselines, achieving improved robustness and better generalization under distribution shift. 
+
+## 1 Introduction 
+
+Adversarial perturbations expose a pronounced fragility of modern machine learning systems, from early evidence of adversarial examples [32, 45, 53, 64] to a broad robustness literature spanning stronger attacks, defense mechanisms [20, 47, 54] and evaluation protocols [5, 14, 17]. Yet, robust-ness to diverse threat models, common corruptions, and distribution shifts remains an open challenge even for well-trained models and certified defenses [20, 54, 66, 67]. Robust learning is therefore not only about surviving a prescribed attack, but about generalizing under broader distributional variation. Distributionally robust optimization (DRO) [44] provides a principled framework for adversarial training. Instead of relying on a fixed attack, DRO models a worst-case adversary that perturbs the data distribution. A widely used approach is Wasserstein DRO, which requires the learned model to perform well for all distributions within a prescribed Wasserstein distance of the empirical distribution [10, 22, 29, 43, 50]. This formulation is appealing because the Wasserstein geometry encodes which distribution shifts are plausible, while the radius controls their magnitude. While conceptually appealing, DRO is not easy to use in practice because the worst-case problem searches over distributions. A common practical variant replaces the hard Wasserstein constraint with a penalized objective, in which the adversary may choose any distribution but incurs a Wasserstein penalty for deviating from the empirical distribution. Evaluating the resulting worst-case risk reduces to a finite-dimensional optimization problem over transported training samples. For standard machine 
+
+> ⋆Equal contribution. 40th Conference on Neural Information Processing Systems (NeurIPS 2026). arXiv:2609.31363v1 [cs.LG] 25 Sep 2026
+
+learning models, this problem is typically nonconvex. Existing methods therefore approximate it through independent sample-wise updates or entropic surrogates [60, 73, 75]. A sufficiently strong penalty on moving samples can make this problem better behaved (more concave). But it does so only by making substantial perturbations too expensive, and hence by weakening the adversary itself. This paper takes a first step toward a theory of penalty-based Wasserstein DRO in the practically rele-vant regime where the adversary is powerful and thus faces a nonconvex problem. We also aim to de-velop strong approximate solution methods. The key enabling idea is to recast the adversary’s problem as an optimization problem over transport maps, which give rise to the following main contributions. • Section 3 : We argue that the adversary’s optimal transport map is cyclically monotone and that restricting the adversary to cyclically monotone maps benefits both the adversary and the learner. • Section 4 : We show that standard particle ascent methods for the dual DRO problem generally violate cyclical monotonicity in the nonconvex regime. As a repair, we introduce Multi-start Particle Ascent (MPA), which approximately solves the adversary’s problem by alternating parallel particle ascent over a batch of samples with optimal reassignment of the resulting particles. • Section 5 : We also propose an algorithm that models the adversary’s transport map as the gradient of an input-convex neural network (ICNN) [3], thereby enforcing cyclical monotonicity by design. • Section 6 : We evaluate both new methods on adversarial training for CIFAR-10 and on robust control tasks with uncertainty in physical parameters. We find that the ICNN-based method delivers the strongest overall robustness, while MPA remains competitive with the DRO baselines. We do not focus on building a state-of-the-art robust training pipeline, which typically incorporates additional regularization techniques [20, 54, 77]. Instead, our methods (MPA and the ICNN-based approach) are complementary and can be seamlessly integrated with such strategies. 
+
+## 2 Background 
+
+We first review some basics of optimal transport and robust machine learning. 
+
+Optimal transport. We use P to denote the space of probability measures P on Rm with finite second moments ( i.e. , EP[∥Z∥22] < ∞), and we equip P with the Wasserstein distance. 
+
+Definition 2.1 (Wasserstein distance) . The Wasserstein distance of order 2 between two distributions 
+
+P, bP ∈ P is given by W(P, bP) := inf {Eγ [∥Z − bZ∥22]1/2 : γ ∈ Γ( P, bP)}, where Γ( P, bP) denotes the set of joint distributions or couplings of Z and bZ with marginals P and bP, respectively. The infimum in the definition of W(P, bP) is always attained by some optimal coupling γ⋆. Below we use T to denote the set of all Borel-measurable functions T : Rm → Rm, and we call elements of T
+
+transport maps. If bP is absolutely continuous with respect to the Lebesgue measure, then the optimal coupling γ⋆ is induced by a transport map. Specifically, Brenier’s theorem asserts that there is a unique T ⋆ ∈ T that is cyclically monotone and satisfies γ⋆ = ( T ⋆, id) # bP and P = T ⋆ 
+
+> #
+
+bP [12]. 
+
+Definition 2.2 (Cyclical monotonicity) . Let Sk denote the set of all permutations of {1, . . . , k }.A set C ⊆ Rm × Rm is called cyclical monotone if for any k ∈ N, any collection of pairs 
+
+{(bz1, z 1), . . . , (bzk, z k)} ⊆ C and any σ ∈ S k, the following equivalent conditions hold: 
+
+> k
+
+X
+
+> i=1
+
+∥bzi − zi∥22 ≤
+
+> k
+
+X
+
+> i=1
+
+∥bzi − zσ(i)∥22 ⇐⇒ 
+
+> k
+
+X
+
+> i=1
+
+⟨zσ(i) − zi, bzi⟩ ≤ 0.
+
+We say that a map T ∈ T is cyclically monotone on a set Z ⊆ Rm if its graph {(bz, T (bz)) : bz ∈ Z} 
+
+is a cyclically monotone set. If Z = Rm, we simply say that T is cyclically monotone. By Rockafellar’s theorem [26, Theorem 2.5.3], a map T ∈ T is cyclically monotone if and only if there exists a convex function ψ : Rm → R ∪ {∞} such that T (z) ∈ ∂ψ (z) for all z ∈ Rm. Any transport map that violates cyclical monotonicity induces a suboptimal coupling between P and bP,and the degree of suboptimality is sometimes referred to as the Monge gap [68]. 
+
+Definition 2.3 (Monge gap) . Given any bP ∈ P , the Monge gap of a map T ∈ T is defined as 
+
+MbP(T ) := EbP[∥ bZ − T ( bZ)∥22] − W2(T# bP, bP).
+
+Note that MbP(T ) ≥ 0, and MbP(T ) = 0 if and only if T is cyclically monotone on the support of bP.2Robust learning. Let f : Θ × Rm → R be a function that assigns each model parameter θ from within a closed convex set Θ ⊆ Rd and each data point z ∈ Rm a training loss f (θ, z ). Throughout the paper we assume that f (θ, z ) is continuous in θ and differentiable as well as Lipschitz continuous in z. Empirical Risk Minimization (ERM) seeks to minimize the expected loss under some bP ∈ P .
+
+min  
+
+> θ∈Θ
+
+EbP[f (θ, bZ)] (ERM) The data distribution bP is typically set to the empirical measure bP = 1
+
+> N
+
+PNi=1 δbzi corresponding to a given training dataset. While computationally convenient, ERM is sensitive to distribution shifts and tends to overfit to the training data. As a remedy, Robust Optimization (RO) minimizes the expected value of the worst-case loss with respect to all data realizations in an ε-neighborhood of bZ [47]. 
+
+min  
+
+> θ∈Θ
+
+EbP
+
+h
+
+max 
+
+n
+
+f (θ, z ) : ∥z − bZ∥2 ≤ ε
+
+o i 
+
+(RO) While RO accounts for local data perturbations, it does not provide protection against global dis-tribution shifts. Moreover, unless f (θ, z ) is concave in z, the embedded maximization problems in (RO) can only be solved approximately, which is usually done via iterative first-order methods [47]. Distributionally Robust Optimization (DRO) offers a principled approach to adversarial training that models distribution shifts explicitly. In penalty-based Wasserstein DRO a fictitious adversary maxi-mizes the expected loss over all possible data distributions P ∈ P subject to a penalty proportional to 
+
+W2(P, bP) for choosing distributions that differ from bP. Thus, the training goal is to solve 
+
+min 
+
+> θ∈Θ
+
+F (θ) := max  
+
+> P∈P
+
+EP [f (θ, Z )] − λW2(P, bP) , (DRO) where λ > 0 captures the strength of the penalty. We refer to F (θ) as the adversarial risk .
+
+## 3 Reparameterizations of the Adversarial Risk 
+
+Evaluating the adversarial risk F (θ) amounts to maximizing a concave functional over an infinite-dimensional space of probability measures. Standard duality results in Wasserstein DRO such as [60, Proposition 1] allow us to reformulate F (θ) as the empirical expectation of the adversarial loss ,which is defined as the negative Moreau envelope of −f (θ, z ); see Appendix B for details. 
+
+F (θ) = EbP
+
+h
+
+max 
+
+> z∈Rm
+
+f (θ, z ) − λ∥z − bZ∥22
+
+i
+
+. (1) Hence, evaluating F (θ) reduces to solving an unconstrained global maximization problem over z for each empirical sample bz. The main results of this paper will exploit yet another reformulation of F (θ)
+
+as the maximum of a functional optimization problem over the space of transport maps T . Indeed, by the interchangeability principle [57, Theorem 14.60], we can recast the adversarial risk in (1) as 
+
+F (θ) = max   
+
+> T∈T
+
+EbP
+
+h
+
+f (θ, T ( bZ)) − λ∥T ( bZ) − bZ∥22
+
+i
+
+. (2) The reformulation (2) seeks an adversarial transport map T ⋆ that simultaneously solves the global optimization problems associated with all empirical samples in (1). Even though the objective function value of T ⋆ in problem (2) depends only on its behavior on the support of bP, it is expedient to extend T ⋆ to the entire ambient space. Formally, this can be done by constructing a set-valued mapping that assigns each empirical sample bz ∈ Rm the corresponding set of adversarial samples 
+
+S(bz) := arg max 
+
+> z∈Rm
+
+f (θ, z ) − λ∥z − bz∥22 . (3) Next, we define the optimal adversarial map T ⋆ as a Borel-measurable selector of this set-valued mapping. The existence of such a selector is shown in Proposition B.1. Since T ⋆(bz) ∈ S(bz) for all bz ∈ Rm, [57, Theorem 14.60] implies that T ⋆ solves (2). In addition, the pushforward T ⋆ 
+
+> #
+
+bP con-stitutes a worst-case distribution for the inner maximization problem in (DRO); see Proposition B.2. The equivalent reformulations (1) and (2) of the adversarial risk F (θ) give rise to two complementary methods for constructing adversarial maps. The pointwise formulation (1) gives rise to methods for constructing implicit maps, which are only defined implicitly through simple algorithms for evaluating the map at a given input bz ∈ Rm. Conversely, the global formulation (2) inspires the design of explicit maps, which are modeled as explicit parametric functions such as neural networks. 3A simple approach for constructing implicit maps is due to Sinha et al. [60]. They show that if 
+
+∇z f (θ, z ) is Lzz -Lipschitz continuous in z and λ > L zz /2, then problem (3) has a strongly concave objective function and thus a unique maximizer. Hence, T ⋆ can be evaluated pointwise by solving (3) via gradient ascent. They further show that problem (1) is amenable to standard stochastic gradient descent (SGD) methods. Specifically, for each sample bz ∼ bP, they compute T ⋆(bz) by solving (3) and then use Danskin’s theorem to differentiate the parametric maximum in (1) with respect to θ,thus constructing an unbiased stochastic gradient for F (θ). This naturally leads to an efficient inner-maximization outer-minimization loop. However, this procedure hinges on the condition 
+
+λ > L zz /2, which is difficult to satisfy in practice if f (θ, z ) depends on z through a neural network. As shown in [72], even computing first-order Lipschitz constants is NP-hard, with loose upper bounds reaching the order of 10 6 for standard architectures like AlexNet [42]. Bounding Lzz , which relates to the network’s Hessian, generally inherits and often exacerbates these first-order intractabilities. When λ is set sufficiently large to guarantee strong concavity, adversarial perturbations are pulled close to the training samples, and the adversarial risk degenerates toward the empirical risk. In other words, the very condition that makes the problem tractable undermines its robustness. In practice, reasonable values of λ that correspond to a sufficiently powerful adversary are significantly smaller than Lzz and invariably render problem (3) nonconvex. Given the intractability of nonconvex optimization, the best we can thus hope for is to construct (implicit or explicit) adversarial maps that solve (2) approximately. The adversarial error ε(θ, T ) of a given map T ∈ T in problem (2) corresponding to a fixed parameter θ ∈ Θ is defined as the degree of suboptimality of T , that is, 
+
+ε(θ, T ) := F (θ) − EbP
+
+f (θ, T ( bZ)) − λ∥T ( bZ) − bZ∥22
+
+ ≥ 0. (4) The following proposition shows that access to an oracle that approximately solves (2) with small adversarial error enables one to solve (DRO) to high accuracy via projected gradient descent. 
+
+Proposition 3.1 (Convergence with inexact adversary) . Assume that f (θ, z ) is convex in θ with uniformly bounded gradients ∥∇ θ f (θ, z )∥2 ≤ Lθ for all θ ∈ Θ and z ∈ Rm. Fix any θ0 ∈ Θ, let 
+
+θ⋆ ∈ arg min θ∈Θ F (θ), and consider H projected gradient descent iterates satisfying 
+
+θt+1 = Proj Θ
+
+ θt − α g t
+
+, where gt = EbP
+
+∇θ f (θt, T t( bZ)) ,
+
+where Tt ∈ T is a near-optimal adversarial map that approximately solves (2) at θ = θt. If the constant step size is set to α = ∥θ0 − θ⋆∥2/L θ
+
+√H, the average iterate ¯θH := 1
+
+> H
+
+PH−1 
+
+> t=0
+
+θt satisfies 
+
+F (¯θH ) − F (θ⋆) ≤ Lθ ∥θ0 − θ⋆∥2
+
+√H + 1
+
+H
+
+> H−1
+
+X
+
+> t=0
+
+ε(θt, T t).
+
+Proposition 3.1 adapts a standard convergence result for minimax problems to our setting [9, § 3.3]. For completeness we provide a short proof in Appendix C. It suggests that, in order to compute near-optimal minimizers for (DRO), one needs access to a strong adversarial oracle that outputs near-optimal adversarial maps. While Proposition 3.1 only holds under the simplifying assumption that the loss function f (θ, z ) is convex in θ, we expect the conclusions of Proposition 3.1 to remain valid in the vicinity of local minimizers even if the loss is nonconvex. The next proposition shows that the adversarial error of any transport map is bounded below by its Monge gap. 
+
+Proposition 3.2 (Suboptimality from wasteful transport) . We have ε(θ, T ) ≥ λMbP(T ) for all T ∈ T .
+
+Note that MbP(T ) > 0 indicates that T transports bP to T# bP in an inefficient manner. Proposition 3.2 implies that such inefficient transport necessarily leads to suboptimality in (2) and weakens the con-vergence guarantees of Proposition 3.1. The following result is a direct corollary of Proposition 3.2. 
+
+Proposition 3.3. The optimal adversarial map T ⋆ is cyclically monotone, and thus MbP(T ⋆) = 0 .
+
+Proposition 3.3 establishes a necessary optimality condition for Wasserstein DRO problems. It is reminiscent of Brenier’s theorem [12], which establishes a similar optimality condition for optimal transport problems. However, it holds even if bP is discrete and f (θ, z ) fails to be concave in z.Evaluating F (θ) requires solving a separate optimization problem for every point in the support of bP;see (1). Unless λ is astronomically large, all of these optimization problems are nonconvex and thus intractable. However, these global optimization problems are coupled because their objective functions differ only with regard to the anchor point bz of the quadratic penalty term. Accordingly, 4Proposition 3.3 reveals that their respective global maximizers T ⋆(bz) are connected through the cyclical monotonicity of T ⋆. Even though the exact adversarial map T ⋆ is hard to compute, the insight that a map T can only be optimal if it is cyclically monotone reduces the search space for good adversarial maps and guides us, by virtue of Proposition 3.1, toward better solutions for (DRO). 
+
+## 4 Implicit Adversarial Maps 
+
+Implicit adversarial maps are defined in terms of an algorithm for point evaluation. Asimple implicit map is obtained by using gradient ascent initialized at bz for solving the nonconvex maximization problem (1) to local optimality. This method naturally general-izes the approach by Sinha et al. [60] to nonconvex instances of (1) with moderate penalty parameters λ ≤ Lzz /2. We first provide a formal definition of this particle ascent method. ̂z1̂ 
+
+> z2̂z2̂
+> z1
+> PA trajectory PA converged maximizer MPA trajectory MPA converged maximizer Global maximizer Local maximizer
+
+Figure 1: PA and MPA trajectories over the contours of 
+
+f (θ, z ) − λ∥z − bzi∥22 for i = 1 (left) and i = 2 (right). 
+
+Particle Ascent (PA). PA approxi-mately solves the maximization prob-lem (1) by using gradient ascent ini-tialized at bz, either in continuous or discrete time. In both cases, we use Tpa to denote the resulting family of implicit maps parametrized by time. The correct interpretation of Tpa will always be clear from the context. In continuous time, Tpa : R+ × Rm →
+
+Rm is defined via the ODE 
+
+∂tTpa (t, bz) = ∇z f (θ, T pa (t, bz)) − 2λ Tpa (t, bz) − bz
+
+initialized by Tpa (0 , bz) = bz. In discrete time, Tpa : Z+ × Rm → Rm is defined via the recursion 
+
+Tpa (t + 1 , bz) = Tpa (t, bz) + η ∇z f (θ, T pa (t, bz)) − 2λ Tpa (t, bz) − bz 
+
+initialized by Tpa (0 , bz) = bz, where η > 0 is the step size. When t is fixed and clear from context, we abbreviate Tpa (t, bz) as Tpa (bz). Note that Tpa is implicitly defined through an optimization oracle. The per-sample formulation of PA is computationally appealing, as it allows different particles to be updated in parallel. Even though Tpa is generically suboptimal in (2) unless λ > L zz /2, it is guaranteed to be cyclically monotone (in fact, monotone) for one-dimensional data. 
+
+Proposition 4.1 (Monotonicity of Tpa when m = 1 ). If m = 1 and ∇z f (θ, ·) is Lzz -Lipschitz, then 
+
+• the continuous-time PA map Tpa (t, ·) is cyclically monotone for all t ∈ R+;
+
+• the discrete-time PA map Tpa (t, ·) is cyclically monotone for all t ∈ Z+ if η ≤ 1/(Lzz + 2 λ).
+
+Unfortunately, Tpa ceases to be cyclically monotone already in two dimensions. 
+
+Example 4.1 (Tpa violates cyclical monotonicity) . Set m = 2 , and consider the loss function 
+
+f (θ, z ) = P2 
+
+> k=1
+
+ake−(z−μk )⊤Σ−1   
+
+> k(z−μk)
+
+with a1 = 200 , a2 = 500 , μ1 = (6 , 2) ⊤, μ2 = ( −6, −2) ⊤,and Σ1 = Σ 2 = diag(64 , 1) . We compute Tpa in discrete time for λ = 3 and t = 8 ,000 steps with step size η = 0 .001 , initialized at bz1 = ( −1, 1) ⊤ and bz2 = (1 , −1) ⊤. The two particles converge to different local maxima, Tpa (bz1) = (2 .17 , 1.98) ⊤ and Tpa (bz2) = ( −3.96 , −2.00) ⊤ (see Figure 1), yielding ⟨Tpa (bz1) − Tpa (bz2), bz1 − bz2⟩ = −4.32 < 0, a strict violation of cyclical monotonicity. 
+
+Example 4.1 shows via Proposition 3.2 that PA wastes transport costs and generates a suboptimal ad-versarial map. While we cannot hope to solve the nonconvex problem (2) to global optimality, we can efficiently improve any suboptimal map T by forcing its Monge gap to 0. To see this, assume that bP =
+
+> 1
+> N
+
+PNi=1 δbzi . Then, the Monge gap satisfies MbP(T ) = max σ∈S N
+
+> 2
+> N
+
+PNi=1 T (bzσ(i)) − T (bzi), bzi
+
+[68]. The optimal permutation σ identifies a reassignment of the empirical samples {bzi}Ni=1 to the adversarial samples {T (bzi)}Ni=1 , thus inducing an improved map T σ with a strictly higher objective function value in (2) while ensuring that T# bP = T σ 
+
+> #
+
+bP. An even better map is obtained by allow-ing many-to-one assignments rather than bijective permutations, which collapse multiple empirical samples to a common output and thereby modify T# bP itself. Such an assignment can reduce the adversarial error by strictly more than the Monge gap. From now on, we call a map T assignment-stationary if T (bzi) attains the largest objective value in problem (3) with bz = bzi among all candidate solutions {T (bzj )}Nj=1 . It cannot be improved by changing the output of bzi to that of bzj for any j̸ = i.5Definition 4.1 (Assignment-stationarity) . A map T ∈ T is assignment-stationary on {bzi}Ni=1 if 
+
+f (θ, T (bzi)) − λ∥T (bzi) − bzi∥22 ≥ f (θ, T (bzj )) − λ∥T (bzj ) − bzi∥22 ∀i, j ∈ [N ]. (5) Assignment-stationarity can be viewed as a discrete, batch-wide analogue of standard continuous stationarity. Just as an algorithm for solving a single maximization problem should not stop if the objective function can be improved locally by moving along an ascent direction, an algorithm for solving N maximization problems in tandem should not stop if the i-th objective function can be improved by jumping to the candidate solution of the j-th problem for some j̸ = i (even if the 
+
+i-th candidate solution is a local maximizer). Beyond guaranteeing that no sample is trapped in a suboptimal assignment, assignment-stationarity implies cyclical monotonicity. 
+
+Lemma 4.1. If bP = 1
+
+> N
+
+PNi=1 δbzi while T ∈ T is assignment-stationary on {bzi}Ni=1 , then T is cyclically monotone on {bzi}Ni=1 .
+
+The converse implication fails. A cyclically monotone map need not be assignment-stationary because cyclical monotonicity ignores the loss f (counterexamples exist even for T = id ). From Example 4.1 we know that the PA map generically violates cyclical monotonicity and conse-quently fails to be assignment-stationary (Lemma 4.1). We thus propose Multi-start Particle Ascent (MPA) as a refinement of PA that enforces assignment-stationarity on the batch to which it is applied. 
+
+Multi-Start Particle Ascent (MPA). MPA computes the right-hand side of (1) approximately by constructing an adversarial sample for each empirical sample in a given batch of size B. The algorithm alternates between batch-wide reassignment of each empirical sample bzi to the best adversarial sample in the current pool Z = {zi}Bi=1 and parallel local optimization of the B adversarial samples in Z;see the inner loop in Algorithm 1, which runs over R rounds. MPA ends with a final reassignment step to enforce assignment-stationarity and thus cyclical monotonicity on {bzi}Bi=1 . When R = 1 , the reassignment steps highlighted in blue are disabled, and Algorithm 1 reduces to PA. When R > 1,the reassignment steps are activated. Both PA and MPA can be embedded into a projected gradient descent algorithm for training θ; see the outer loop in Algorithm 1, which runs over E epochs.                                                                                
+
+> Algorithm 1: Training with implicit adversarial maps
+> Input: distribution bP; batch size B; initial iterate θ; step sizes α,η; # epochs E;# inner steps K; # rounds R(R= 1 : PA; R > 1: MPA )
+> for e∈[E]do
+> Sample {bzi}Bi=1
+> iid
+> ∼bP, and set zi←bzifor all i∈[B]
+> for r∈[R]do
+> Z ← { zi}Bi=1
+> zi←arg max z∈Z f(θ, z )−λ∥z−bzi∥22for all i∈[B]
+> do Ksteps of zi←zi+η(∇zf(θ, z i)−2λ(zi−bzi)) for all i∈[B]
+> end for
+> Z ← { zi}Bi=1
+> zi←arg max z∈Z f(θ, z )−λ∥z−bzi∥22for all i∈[B]
+> θ←Proj Θ
+>  θ−αB
+> PBi=1 ∇θf(θ, z i)
+> end for Output: θ
+
+MPA is reminiscent of multi-start heuristics in non-convex op-timization. Indeed, a standard multi-start heuristic launches sev-eral local searches from differ-ent starting points. Their pur-pose is to explore different re-gions (or basins) of the objective landscape. The resulting solu-tions form a pool of alternatives, from which one can select the best solution. MPA extends this familiar idea from a single op-timization problem to a family of B coupled optimization prob-lems. During reassignment, the local maxima discovered by the different problems using PA are shared as candidate starting solutions. Thus, each problem is no longer confined to the basin reached from its own empirical sample. Instead, it can jump to promising basins discovered by other samples. MPA has several striking properties. First, as the inner loop of Algorithm 1 is followed by a reassign-ment step, all adversarial maps generated by MPA are guaranteed to be assignment-stationary and therefore also cyclically monotone on the batch (see Lemma 4.1). Second, if each local optimization phase is run over K = ∞ many iterations, which ensures that a stationary point is reached, then the inner loop of Algorithm 1 is guaranteed to converge after finitely many rounds. 
+
+Theorem 4.1 (Finite termination of MPA (informal version of Theorem D.1)) . If K = ∞, then the adversarial samples {zi}Bi=1 generated by MPA cease to change after finitely many rounds. 
+
+Third, MPA guarantees global optimality whenever the batch of empirical samples is sufficiently large. 6Theorem 4.2 (Global optimality guarantee of MPA (informal version of Theorem D.2)) . Suppose that the empirical samples are drawn independently from a distribution with an everywhere positive density. Then, for every tolerance ϵ > 0, the implicit adversarial maps generated by MPA are 
+
+ϵ-optimal in (2) with probability at least 1 − β(B, ϵ ), where β(B, ϵ ) > 0 converges to 0 as B grows. 
+
+Intuitively, Theorem 4.2 holds because MPA resembles a multi-start heuristic and because sufficiently many starting points enable such methods to solve nonconvex optimization problems globally. However, adding a sample to the batch not only enlarges the pool of candidate starting points but also introduces a new global optimization problem, which complicates the proof of Theorem 4.2. Notably, the global optimality guarantee of MPA holds for every penalty parameter λ > 0, thereby removing the restriction λ > L zz /2 required for PA to be exact [60]. See Appendix D for further details. 
+
+## 5 Explicit Adversarial Maps 
+
+To overcome the transductive nature of MPA, which constructs an implicit adversarial map restricted to the given batch of training samples and prevents generalization to unseen data, we now construct 
+
+explicit adversarial maps of the form Tω ∈ T parametrized by ω ∈ Ω, where Ω is a Euclidean space. Restricting T in (2) to this parametric family allows us to work with the parametric objective function 
+
+L(θ; ω) := EbP
+
+h
+
+ℓ(θ, ω, bZ) := f  θ, T ω ( bZ) − λ Tω ( bZ) − bZ 22
+
+i
+
+.
+
+To jointly learn the parameters θ and ω of the model and the adversarial map, respectively, we employ an alternating optimization scheme consisting of two nested loops. The inner loop applies K
+
+gradient-ascent steps in ω, while the outer loop applies E projected gradient descent steps in θ. Here, the outer gradient ∇θ max ω∈Ω L(θ; ω) is computed approximately via Danskin’s theorem, treating the current iterate ω as an approximate maximizer. We formalize this procedure in Algorithm 2.                                     
+
+> Algorithm 2: Training with explicit adversarial maps
+> Input: distribution bP; batch size B; initial iterates θ, ω ;step sizes α, η ; # epochs E; # inner steps K
+> for e∈[E]do
+> Sample {bzi}Bi=1
+> iid
+> ∼bP
+> do Ksteps of ω←ω+ηB
+> PBi=1 ∇ωℓ(θ, ω, bzi)
+> zi←Tω(bzi)for all i∈[B]
+> θ←Proj Θ
+>  θ−αB
+> PBi=1 ∇θf(θ, z i)
+> end for Output: θ
+
+It is tempting to model the explicit adversarial maps as unconstrained neural networks ( e.g. , generative adversarial networks [31] or neural transport maps for worst-case generation [16]). However, such stan-dard networks typically violate cyclical monotonicity, which is a known property of the globally optimal map. It is thus expedient to enforce cyclical mono-tonicity in the neural network architecture. By a classical result in convex analysis, a map T ∈ T 
+
+is cyclically monotone if and only if it lies in the subdifferential of a convex function. 
+
+Theorem 5.1 (Convex-potential representation, [26, Theorem 2.5.3]) . A transport map T ∈ T is cyclically monotone if and only if there exists a convex potential function ψ : Rm → R ∪ { +∞} such that T (bz) ∈ ∂ψ (bz) for every bz ∈ Rm. In particular, if ψ is differentiable at bz, then T (bz) = ∇ψ(bz).
+
+Theorem 5.1 is the key to enforce cyclical monotonicity in explicit adversarial maps. Specifically, we can define Tω := ∇z ψω , where the potential function ψω : Rm → R is modeled as an Input Convex Neural Network (ICNN) [3]. ICNNs are scalar-valued neural networks guaranteed to be convex in their input bz (see, e.g. , [3, Proposition 1]). Thus, the map Tω induced by ψω is cyclically monotone. We henceforth refer to any such Tω as an ICNN map . Note that ICNNs represent universal approximators for convex functions [15, Theorem 1]. More precisely, any Lipschitz convex potential ψ on a compact set can be approximated to arbitrary absolute precision by an ICNN. Below we describe the exact architecture and initialization used to train ICNN maps in our experiments. 
+
+Architecture. Among existing implementations of ICNN-based Brenier maps (see, e.g. , [39, 48, 70]), we adopt the convex-potential construction proposed in [70] and adapt it to our setting. We model only the scalar potential function ψω : Rm → R, and evaluate the ICNN map Tω = ∇z ψω on the fly via automatic differentiation. With L hidden layers, ψω is defined through the recursions 
+
+y1 = σ(W z 
+
+> 0
+
+z + b0) ,yℓ+1 = σ(exp( W yℓ ) yℓ + W zℓ z + bℓ) ℓ = 1 , . . . , L − 1,ψω (z) = exp( wyL)⊤yL + 12 z⊤ diag( δ2
+
+> L
+
+) + A⊤ 
+
+> L
+
+AL
+
+ z + ( wzL)⊤z + bL,
+
+(ICNN) where the exponential function exp( ·) is applied component-wise. The full parameter vector is 
+
+ω =
+
+
+
+{W zℓ }L−1 
+
+> ℓ=0
+
+, w zL, δ L, A L, {W yℓ }L−1 
+
+> ℓ=1
+
+, w yL, {bℓ}Lℓ=0 
+
+
+
+7with W zℓ ∈ Rqℓ×m, wzL, δ L ∈ Rm, AL ∈ Rrout ×m, W yℓ ∈ Rqℓ×qℓ−1 , wyL ∈ RqL−1 , and bℓ ∈ Rqℓ ,where qℓ denotes the number of neurons in the ℓ-th layer ( qL = 1 ). By construction, ψω is convex in z for all ω. Convexity is preserved across layers through affine transformations W zℓ z + bℓ,convex non-decreasing activation functions σ (e.g. , Softplus), and elementwise positive weights connecting each layer to the next. The quadratic term in the last layer is also convex because 
+
+diag( δ2
+
+> L
+
+) + A⊤ 
+
+> L
+
+AL ⪰ 0. Thus, the induced map Tω = ∇z ψω is cyclically monotone for every ω.The original formulation proposed in [70] incorporates positive semidefinite quadratic forms from the input to every layer. However, incorporating such quadratic forms at every layer is computationally expensive. We therefore restrict the quadratic terms to the final readout layer, keeping the hidden-layer passthroughs purely affine. Our architecture’s capacity is primarily controlled by the last-layer readout rank rout . As we show in Section G.4, restricting the quadratic term to the last layer while increasing rout achieves the best robust performance and substantially reduces runtime compared with incorporating a quadratic term at every layer. Furthermore, ICNNs are notoriously difficult to train because their nonnegative weights can cause standard zero-mean initializations to propagate unstably across layers. We address this chal-lenge with a two-part initialization strategy. First, we use a principled moment-matching scheme to stabilize the variance of the forward and backward signals across depth. Second, our single-quadratic architecture allows us to initialize the overall gradient map Tω near the identity, providing an effective warm start. Finally, to maintain training stability, we use an adaptive inner step size that dynamically adjusts to the local curvature of the network. We detail these training mechanisms in Appendix E. 
+
+## 6 Experiments 
+
+We benchmark our two new methods, namely the implicit multi-start particle ascent approach (MPA) and the explicit ICNN map approach (ICNN-DRO), against the following six baselines. Empirical Risk Minimization (ERM) solves problem (ERM) using SGD. Robust Optimization (RO) solves (RO) as in [47]. Particle Ascent (PA) solves (DRO) using Algorithm 1 with R = 1 . Neural Network DRO (NN-DRO) solves (DRO) using Algorithm 2 with the explicit transport map modeled as a Multi-Layer Perceptron (MLP) [16] without enforcing cyclical monotonicity. 1 Finally, Sinkhorn DRO (SDRO) [73] and Wasserstein-Fisher-Rao DRO (WFR) [75] solve an entropy-regularized optimal transport variant of problem (DRO) (recovering (DRO) as the regularization weight vanishes) using sampling methods. The two methods differ in how they sample from the worst-case distribution, which is known to be a Gibbs distribution [73, Remark 4]. Our experiments span three domains of increasing complexity: feature-space logistic regression in § 6.1; image-space logistic regression under adversarial attacks, domain shifts, and image corruptions in § 6.2; and robust control in § 6.3. Additional results for uncertain least squares and cross-model universality are provided in § G.1 and § G.2, respectively. 
+
+6.1 Adversarial Multi-class Logistic Regression 0.00 0.02 0.04 0.06 0.08 Perturbation ∆ 13 20 30 40 50 60 Test error (%) 
+
+> ERM PA WFR SDRO MPA RO NN-DRO
+> ICNN-DRO
+
+Figure 2: Test error vs. perturbation level 
+
+∆ on multi-class logistic regression. In the first experiment, we follow the setup of [75, § 6.3] to assess the adversarial robustness of a multi-class logistic regression model trained on features extracted from the CIFAR-10 dataset [41]. Specifically, each image is mapped to a feature vector x ∈ Rm−1 with m − 1 = 512 
+
+using a frozen ResNet-50 architecture [33] pre-trained on ImageNet [19]. We then train a linear classifier on these features using the negative log-likelihood loss. For a data point z = ( x, y ), the loss is given by 
+
+f (θ, (x, y )) := −y⊤θ⊤x + log( 1⊤ exp( θ⊤x)) , where 
+
+θ = [θ1, . . . , θ C ] ∈ R(m−1) ×C comprises all model parameters, y ∈ { 0, 1}C is the one-hot label vector, and C
+
+is the number of classes. The adversary perturbs only the features x, while the labels y remain unchanged. To evaluate robustness under adversarial distribution shift, we subject the test features to an ℓ2-constrained Projected Gradient Descent (PGD) attack. We sweep the relative     
+
+> 1NN-DRO is related to [16], which models the transport map as an MLP trained indirectly via least-squares regression on adversarial samples generated by PA. In contrast, NN-DRO trains the MLP directly using Algorithm 2.
+
+8Table 1: Accuracy (%) under adversarial attacks, natural domain shifts and image corruptions. The left section reports results for the original CIFAR-10 test set (Clean, PGD, and AA), along with the Monge gap. The center columns evaluate accuracy on the unseen domains of CIFAR-10.1 and CIFAR-10.2. The right section (CIFAR-10-C) details performance across five increasing levels of corruption severity, followed by the mean accuracy across all five levels and the runtime. Bold values indicate the best results, and underlined values denote the second best.                                                                                                                          
+
+> Method CIFAR-10 CIFAR-10.1 CIFAR-10.2 CIFAR-10-C (Common Corruption) Runtime Clean PGD AA Monge Gap Clean Clean 12345Avg (s) ERM 93.12 14.76 00.20 —87.12 83.14 91.50 87.95 83.84 77.89 68.41 81.92 —PA 90.08 52.41 48.86 8.01e-4 80.27 76.16 87.11 84.35 80.21 74.62 69.74 79.20 1320 RO 90.05 53.37 50.26 8.06e-4 80.28 76.81 87.15 85.06 81.75 75.35 70.12 79.89 659
+> WFR 91.03 53.28 50.37 5.63e-3 81.24 77.09 88.60 85.34 82.93 77.56 71.09 81.10 6396 SDRO 90.00 53.12 49.61 1.37e-3 80.20 76.48 87.12 84.82 80.33 74.70 70.09 79.41 6241 NN-DRO 89.46 50.34 44.27 3.25e-3 80.01 75.71 85.90 82.23 78.55 72.20 67.42 77.26 11051 MPA 91.39 55.31 54.47 4.71e-4 82.23 78.45 89.34 87.18 84.47 80.64 74.51 83.23 3612 ICNN-DRO 91.41 58.11 57.71 1.01e-7 82.56 80.12 89.20 86.79 84.01 79.92 73.95 82.77 4037
+
+attack budget ∆ ∈ [0 , 0.08] , where the maximum perturbation radius is scaled by the average 
+
+ℓ2-norm of the test features. Under this configuration (full training hyperparameters are provided in Section F.1), Figure 2 reports the test error as a function of ∆. Both explicit map approaches perform well, with ICNN-DRO slightly outperforming NN-DRO across most perturbation budgets. At extreme perturbation levels, their test errors coincide. Under such large attack budgets, the adversary shifts probability mass so extensively that the optimal transport geometry no longer acts as a limiting factor, making the ICNN’s structural advantages less critical. The key difference emerges on clean samples ( ∆ = 0 ), where NN-DRO degrades significantly. In contrast, ICNN-DRO preserves clean accuracy. Section G.3 additionally reports the Monge gaps of the trained adversarial maps. 
+
+6.2 Robustness to Adversarial and Natural Distribution Shifts 
+
+Building on the feature-space analysis of Section 6.1, we now transition to full image-space adver-sarial training on the CIFAR-10 dataset. We train a deep neural network classifier hθ : Rm−1 → RC
+
+against perturbations injected directly into the raw pixel space ( m − 1 = 32 × 32 × 3). For a given data point z = ( x, y ), where y ∈ { 0, 1}C is the one-hot encoded ground-truth label, we optimize the network parameters θ utilizing the multi-class cross-entropy loss. We formulate this objective as f (θ, (x, y )) := −y⊤hθ (x) + log( 1⊤ exp( hθ (x))) . As in the previous experiment, the adversary exclusively perturbs the covariates x while the labels y remain fixed. We subject the trained models to a comprehensive evaluation spanning worst-case adversarial attacks, image corruptions, and natural domain shifts to assess their generalizability, and additionally report each map’s empirical Monge gap and training runtime (implementation details in Section F.2). 
+
+Robustness to adversarial attacks. We evaluate on CIFAR-10 under ℓ2 attacks with ε=0 .5
+
+(standard budget [17, 18]) using PGD and AutoAttack (AA) [17]. AA is a suite of diverse attacks designed to expose the gradient obfuscation failure mode [5], in which a model appears robust to PGD only because its gradients are uninformative. The left block of Table 1 reports the results. ICNN-DRO preserves clean accuracy at 91 .41% (within 1.71% of ERM) and attains 58 .11% against PGD and 57 .71% against AA, substantially outperforming PA and WFR. Crucially, the PGD–AA gap is only 0.4% for ICNN-DRO compared to 3.55% for PA. This tight agreement certifies that the robustness gain reflects genuine geometric regularity induced by the Brenier-structured map, rather than an artifact of gradient masking [5] (see Section F.2). 
+
+Robustness to unseen domains. CIFAR-10.1 [55] and CIFAR-10.2 [46] provide independent, natural covariate-shift benchmarks free of algorithmic corruption. Table 1 shows that ICNN-DRO achieves 82 .56% on CIFAR-10.1 and 80 .12% on CIFAR-10.2. Our MPA follows very closely behind at 82 .23% and 78 .45% , respectively. Both of our proposed methods consistently outperform the full suite of established robust baselines. Because these datasets were unseen during training, these gains demonstrate genuine generalization rather than overfitting to specific shift patterns. 
+
+Robustness to image corruptions. We evaluate on CIFAR-10-C [35], which features 15 algorithmic corruptions ( e.g. , noise, blur, weather effects) at five severity levels. As shown in Table 1, ICNN-DRO attains 82 .77% average accuracy, outperforming PA ( 79 .20% ) and WFR ( 81 .10% ). Notably, it 9exceeds ERM ( 81 .92% ), showing that robustification via a global transport map improves resilience to corruptions without sacrificing in-distribution accuracy. The gap widens at the highest severity (level 5), where ICNN-DRO reaches 73 .95% against 69 .74% for PA. 
+
+Monge gap and cost. ICNN-DRO attains a Monge gap of 1.01e -7, nearly four orders of magnitude below every baseline, since it is cyclically monotone by construction, while reassignment alone lowers PA’s gap by 38% . The two smallest gaps belong to the two most robust methods, as predicted by Proposition 3.2. Enforcing cyclical monotonicity is also inexpensive: ICNN-DRO trains in 4,037 s, faster than every other DRO baseline while surpassing all of them on every robustness metric, and only the first-order RO is faster, at a cost of 7.45 AA points. 
+
+6.3 Robust Control Original Light Long Soft Gravity Heavy Short Strong Gravity 
+
+> ERM PA RO WFR SDRO NN-DRO MPA ICNN-DRO
+> 200 600 1000
+
+Figure 3: Mean episode length for λ=1 .We evaluate our methods on the cart-pole control task, where the goal is to balance a pole on a cart by applying horizontal actuation. We have parametric physical uncertainty over the pole mass and length, denoted by z =(mp, ℓ ) ∈ Z ⊆ R2, where Z = [0 .05 , 0.2] × [0 .25 , 0.75] ,and draw the training samples uniformly from Z. At any time step t, the agent observes a state st ∈ S ⊆ R4, captur-ing the system’s position, linear velocity, angle, and angu-lar velocity, and samples an action at ∈ A = {0, 1} (cor-responding to a left or right impulse) from a parameterized policy πθ (at | st). The environment then evolves accord-ing to known physical dynamics st+1 = F (st, a t, z ) [27]. We define the loss function as the negative expected re-ward f (θ, z ) := −Eπθ [PH−1 
+
+> t=0
+
+r(st, a t)] over trajectories generated by the dynamics parameterized by z. The adversary perturbs the nominal uncertainty distribution under the regularization parameter λ = 1 . We optimize 
+
+θ using proximal policy optimization (PPO) [59]. We evaluate each policy over 1,000 deterministic rollouts, each with maximum horizon H = 1 ,000 ,and report the mean episode length across these trials in Figure 3. The figure reports mean episode lengths only; a more detailed table including standard errors, together with a sensitivity analysis over 
+
+λ ∈ { 0.1, 0.5} and additional training details, is provided in Section F.3. The evaluation grid spans three categories to test both interpolation and extrapolation. The original configuration captures the nominal physics at the center of the training box. The evaluation also includes Easier Environments (Light, Long, Soft Gravity) and Harder Environments (Heavy, Short, Strong Gravity). Crucially, the harder variants lie outside the training uncertainty box, so they probe extrapolation rather than interpolation of the learned robustness. As shown in Figure 3, ICNN-DRO achieves the best episode length on every variant, with especially large gains on the extrapolative Heavy, Short, and Strong gravity shifts. MPA is the consistent runner-up and substantially improves over PA, while WFR is the strongest of the remaining baselines but degrades more noticeably on the harder variants. These results suggest that improving the transport geometry in the inner maximization already yields a substantial benefit, and that learning a single global Brenier-structured adversarial map provides an additional robustness gain beyond batch-wise reassignment alone. 
+
+## 7 Conclusions 
+
+We studied regularized Wasserstein DRO through the geometry of optimal transport and showed that cyclical monotonicity is the key structural property missing from standard per-sample adversarial training. This yields two remedies: MPA, which restores the transport structure implicitly through ascent and reassignment, and ICNN-based adversaries, which enforce it explicitly by parameterizing a Brenier map. Across regression, adversarial training, and robust control, both approaches improve robustness and out-of-distribution generalization over standard baselines. 
+
+Limitations. The main limitation is computational cost. MPA requires an O(B2) reassignment step per round, while the ICNN adversary introduces an auxiliary network, making each training iteration more expensive than standard single-step adversarial updates [32]. However, this increased cost is offset by significant robustness benefits. 10 Acknowledgments This work was supported as a part of NCCR Automation, a National Centre of Competence in Research, funded by the Swiss National Science Foundation (grant number 51NF40 225155). We thank Yves Rychener for insightful discussions in the early stages of this work. 
+
+## References 
+
+[1] Pierre-Antoine Absil, Robert Mahony, and Ben Andrews. Convergence of the iterates of descent methods for analytic cost functions. SIAM Journal on Optimization , 16(2):531–547, 2005. [2] Luigi Ambrosio, Nicola Gigli, and Giuseppe Savar´ e. Gradient Flows: In Metric Spaces and in the Space of Probability Measures . Springer, 2005. [3] Brandon Amos, Lei Xu, and J Zico Kolter. Input convex neural networks. In International Conference on Machine Learning , pages 146–155, 2017. [4] Larry Armijo. Minimization of functions having Lipschitz continuous first partial derivatives. 
+
+Pacific Journal of Mathematics , 16(1):1–3, 1966. [5] Anish Athalye, Nicholas Carlini, and David Wagner. Obfuscated gradients give a false sense of security: Circumventing defenses to adversarial examples. In International Conference on Machine Learning , pages 274–283, 2018. [6] Sheldon Axler. Measure, Integration & Real Analysis . Springer, 2020. [7] Andrew G Barto, Richard S Sutton, and Charles W Anderson. Neuronlike adaptive elements that can solve difficult learning control problems. IEEE Transactions on Systems, Man, and Cybernetics , 13(5):834–846, 1983. [8] Yoshua Bengio, Nicholas L´ eonard, and Aaron Courville. Estimating or propagating gradients through stochastic neurons for conditional computation. arXiv:1308.3432 , 2013. [9] Dimitri Bertsekas. Convex Optimization Algorithms . Athena Scientific, 2015. [10] Jose Blanchet and Karthyek Murthy. Quantifying distributional model risk via optimal transport. 
+
+Mathematics of Operations Research , 44(2):565–600, 2019. [11] Jose H. Blanchet and Peter W. Glynn. Unbiased Monte Carlo for optimization and functions of expectations via multi-level randomization. In Winter Simulation Conference , pages 3656–3667, 2015. [12] Yann Brenier. Polar factorization and monotone rearrangement of vector-valued functions. 
+
+Communications on Pure and Applied Mathematics , 44(4):375–417, 1991. [13] Charlotte Bunne, Andreas Krause, and Marco Cuturi. Supervised training of conditional Monge maps. In Advances in Neural Information Processing Systems , pages 6859–6872, 2022. [14] Nicholas Carlini and David Wagner. Towards evaluating the robustness of neural networks. In 
+
+IEEE Symposium on Security and Privacy , pages 39–57, 2017. [15] Yize Chen, Yuanyuan Shi, and Baosen Zhang. Optimal control via neural networks: A convex approach. In International Conference on Learning Representations , 2019. [16] Xiuyuan Cheng, Yao Xie, Linglingzhi Zhu, and Yunqin Zhu. Worst-case generation via minimax optimization in Wasserstein space. arXiv:2512.08176 , 2025. [17] Francesco Croce and Matthias Hein. Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks. In International Conference on Machine Learning ,pages 2206–2216, 2020. [18] Francesco Croce, Maksym Andriushchenko, Vikash Sehwag, Edoardo Debenedetti, Nicolas Flammarion, Mung Chiang, Prateek Mittal, and Matthias Hein. RobustBench: A standardized adversarial robustness benchmark. In Neural Information Processing Systems Datasets and Benchmarks Track , 2021. 11 [19] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. Imagenet: A large-scale hierarchical image database. In IEEE Conference on Computer Vision and Pattern Recognition ,pages 248–255, 2009. [20] Junhao Dong, Seyed-Mohsen Moosavi-Dezfooli, Jianhuang Lai, and Xiaohua Xie. The enemy of my enemy is my friend: Exploring inverse adversaries for improving adversarial training. In 
+
+IEEE Conference on Computer Vision and Pattern Recognition , pages 24678–24687, 2023. [21] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is worth 16x16 words: Transformers for image recognition at scale. In International Conference on Learning Representations , 2021. [22] John C Duchi and Hongseok Namkoong. Learning models with uniform performance via distributionally robust optimization. Annals of Statistics , 49(3):1378–1406, 2021. [23] Laurent El Ghaoui and Herv´ e Lebret. Robust solutions to least-squares problems with uncertain data. SIAM Journal on Matrix Analysis and Applications , 18(4):1035–1064, 1997. [24] Logan Engstrom, Brandon Tran, Dimitris Tsipras, Ludwig Schmidt, and Aleksander Madry. Exploring the landscape of spatial robustness. In International Conference on Machine Learning ,pages 1802–1811, 2019. [25] Jean Feydy, Thibault S´ ejourn´ e, Franc ¸ois-Xavier Vialard, Shun-ichi Amari, Alain Trouv´ e, and Gabriel Peyr´ e. Interpolating between optimal transport and MMD using Sinkhorn divergences. In International Conference on Artificial Intelligence and Statistics , pages 2681–2690, 2019. [26] Alessio Figalli and Federico Glaudo. An Invitation to Optimal Transport, Wasserstein Distances, and Gradient Flows . EMS Press Berlin, 2021. [27] C. Daniel Freeman, Erik Frey, Anton Raichuk, Sertan Girgin, Igor Mordatch, and Olivier Bachem. Brax - A differentiable physics engine for large scale rigid body simulation. In Neural Information Processing Systems Datasets and Benchmarks Track (Round 1) , 2021. [28] A. M. Gabrielov. Projections of semi-analytic sets. Functional Analysis and its Applications , 2 (4):282–291, 1968. [29] Rui Gao, Xi Chen, and Anton J Kleywegt. Wasserstein distributionally robust optimization and variation regularization. Operations Research , 72(3):1177–1191, 2024. [30] Xavier Glorot and Yoshua Bengio. Understanding the difficulty of training deep feedforward neural networks. In International Conference on Artificial Intelligence and Statistics , pages 249–256, 2010. [31] Ian J Goodfellow, Jean Pouget-Abadie, Mehdi Mirza, Bing Xu, David Warde-Farley, Sherjil Ozair, Aaron Courville, and Yoshua Bengio. Generative adversarial nets. In Advances in Neural Information Processing Systems , pages 2672–2680, 2014. [32] Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversar-ial examples. In International Conference on Learning Representations , 2015. [33] Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In IEEE Conference on Computer Vision and Pattern Recognition , pages 770–778, 2016. [34] Nicolas Heess, Gregory Wayne, David Silver, Timothy Lillicrap, Yuval Tassa, and Tom Erez. Learning continuous control policies by stochastic value gradients. In Advances in Neural Information Processing Systems , pages 2944–2952, 2015. [35] Dan Hendrycks and Thomas Dietterich. Benchmarking neural network robustness to common corruptions and perturbations. In International Conference on Learning Representations , 2019. [36] Pieter-Jan Hoedt and G¨ unter Klambauer. Principled weight initialisation for input-convex neural networks. In Advances in Neural Information Processing Systems , pages 46093–46104, 2023. 12 [37] Yuanming Hu, Luke Anderson, Tzu-Mao Li, Qi Sun, Nathan Carr, Jonathan Ragan-Kelley, and Fr´ edo Durand. DiffTaichi: Differentiable programming for physical simulation. In International Conference on Learning Representations , 2020. [38] Alexander Korotin, Vage Egiazarian, Arip Asadulaev, Alexander Safin, and Evgeny Burnaev. Wasserstein-2 generative networks. arXiv:1909.13082 , 2019. [39] Alexander Korotin, Lingxiao Li, Aude Genevay, Justin M Solomon, Alexander Filippov, and Evgeny Burnaev. Do neural optimal transport solvers work? A continuous Wasserstein-2 benchmark. In Advances in Neural Information Processing Systems , volume 34, pages 14593– 14605, 2021. [40] Steven G Krantz and Harold R Parks. A Primer of Real Analytic Functions . Springer Science & Business Media, 2002. [41] Alex Krizhevsky and Geoffrey Hinton. Learning multiple layers of features from tiny images. Technical report, University of Toronto, 2009. [42] Alex Krizhevsky, Ilya Sutskever, and Geoffrey E Hinton. Imagenet classification with deep convolutional neural networks. In Advances in Neural Information Processing Systems , pages 1097–1105, 2012. [43] Daniel Kuhn, Peyman Mohajerin Esfahani, Viet Anh Nguyen, and Soroosh Shafieezadeh-Abadeh. Wasserstein distributionally robust optimization: Theory and applications in machine learning. INFORMS TutORials in Operations Research , pages 130–166, 2019. [44] Daniel Kuhn, Soroosh Shafiee, and Wolfram Wiesemann. Distributionally robust optimization. 
+
+Acta Numerica , 34:579–804, 2025. [45] Alexey Kurakin, Ian J. Goodfellow, and Samy Bengio. Adversarial machine learning at scale. In International Conference on Learning Representations , 2017. [46] Shangyun Lu, Bradley Nott, Aaron Olson, Alberto Todeschini, Hossein Vahabi, Yair Carmon, and Ludwig Schmidt. Harder or different? A closer look at distribution shift in dataset reproduction. In ICML Workshop on Uncertainty and Robustness in Deep Learning , page 15, 2020. [47] Aleksander Madry, Aleksandar Makelov, Ludwig Schmidt, Dimitris Tsipras, and Adrian Vladu. Towards deep learning models resistant to adversarial attacks. In International Conference on Learning Representations , 2018. [48] Ashok Makkuva, Amirhossein Taghvaei, Sewoong Oh, and Jason Lee. Optimal transport mapping via input convex neural networks. In International Conference on Machine Learning ,pages 6672–6681, 2020. [49] Luke Metz, C. Daniel Freeman, Samuel S. Schoenholz, and Tal Kachman. Gradients are not all you need. arXiv:2111.05803 , 2021. [50] Peyman Mohajerin Esfahani and Daniel Kuhn. Data-driven distributionally robust optimization using the Wasserstein metric: Performance guarantees and tractable reformulations. Mathemati-cal Programming , 171(1):115–166, 2018. [51] Shakir Mohamed, Mihaela Rosca, Michael Figurnov, and Andriy Mnih. Monte Carlo gradient estimation in machine learning. Journal of Machine Learning Research , 21(132):1–62, 2020. [52] Yurii Nesterov. A method for solving the convex programming problem with convergence rate 
+
+O(1 /k 2). Proceedings of the USSR Academy of Sciences , 269:543–547, 1983. [53] Anh Nguyen, Jason Yosinski, and Jeff Clune. Deep neural networks are easily fooled: High confidence predictions for unrecognizable images. In IEEE Conference on Computer Vision and Pattern Recognition , pages 427–436, 2015. [54] Rahul Rade and Seyed-Mohsen Moosavi-Dezfooli. Reducing excessive margin to achieve a bet-ter accuracy vs. robustness trade-off. In International Conference on Learning Representations ,2022. 13 [55] Benjamin Recht, Rebecca Roelofs, Ludwig Schmidt, and Vaishaal Shankar. Do ImageNet classifiers generalize to ImageNet? In International Conference on Machine Learning , pages 5389–5400, 2019. [56] Gareth O Roberts and Richard L Tweedie. Exponential convergence of Langevin distributions and their discrete approximations. Bernoulli , 2(4):341–363, 1996. [57] R Tyrrell Rockafellar and Roger JB Wets. Variational Analysis . Springer, 2009. [58] Filippo Santambrogio. Optimal Transport for Applied Mathematicians: Calculus of Variations, PDEs, and Modeling . Progress in Nonlinear Differential Equations and Their Applications. Birkh¨ auser, 2015. [59] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization algorithms. arXiv:1707.06347 , 2017. [60] Aman Sinha, Hongseok Namkoong, Riccardo Volpi, and John Duchi. Certifying some distribu-tional robustness with principled adversarial training. In International Conference on Learning Representations , 2018. [61] Sarath Sivaprasad, Ankur Singh, Naresh Manwani, and Vineet Gandhi. The curious case of convex neural networks. In Machine Learning and Knowledge Discovery in Databases. Research Track , pages 738–754, 2021. [62] Leslie N. Smith and Nicholay Topin. Super-convergence: Very fast training of neural networks using large learning rates. In Artificial Intelligence and Machine Learning for Multi-Domain Operations Applications , page 1100612, 2019. [63] H. J. Terry Suh, Max Simchowitz, Kaiqing Zhang, and Russ Tedrake. Do differentiable simulators give better policy gradients? In International Conference on Machine Learning ,pages 20668–20696, 2022. [64] Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan, Ian Good-fellow, and Rob Fergus. Intriguing properties of neural networks. In International Conference on Learning Representations , 2014. [65] Conghui Tan, Shiqian Ma, Yu-Hong Dai, and Yuqiu Qian. Barzilai-Borwein step size for stochastic gradient descent. In Advances in Neural Information Processing Systems , pages 685–693, 2016. [66] Rohan Taori, Achal Dave, Vaishaal Shankar, Nicholas Carlini, Benjamin Recht, and Ludwig Schmidt. Measuring robustness to natural distribution shifts in image classification. In Advances in Neural Information Processing Systems , pages 18583–18599, 2020. [67] Florian Tram` er and Dan Boneh. Adversarial training and robustness for multiple perturbations. In Advances in Neural Information Processing Systems , pages 5866–5876, 2019. [68] Th´ eo Uscidda and Marco Cuturi. The Monge gap: A regularizer to learn all transport maps. In 
+
+International Conference on Machine Learning , pages 34709–34733, 2023. [69] Roman Vershynin. High-Dimensional Probability: An Introduction with Applications in Data Science . Cambridge University Press, 2018. [70] Nina Vesseron and Marco Cuturi. On a neural implementation of Brenier’s polar factorization. In International Conference on Machine Learning , pages 49434–49454, 2024. [71] C´ edric Villani. Topics in Optimal Transportation , volume 58. American Mathematical Society, 2003. [72] Aladin Virmaux and Kevin Scaman. Lipschitz regularity of deep neural networks: Analysis and efficient estimation. In Advances in Neural Information Processing Systems , pages 3839–3848, 2018. [73] Jie Wang, Rui Gao, and Yao Xie. Sinkhorn distributionally robust optimization. Operations Research , 74(3):1581–1603, 2026. 14 [74] Chen Xu, Jonghyeok Lee, Xiuyuan Cheng, and Yao Xie. Flow-based distributionally robust optimization. IEEE Journal on Selected Areas in Information Theory , 5:62–77, 2024. [75] Zusen Xu and Jia-Jie Zhu. Gradient flow sampler-based distributionally robust optimization. 
+
+arXiv:2510.25956 , 2025. [76] Haoxiang You, Yilang Liu, and Ian Abraham. Accelerating visual-policy learning through parallel differentiable simulation. In Advances in Neural Information Processing Systems , 2025. [77] Hongyang Zhang, Yaodong Yu, Jiantao Jiao, Eric Xing, Laurent El Ghaoui, and Michael Jordan. Theoretically principled trade-off between robustness and accuracy. In International Conference on Machine Learning , pages 7472–7482, 2019. [78] Luhao Zhang, Jincheng Yang, and Rui Gao. A Short and General Duality Proof for Wasserstein Distributionally Robust Optimization. Operations Research , 73(4):1723–2295, 2024. [79] Jia-Jie Zhu, Wittawat Jitkrittum, Moritz Diehl, and Bernhard Sch¨ olkopf. Kernel distributionally robust optimization: Generalized duality theorem and stochastic approximation. In International Conference on Artificial Intelligence and Statistics , pages 280–288, 2021. 15 Appendix 
+
+## Contents 
+
+A Related Work 16 B Technical Background Results 17 C Proofs 20 D Properties of MPA 22 
+
+D.1 Finite-time Termination of MPA . . . . . . . . . . . . . . . . . . . . . . . . . . . 22 D.2 Global Optimality Guarantees for MPA . . . . . . . . . . . . . . . . . . . . . . . 25 D.3 An Illustrative Example where PA Stalls and MPA Progresses . . . . . . . . . . . . 30 
+
+E ICNN Training Details 31 
+
+E.1 Adaptive Inner Step Size Selection . . . . . . . . . . . . . . . . . . . . . . . . . . 32 
+
+F Supplementary Details for Section 6 33 
+
+F.1 Supplementary Details for Section 6.1 . . . . . . . . . . . . . . . . . . . . . . . . 34 F.2 Supplementary Details for Section 6.2 . . . . . . . . . . . . . . . . . . . . . . . . 34 F.3 Supplementary Details for Section 6.3 . . . . . . . . . . . . . . . . . . . . . . . . 35 
+
+G Additional Experiments 39 
+
+G.1 Robust Least Squares . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 39 G.2 Cross-Model Universality . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 40 G.3 An Empirical Monge Gap . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . 41 G.4 Design Axes of the ICNN Adversary . . . . . . . . . . . . . . . . . . . . . . . . . 42 G.5 Penalty Annealing for the Global Map . . . . . . . . . . . . . . . . . . . . . . . . 43 
+
+## A Related Work 
+
+The literature most closely related to our work falls naturally into three groups. 
+
+Optimal transport and ICNNs. For any P, bP ∈ P , one can use Kantorovich duality to show that 
+
+12 W2(P, bP) = 12 EbP
+
+∥ bZ∥22
+
+ + 12 EP
+
+∥Z∥22
+
+ − min  
+
+> ψconvex
+
+n
+
+EbP
+
+ψ( bZ) + EP
+
+ψ∗(Z)o
+
+, (6) where ψ∗ denotes the convex conjugate of ψ. The minimum in (6) is always attained. Moreover, if bP
+
+is absolutely continuous with respect to Lebesgue measure, then for every minimizer ψ, ∇ψ coincides 
+
+bP-almost everywhere with the unique Brenier map from bP to P [12]. These observations underlie a rich line of work that parameterizes the convex potential ψ using an ICNN [3] and optimizes its parameters, with the conjugate ψ∗ evaluated through an inner maximization [13, 38, 39, 48, 70]. Our methods in Section 5 differ from the ICNN-based solution methods for optimal transport problems in several important respects. (i) The target distribution P is not fixed as it solves the inner problem in (DRO) and hence varies with θ. (ii) Our reference distribution bP is not required to be absolutely continuous (such as a discrete empirical distribution), and thus Brenier’s theorem 16 does not apply. (iii) Our problem (2) is nonconvex in T and thus also in the potential ψ, in contrast to the minimization problem in (6). We show that restricting the adversary to gradients of convex potentials acts as a structural safeguard against selecting poor local optima—a role absent in the context of solving classical optimal transport problems. (iv) We use ICNNs directly to solve a primal optimization problem over transport maps (see (2)) instead of a dual problem over potential functions. (v) For the optimal transport problem underlying (6), cyclical monotonicity of a map is both necessary and sufficient for optimality [71, Theorem 2.12], whereas in our setting it is only necessary. 
+
+Adversarial training with DRO. For adversarial training based on problem (DRO), the closest approach to ours is [60], which evaluates the adversarial risk by running independent gradient ascent from each training sample. Other approaches quantify the mismatch between the nominal and target distributions using an entropic optimal transport discrepancy. In this setting, the worst-case distribution is a Gibbs measure [73], allowing the adversarial risk to be evaluated by sampling from this measure. An alternative particle-based flow for sampling from the Gibbs measure is proposed in [75]. In all of these approaches, however, adversarial samples are generated independently for each training sample, without enforcing cyclical monotonicity. MPA takes a fundamentally different approach in that it reassigns particles across the batch to enforce this structural property. 
+
+Adversarial transport maps. The idea of recasting the adversary’s problem as an optimization prob-lem over transport maps was first explored in [16, 60, 74]. When bP admits a density, [16, 74] justify this formulation via Brenier’s theorem for Monge’s optimal transport problem. In [74], the optimal adversarial map is constructed by training and composing a sequence of neural networks that push the nominal distribution forward to the worst-case distribution. In [16], by contrast, the transport map is represented by a single neural network trained via least-squares regression on adversarial samples generated by particle ascent [60]. Both approaches model the adversarial map using an unconstrained 
+
+neural network and require bP to admit a density. We instead constrain the map to be the gradient of an ICNN, making it cyclically monotone by construction, while imposing no density assumption that would exclude an empirical nominal distribution. Moreover, none of these prior works recognize that enforcing cyclical monotonicity can steer the adversarial map away from local maxima, thereby im-proving the quality of the adversarial samples and, ultimately, the effectiveness of adversarial training. 
+
+## B Technical Background Results 
+
+Blanket assumptions. Throughout Appendix B, we fix θ ∈ Θ and λ > 0, and we assume that 
+
+f (θ, z ) is Lz -Lipschitz continuous in z. We use P0(Rm) to denote the family of all Borel probability measures on Rm, which contains the family P(Rm) of all Borel probability measures with finite second moments as a subset. Furthermore, we fix an arbitrary reference measure bP ∈ P (Rm).In the remainder of this section, we show that the adversarial map T ⋆ is well-defined and that the maximum in the definition of F (θ) is attained by T ⋆ 
+
+> #
+
+bP, which is guaranteed to have finite second moments. The main text defines F (θ) as a maximum over P(Rm), which presupposes the existence of a maximizer therein. As establishing this is the goal of the present appendix, we initially replace the maximum with a supremum and reintroduce the maximum only once attainment is shown. 
+
+Proposition B.1 (Measurability and well-definedness of T ⋆). The set-valued mapping S(bz) in (3) is non-empty and closed-valued for all bz ∈ Rm. Furthermore, there exists a Borel-measurable map 
+
+T ⋆ : Rm → Rm such that T ⋆(bz) ∈ S(bz) for all bz ∈ Rm.Proof. Define g(bz, z ) := f (θ, z ) − λ∥z − bz∥22 to simplify notation. Since f (θ, z ) is Lipschitz contin-uous in z, the quadratic penalty dominates as ∥z∥2 → ∞ , and thus the continuous function −g(bz, z )
+
+is coercive in z. Therefore, g(bz, z ) attains its maximum over z, which in turn implies that the set of maximizers S(bz) is non-empty and closed for every bz ∈ Rm. To establish the measurability of the set-valued mapping S(bz), note first that g(bz, z ) is continuous throughout Rm × Rm. This implies via [57, Examples 14.15 & 14.29] that g(bz, z ) is a normal integrand. By [57, Theorem 14.37], the argmax mapping S(bz) = arg max z∈Rm g(bz, z ) thus constitutes a Borel-measurable set-valued mapping. We can therefore invoke [57, Corollary 14.6] to conclude that S admits a measurable selection. That is, there exists a Borel-measurable function T ⋆ : Rm → Rm with T ⋆(bz) ∈ S(bz) for all bz ∈ Rm.17 We now show that the adversarial risk F (θ) can be expressed as in (1). This reformulation is reminiscent of duality results in Wasserstein DRO (see, e.g. , [10, 50, 78]) and appeared first in [60, Proposition 1]. We provide a short alternative proof to keep this paper self-contained. 
+
+Proposition B.2 (Adversarial risk) . The adversarial risk satisfies (1) , the measure P⋆:= T ⋆ 
+
+> #
+
+bP solves the inner maximization problem in (DRO) , and γ⋆:=( T ⋆, id) # bP is an optimal coupling of bP and P⋆.Proof. By rewriting the squared Wasserstein distance appearing in the definition of F (θ) as an optimal transport problem over couplings γ, and by eliminating the candidate measure P through its representation as the first marginal of γ, we obtain 
+
+F (θ) = sup 
+
+> γ∈P (Rm×Rm)(π2)#γ=bP
+
+Z
+
+> Rm×Rm
+
+
+
+f (θ, z ) − λ∥z − bz∥22
+
+
+
+dγ(z, bz). (7) Note that the constraint P ∈ P (Rm) in the definition of F (θ), which requires P to have finite second moments, translates to the requirement γ ∈ P (Rm × Rm) in (7), which requires the coupling γ to have finite second moments. Indeed, whenever bP has finite second moments, P has finite second moments if and only if every coupling of P and bP does. This follows from the relation 
+
+Eγ
+
+h
+
+∥(Z, bZ)∥22
+
+i
+
+= E(π1)#γ
+
+∥Z∥22
+
+ + EbP
+
+h
+
+∥ bZ∥22
+
+i
+
+,
+
+where π1 : Rm × Rm → Rm is the coordinate projection defined by π1(z, bz) = z. Next, we show that couplings with infinite second moments are strictly suboptimal in (7) and that P(Rm × Rm) can be relaxed to P0(Rm × Rm). To this end, we first prove that the optimal value of (7) is finite. We can start by bounding the integrand in (7). As f (θ, z ) is Lz -Lipschitz continuous in z, we have 
+
+f (θ, z ) − λ∥z − bz∥22 ≤ f (θ, bz) + Lz ∥z − bz∥2 − λ∥z − bz∥22
+
+= f (θ, bz) + L2
+
+> z
+
+4λ − λ
+
+
+
+∥z − bz∥2 − Lz
+
+2λ
+
+2
+
+for all z, bz ∈ Rm. Using the elementary inequality (a − b)2 ≥ 12 a2 − b2 for any a, b ∈ R, we can further loosen this bound to isolate the quadratic transport cost. We thus obtain 
+
+f (θ, z ) − λ∥z − bz∥22 ≤ f (θ, bz) + L2
+
+> z
+
+2λ − λ
+
+2 ∥z − bz∥22
+
+≤ f (θ, 0) + Lz ∥bz∥2 + L2
+
+> z
+
+2λ − λ
+
+2 ∥z − bz∥22.
+
+Integrating both sides with respect to γ and recalling that the second marginal of γ equals bP yields 
+
+Z  f (θ, z ) − λ∥z − bz∥22
+
+ dγ(z, bz) ≤ f (θ, 0) + L2
+
+> z
+
+2λ + Lz EbP
+
+∥ bZ∥2
+
+ − λ
+
+2
+
+Z
+
+∥z − bz∥22 dγ(z, bz) (8a) 
+
+≤ f (θ, 0) + L2
+
+> z
+
+2λ + Lz EbP
+
+∥ bZ∥2
+
+. (8b) As bP has finite second moments, the inequality (8b) shows that the integral is bounded above by a finite constant uniformly across all couplings γ. Thus, we find F (θ) < ∞. Conversely, the trivial coupling γ = (id , id) # bP is feasible in (7) and attains the finite objective value EbP[f (θ, bZ)] .Consequently, we have F (θ) > −∞ . In summary, we may conclude that F (θ) is indeed finite. By (8a), the objective function in (7) evaluates to −∞ for any coupling γ with infinite transport cost. Moreover, γ has infinite transport cost if and only if it has infinite second moments because 
+
+Z 12 ∥z − bz∥22 dγ(z, bz) ≤
+
+Z  ∥z∥22 + ∥bz∥22
+
+ dγ(z, bz) ≤
+
+Z  2∥z − bz∥22 + 4 ∥bz∥22
+
+ dγ(z, bz).
+
+We may therefore relax P(Rm × Rm) to P0(Rm × Rm) without increasing the supremum in (7). 18 Next, we can decompose any feasible coupling γ ∈ P 0(Rm ×Rm) with respect to its second marginal. Indeed, by the disintegration theorem on Polish spaces [2, Theorem 5.3.1], γ decomposes as 
+
+γ(d z, dbz) = νbz (d z) ⊗ bP(d bz) (9) for a bP-a.e. uniquely defined Borel family (νbz )bz∈Rm ⊆ P 0(Rm). Conversely, any such family defines a feasible γ via (9). Substituting (9) into the exact relaxation of (7) derived above and applying the Fubini-Tonelli theorem, which is justified in view of (8b), we obtain 
+
+F (θ) = sup  
+
+> (νbz)
+
+Z
+
+> Rm
+
+Z 
+
+> Rm
+
+ f (θ, z ) − λ∥z − bz∥22
+
+ dνbz (z)
+
+
+
+dbP(bz).
+
+For each fixed bz, the inner integral admits the upper bound 
+
+Z
+
+> Rm
+
+ f (θ, z ) − λ∥z − bz∥22
+
+ dνbz (z) ≤ max 
+
+> z∈Rm
+
+f (θ, z ) − λ∥z − bz∥22 ,
+
+where equality holds whenever νbz is supported on S(bz) defined in (3). Note that the right-hand side of the above inequality is a pointwise maximum of continuous functions and thus Borel-measurable. By Proposition B.1, there exists a Borel selector T ⋆ such that T ⋆(bz) is optimal on the right-hand side for every bz ∈ Rm. Clearly, the choice ν⋆ 
+
+> bz
+
+:= δT ⋆(bz) defines a feasible disintegration. Thus, we find 
+
+F (θ) = EbP
+
+h
+
+max 
+
+> z∈Rm
+
+f (θ, z ) − λ∥z − bZ∥22
+
+i
+
+,
+
+which establishes (1). This shows that γ⋆ := (id , T ⋆)# bP solves (7) and that P⋆ = ( π1)#γ⋆ = T ⋆ 
+
+> #
+
+bP
+
+solves the inner maximization problem in (DRO). We emphasize that P⋆ ∈ P (Rm) has finite second moments for otherwise γ⋆ would have infinite second moments and an objective value of −∞ , thus contradicting its optimality. It remains to be shown that γ⋆ is an optimal coupling between P⋆ and bP.Suppose for contradiction that there is eγ ∈ Γ( P⋆, bP) with 
+
+Z
+
+> Rm×Rm
+
+∥z − bz∥22 deγ(z, bz) <
+
+Z
+
+> Rm×Rm
+
+∥z − bz∥22 dγ⋆(z, bz).
+
+Since eγ and γ⋆ share the first marginal P⋆, they yield identical loss integrals, that is, 
+
+Z
+
+f (θ, z ) d eγ(z, bz) = 
+
+Z
+
+f (θ, z ) d γ⋆(z, bz) = EP⋆ [f (θ, Z )] .
+
+Consequently, we find 
+
+Z  f (θ, z ) − λ∥z − bz∥22
+
+ deγ(z, bz) >
+
+Z  f (θ, z ) − λ∥z − bz∥22
+
+ dγ⋆(z, bz) = F (θ),
+
+which contradicts (7). We may thus conclude that 
+
+W2(P⋆, bP) = 
+
+Z
+
+> Rm×Rm
+
+∥z − bz∥22 dγ⋆(z, bz) = EbP
+
+∥T ⋆( bZ) − bZ∥22
+
+,
+
+which confirms that γ⋆ is indeed an optimal coupling between P⋆ and bP.The proof of Proposition B.2 shows that F (θ) is guaranteed to be finite. 
+
+Remark B.1 (Empirical measure) . When bP = 1
+
+> N
+
+PNi=1 δbzi is the empirical measure corresponding to the training samples bz1, . . . , bzN ∈ Rm, the disintegration (9) reduces to the elementary decomposition 
+
+γ(d z, dbz) = 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+νi(d z) ⊗ δbzi (d bz) with νi ∈ P 0(Rm) ∀i ∈ [N ],
+
+in which case no measurable selection is required. Specifically, it suffices to pick a maximizer 
+
+z⋆i ∈ arg max 
+
+> z∈Rm
+
+f (θ, z ) − λ∥z − bzi∥22
+
+for each i ∈ [N ]. Proposition B.2 then reduces to the simpler statement 
+
+sup 
+
+> P∈P (Rm)
+
+n
+
+EP[f (θ, Z )] − λ W2(P, bP)
+
+o
+
+= 1
+
+N
+
+> N
+
+X
+
+> i=1
+
+sup 
+
+> z∈Rm
+
+f (θ, z ) − λ∥z − bzi∥22 ,
+
+and an optimizer of the inner maximization problem in (DRO) is given by P⋆ = 1
+
+> N
+
+PNi=1 δz⋆i .19 C Proofs 
+
+Proof of Proposition 3.1. We first show that gt is an ε(θt, T t)-subgradient of F at θt. As f (θ, z ) is convex in θ, we may use the first-order condition of convexity to obtain 
+
+f (θ, T t(bz)) − λ∥Tt(bz) − bz∥22 ≥ f (θt, T t(bz)) − λ∥Tt(bz) − bz∥22 + ⟨∇ θ f (θt, T t(bz)) , θ − θt⟩
+
+for any fixed θ ∈ Θ and all bz ∈ Rm. Taking expectations with respect to bP on both sides implies that 
+
+EbP
+
+f (θ, T t( bZ)) − λ∥Tt( bZ) − bZ∥22
+
+ ≥ EbP
+
+f (θt, T t( bZ)) − λ∥Tt( bZ) − bZ∥22
+
+ + ⟨gt, θ − θt⟩.
+
+By the definition of the adversarial risk, the left-hand side is no larger than F (θ), and by the definition of the adversarial error, the first term on the right-hand side equals F (θt) − ε(θt, T t). Hence, we find 
+
+F (θ) ≥ F (θt) + ⟨gt, θ − θt⟩ − ε(θt, T t). (10) As θ ∈ Θ was chosen freely, this shows that gt is indeed an ε(θt, T t)-subgradient of F at θt.Next, we use the nonexpansiveness of the Euclidean projection operator ‘ Proj Θ(·)’ and the update rule θt+1 = Proj Θ(θt − α g t) of the projected gradient descent algorithm to conclude that 
+
+∥θt+1 − θ⋆∥22 ≤ ∥ θt − α g t − θ⋆∥22 ≤ ∥ θt − θ⋆∥22 − 2α⟨gt, θ t − θ⋆⟩ + α2∥gt∥22. (11) As gt is defined at the expected value of a random variable whose norm is uniformly bounded by Lθ ,it is clear that ∥gt∥2 ≤ Lθ . Combining (10) for θ = θ⋆ with (11) and rearranging terms we then find 
+
+F (θt) − F (θ⋆) ≤ 12α
+
+ ∥θt − θ⋆∥22 − ∥ θt+1 − θ⋆∥22
+
+ + αL 2
+
+> θ
+
+2 + ε(θt, T t).
+
+Summing over t = 0 , . . . , H − 1 and discarding the last term −∥ θH − θ⋆∥22/(2 α) ≤ 0 in the telescoping sum then yields the estimate 
+
+1
+
+H
+
+> H−1
+
+X
+
+> t=0
+
+ F (θt) − F (θ⋆) ≤ ∥θ0 − θ⋆∥22
+
+2αH + αL 2
+
+> θ
+
+2 + 1
+
+H
+
+> H−1
+
+X
+
+> t=0
+
+ε(θt, T t).
+
+The step size α = ∥θ0 − θ⋆∥2/(Lθ
+
+√H) balances the first two terms, ensuring that their sum reduces to Lθ ∥θ0 − θ⋆∥2/√H. Since F (θ) is convex (as the pointwise supremum of convex functions), Jensen’s inequality implies that F (¯θH ) ≤ 1
+
+> H
+
+PH−1 
+
+> t=0
+
+F (θt), which yields the claimed bound. 
+
+Proof of Proposition 3.2. Since F (θ) is finite by the proof of Proposition B.2, we may assume without loss of generality that T# bP has finite second moments. Otherwise, the same proof yields 
+
+ε(θ, T ) = ∞, in which case the claim holds trivially. Hence, T# bP is feasible in the inner maximiza-tion problem in (DRO), and we have 
+
+F (θ) ≥ ET#bP[f (θ, Z )] − λ W2(T# bP, bP).
+
+Subtracting EbP
+
+f (θ, T ( bZ)) − λ∥T ( bZ) − bZ∥22
+
+ from both sides and using the measure-theoretic change of variables formula ET#bP[f (θ, Z )] = EbP[f (θ, T ( bZ))] , we obtain 
+
+ε(θ, T ) ≥ λ EbP
+
+∥T ( bZ) − bZ∥22
+
+ − λ W2(T# bP, bP) = λ MbP(T ),
+
+where the equality follows from the definition of the Monge gap. This concludes the proof. 
+
+Remark C.1 (Monge gap of the empirical distribution) . When bP = 1
+
+> N
+
+PNi=1 δbzi is the empirical distribution over N training samples, the Monge gap admits the more explicit representation 
+
+MbP(T ) = max 
+
+> σ∈S N
+
+2
+
+N
+
+> N
+
+X
+
+> i=1
+
+T (bzσ(i)) − T (bzi), bzi ,
+
+where SN denotes the family of all permutations of N elements [68]. By Proposition 3.2, any lack of cyclical monotonicity of T on the support of bP thus leads to a strictly positive lower bound on ε(θ, T ).20 Proof of Proposition 3.3. Select any k ∈ N and any collection of points {bzi}ki=1 in Rm. By the definition of the optimal adversarial map T ⋆, we have 
+
+T ⋆(bzi) ∈ arg max 
+
+> z∈Rm
+
+f (θ, z ) − λ∥z − bzi∥22 ∀i ∈ [k].
+
+Therefore, the following inequality holds for any permutation σ ∈ S k:
+
+f (θ, T ⋆(bzi)) − λ∥T ⋆(bzi) − bzi∥22 ≥ f (θ, T ⋆(bzσ(i))) − λ∥T ⋆(bzσ(i)) − bzi∥22 ∀i ∈ [k].
+
+Summing over i ∈ [k], the terms involving f on both sides of the inequality coincide and thus cancel. As the points {bzi}ki=1 were chosen arbitrary, this implies that T ⋆ is cyclically monotone on Rm. In particular, T ⋆ is cyclically monotone on the support of bP, which implies that MbP(T ⋆) = 0 .
+
+Proof of Proposition 4.1. Since m = 1 , the map Tpa (t, ·) is cyclical monotone if and only if it is monotonically non-decreasing [58, Chapter 2]. We therefore prove that the PA map Tpa (t, ·) is monotonically non-decreasing both in the continuous-time and discrete-time settings. 
+
+Continuous-time PA. By the Picard-Lindel¨ of theorem, the defining ODE of the continuous-time PA map has a unique solution that depends continuously on the initial conditions. This implies that 
+
+Tpa (t, bz) is continuously differentiable in t and continuous in bz. In the remainder, we fix t > 0.Suppose now for the sake of contradiction that Tpa (t, ·) fails to be monotonically non-decreasing. Thus, there exist bz1 < bz2 such that Tpa (t, bz1) > T pa (t, bz2). For ease of notation, we define the gap function δ(t′) := Tpa (t′, bz2) − Tpa (t′, bz1), which is continuously differentiable. By assumption, we have δ(0) = bz2 − bz1 > 0 and δ(t) < 0. The intermediate value theorem then implies that there exists 
+
+t⋆ < t with δ(t⋆) = 0 and δ′(t⋆) ≤ 0. Next, an elementary calculation reveals that 
+
+δ′(t⋆) = ddt Tpa (t⋆, bz2) − ddt Tpa (t⋆, bz1)= ∇z f (θ, T pa (t⋆, bz2)) − 2λ Tpa (t⋆, bz2) − bz2
+
+ 
+
+− ∇z f (θ, T pa (t⋆, bz1)) − 2λ Tpa (t⋆, bz1) − bz1
+
+ .
+
+Since Tpa (t⋆, bz1) = Tpa (t⋆, bz2), the terms involving ∇z f and 2λ T pa (t⋆, ·) cancel. Thus, we obtain 
+
+δ′(t⋆) = 2 λ(bz2 − bz1) > 0,
+
+which contradicts the defining property δ′(t⋆) ≤ 0 of the point t⋆. Consequently, we may conclude that the continuous-time PA map Tpa (t, ·) must be monotonically non-decreasing. 
+
+Discrete-time PA. Fix bz1 < bz2 and define the gap δt := Tpa (t, bz2) − Tpa (t, bz1). We use induction on t to show that δt ≥ 0 for every t ∈ N. As bz1 and bz2 with bz1 < bz2 were chosen arbitrarily, this readily implies that Tpa (t, bz) is monotonically non-decreasing in bz. The base case corresponding to t = 0 holds trivially because Tpa (0 , ·) is the identity map, which implies that δ0 = bz2 − bz1 > 0.As for the induction step, assume now that δt ≥ 0, and note that the gap obeys the recursion 
+
+δt+1 = δt + η∇z f (θ, T pa (t, bz2)) − ∇ z f (θ, T pa (t, bz1))  − 2λη δ t + 2 λη (bz2 − bz1)= (1 − 2λη ) δt + η∇z f (θ, T pa (t, bz2)) − ∇ z f (θ, T pa (t, bz1))  + 2 λη (bz2 − bz1).
+
+We have ∇z f (θ, T pa (t, bz2)) − ∇ z f (θ, T pa (t, bz1)) ≥ − Lzz (Tpa (t, bz2) − Tpa (t, bz1)) = −Lzz δt
+
+because ∇z f (θ, z ) is Lzz -Lipschitz continuous in z. Substituting this bound into the recursion yields 
+
+δt+1 ≥  1 − η(Lzz + 2 λ) δt + 2 λη (bz2 − bz1).
+
+The step size condition η ≤ (Lzz + 2 λ)−1 and the induction hypothesis ensure that the first term is nonnegative, while the second term is positive by construction. We may thus conclude that δt+1 ≥ 0,which completes the induction step. Thus, the claim follows. 
+
+Proof of Lemma 4.1. The proof widely parallels the second part of the proof of Proposition 3.3, with the optimality of T ⋆ replaced by the assignment-stationarity inequality (5). 21 D Properties of MPA 
+
+In this appendix, we establish two key properties of MPA. This discussion focuses on the inner loop of Algorithm 1, which evaluates the adversarial risk of a fixed model parameter θ. First, we prove that an ideal variant of MPA with K = ∞ is guaranteed to terminate in finitely many rounds (Section D.1). Second, we prove that if the batch size B is sufficiently large, then MPA is guaranteed to find a near-optimal adversarial map with high probability (Section D.2). To showcase the benefits of MPA vis-` a-vis PA, we also demonstrate that the outer loop of Algorithm 1 may get trapped at the initial iterate unless the current adversarial map is cyclically monotone (Section D.3). 
+
+D.1 Finite-time Termination of MPA 
+
+Recall our standing assumption that f (θ, z ) is differentiable and Lz -Lipschitz continuous with respect to z. Some of the results in this section require one or both of the following additional assumptions. 
+
+Assumption D.1. The gradient ∇z f (θ, z ) is Lzz -Lipschitz continuous in z uniformly over all θ ∈ Θ.
+
+Assumption D.2. The loss function f (θ, z ) is real analytic in z uniformly across all θ ∈ Θ.For example, Assumption D.2 is satisfied when f is the cross-entropy loss of a multilayer perceptron, which consists of compositions of linear transformations and analytic activation functions, such as sigmoid, GELU, or Softplus. Throughout this section we focus on one epoch of Algorithm 1 and thus consider a fixed batch of B training samples {bzi}Bi=1 generated from bP.Focusing on one epoch also means that λ > 0 and θ ∈ Θ are kept fixed. For ease of notation, we then define 
+
+fi(z) := f (θ, z ) − λ∥z − bzi∥22 (12) as the penalized objective function for each sample i ∈ [B].In the following we use boldface symbols to denote stacked vectors of per-sample quantities, such as 
+
+z = ( z1, . . . , z B ). Accordingly, we assemble the per-sample penalized objectives into a vector field 
+
+f := ( f1, . . . , f B ), such that f (z) = ( f1(z1), . . . , f B (zB )) .Since the objective function in (2) depends on the transport map T ∈ T only through its evaluations at the empirical samples, we introduce the shorthand zi := T (bzi). This allows us to identify the map T restricted to the empirical samples with the tuple z ∈ RBm . Finally, for each i ∈ [B], let 
+
+Mi ⊆ Rm denote the set of stationary points of fi, and define the joint set M := M1 × · · · × M B .
+
+Lemma D.1. If Assumption D.2 holds, then Mi is a compact analytic subset of Rm for each i ∈ [B].Proof. We first show that Mi is compact. By definition, any z ∈ M i satisfies 
+
+0 = ∇z fi(z) = ∇z f (θ, z ) − 2λ(z − bzi),
+
+which implies 2λ∥z − bzi∥2 = ∥∇ z f (θ, z )∥2. Lipschitz continuity of f (θ, ·) ensures that 
+
+∥∇ z f (θ, ·)∥2 ≤ Lz . As λ > 0, we thus find ∥z − bzi∥2 ≤ Lz 
+
+> 2λ
+
+. Consequently, Mi is bounded. Because ∇z fi(z) is continuous, its zero-set Mi is also closed, making Mi a compact subset of Rm.Next, note that the penalized objective fi(z) inherits real analyticity from f (θ, ·). Therefore, the squared norm of its gradient, ∥∇ z fi(z)∥22, is also a real analytic function on Rm. The set Mi of stationary points can be uniquely identified as the zero locus of this single analytic function, that is, 
+
+Mi = z ∈ Rm : ∥∇ z fi(z)∥22 = 0 .
+
+By definition, this makes Mi an analytic subset of Rm [40, Chapter 6]. 
+
+Corollary D.1. If Assumption D.2 holds, then Mi has finitely many connected components, and the set of critical values fi(Mi) is finite for each i ∈ [B].Proof. By Lemma D.1, Mi is a compact analytic subset of Rm, which inherently belongs to the broader class of semianalytic sets. A fundamental topological property of semianalytic sets is that they are locally connected and that the family of their connected components is locally finite [40, Theorem 6.5.12]. Local finiteness means that for every point z ∈ M i there exists an open neighborhood Uz that intersects only a finite number of connected components. The collection of 22 all such neighborhoods, {Uz }z∈M i , naturally forms an open cover of Mi. Because Mi is compact, this open cover admits a finite subcover, say {Uz1 , . . . , U zK }. Since the entirety of Mi lies within the union of these K finite neighborhoods, and each neighborhood intersects only finitely many components, the total number of connected components in Mi is finite. Let C ⊆ M i be one such connected component. By [40, Theorem 6.5.12], the connected component 
+
+C is itself a semianalytic set. A standard result in semianalytic geometry is that any two points of a connected semianalytic set can be joined by a semianalytic arc, which is real analytic except at finitely many points [28]. Therefore, for any two points z, z ′ ∈ C, there exists a piecewise smooth path 
+
+γ : [0 , 1] → C connecting them. Because every point on γ belongs to Mi, we have ∇z fi(γ(t)) = 0 
+
+for all t ∈ [0 , 1] . By the fundamental theorem of calculus along curves, we thus have 
+
+fi(z′) − fi(z) = 
+
+Z 10
+
+⟨∇ z fi(γ(t)) , ddt γ(t)⟩ dt = 0 .
+
+Therefore, fi is constant on C. Because Mi consists of a finite number of connected components, it follows that the set of critical values fi(Mi) is finite. We now show that an ideal instance of MPA (Algorithm 1 with K = ∞) terminates after finitely many rounds. The argument relies on the properties of certain ascent and reassignment operators. 
+
+Definition D.1 (Ascent Operators) . For a fixed step size 0 < η < 2/(Lzz + 2 λ), we define the (i) i-th one-step ascent operator: Ai : Rm → Rm, z 7 → z + η∇fi(z);(ii) i-th t-step ascent operator: Ati := Ai ◦ A t−1 
+
+> i
+
+for all t ∈ N, where A0 
+
+> i
+
+:= id; (iii) i-th asymptotic ascent operator: A∞ 
+
+> i
+
+: Rm → Rm, z 7 → lim t→∞ Ati(z);(iv) t-step ascent operator: At : RBm → RBm , z 7 → (At
+
+> 1
+
+(z1), . . . , AtB (zB )) for all t ∈ N ∪ {∞} .The t-step ascent operator implements one full round of t ascent steps in parallel across all B samples. Note that the discrete-time PA map satisfies Tpa (t, bzi) = Ati(bzi) and is thus fully determined by the 
+
+t-step ascent operator Ati. However, Ati itself is more general because its input zi may differ from the empirical sample bzi, which is hard-coded in the definition of the penalized objective fi. The next lemma shows that all asymptotic ascent operators are well-defined. 
+
+Lemma D.2. If Assumptions D.1 and D.2 hold and 0 < η < 2/(Lzz + 2 λ), then the sequence 
+
+zt = Ati(z0) converges to a stationary point z⋆ ∈ M i for every i ∈ [N ] and initialization z0 ∈ Rm.Proof. Fix i ∈ [N ], and set L := Lzz + 2 λ. Since ∇fi is L-Lipschitz by Assumption D.1, the ascent lemma [9, Proposition 6.1.2] and the update rule zt+1 = Ai(zt) = zt + η∇fi(zt) yield 
+
+fi(zt+1 ) − fi(zt) ≥
+
+ 1
+
+η − L
+
+2
+
+
+
+∥zt+1 − zt∥22
+
+=
+
+
+
+1 − ηL 
+
+2
+
+
+
+∥∇ fi(zt)∥2∥zt+1 − zt∥2.
+
+(13) As η < 2/L , a standard telescoping sum argument implies that fi(zt) ≥ fi(z0) for all t ≥ 0.Moreover, the Lz -Lipschitz continuity of f (θ, ·) implies that fi(z) is coercive, i.e. , fi(z) → −∞ 
+
+as ∥z∥2 → ∞ . Thus, the superlevel set {z ∈ Rm | fi(z) ≥ fi(z0)} is compact and contains the entire sequence {zt}t∈N. To establish convergence, we note that the sequence satisfies the strong ascent conditions of [1, Definition 3.1]. This is an immediate consequence of (13). In particular, the inequality in the first line of (13) ensures that fi(zt+1 ) = fi(zt) implies zt+1 = zt. Because the sequence {zt}t∈N is bounded and fi is real analytic by Assumption D.2, [1, Theorem 3.2] guarantees that the sequence converges and thus has a limit z⋆. Finally, the update rule ensures that 
+
+∇fi(zt) = zt+1 − zt
+
+η −→ 0 as t → ∞ .
+
+By the continuity of ∇fi, we thus have ∇fi(z⋆) = 0 . This implies that z⋆ ∈ M i.23 Lemma D.2 shows that the asymptotic ascent operator A∞ 
+
+> i
+
+maps any input z0 to a unique stationary point z⋆ and is therefore indeed well-defined for every i ∈ [B]. Hence, A∞ is well-defined, too. To mathematically analyze the MPA algorithm, we also define a reassignment operator. 
+
+Definition D.2 (Reassignment Operator) . The reassignment operator R : RBm → RBm is defined through R(z) = z′, where z′ 
+
+> i
+
+= zσ(i) and σ(i) ∈ arg max j∈[B] fi(zj ) for all i ∈ [B]. Ties among the maximizers are resolved using a self-favoring rule, i.e. if i ∈ arg max j fi(zj ), we set σ(i) = i.Otherwise, ties are broken by choosing the maximizer with the smallest index. Given a list z = ( z1, . . . , z B ) of B samples, the reassignment operator R produces a new list 
+
+z′ = ( z′
+
+> 1
+
+, . . . , z ′ 
+
+> B
+
+), where, for each i ∈ [B], the sample z′ 
+
+> i
+
+is a maximizer of fi over the set 
+
+{z1, . . . , z B }. Equivalently, for every i ∈ [B], z′ 
+
+> i
+
+solves the restriction of problem (3) with bz = zi, in which the uncountable original feasible set Rm is replaced by the finite set {z1, . . . , z B }.By the construction of the penalized objective functions fi, i ∈ [B], a map T is assignment-stationary on {bzi}Bi=1 in the sense of Definition 4.1 if and only if its outputs zi := T (bzi), i ∈ [B], satisfy 
+
+fi(zi) ≥ fi(zj ) for all i, j ∈ [B]. Thus, each output zi maximizes the corresponding objective function fi over the set of outputs {z1, . . . , z B }. By a slight abuse of terminology, we call the list 
+
+z = ( z1, . . . , z B ) of output samples assignment-stationary . We call z simply stationary if z ∈ M .
+
+Lemma D.3 (Properties of the Ascent and Reassignment Operators) . If Assumptions D.1 and D.2 hold and 0 < η < 2/(Lzz + 2 λ), the ascent and reassignment operators have the following properties. (i) Stationarity: A∞(z) is stationary, and R(z) is assignment-stationary for all z ∈ RBm .(ii) Idempotence: A∞ ◦ A ∞ = A∞ and R ◦ R = R.(iii) Strict monotonicity: f (At(z)) ≥ f (z) and f (R(z)) ≥ f (z) for all z ∈ RBm and t ∈ N ∪ {∞} ,and these inequalities are strict in at least one coordinate if At(z)̸ = z or R(z)̸ = z, respectively. Proof. Stationarity: Fix an arbitrary z ∈ RBm . Lemma D.2 readily implies that A∞(z) ∈ M is stationary. Similarly, the definition of the reassignment operator readily implies that z′ := R(z) is such that z′ 
+
+> i
+
+maximizes fi over the candidate set {z1, . . . , z B }. As {z′
+
+> 1
+
+, . . . , z ′ 
+
+> B
+
+} ⊆ { z1, . . . , z B }, it immediately follows that fi(z′
+
+> i
+
+) ≥ fi(z′ 
+
+> j
+
+) for all i, j ∈ [B], meaning that z′ is assignment-stationary. 
+
+Idempotence: Set z⋆i := A∞ 
+
+> i
+
+(zi). As ∇fi(z⋆i ) = 0 by virtue of Lemma D.2, the point z⋆i is a fixed point of the one-step operator Ai, meaning that A∞ 
+
+> i
+
+(z⋆i ) = z⋆i . As this is true for every i ∈ [B],we have A∞ ◦ A ∞ = A∞. as for the reassignment operator, set z′ := R(z). As z′ is assignment-stationary, we have i ∈ arg max j∈[B] fi(z′ 
+
+> j
+
+) for all i ∈ [B]. The self-favoring tie-breaking rule in Definition D.2 thus dictates that R(z′)i = z′ 
+
+> i
+
+for every i ∈ [B]. Consequently, we have R ◦ R = R.
+
+Strict monotonicity: Equation (13) in the proof of Lemma D.2 and the assumptions on η imply that 
+
+fi(Ati(zi)) ≥ fi(zi) and that this inequality is strict if Ati(zi)̸ = zi, for every i ∈ [B]. Hence, the 
+
+t-step ascent operator At is strictly monotone for every t ∈ N ∪ {∞} . The reassignment operator R
+
+is strictly monotone by construction. In particular, if z′ := R(z) and there exists i ∈ [B] with z′
+
+> i
+
+̸ = zi,then the self-favoring tie-breaking rule ensures that fi(z′
+
+> i
+
+) > f i(zi).The ascent and reassignment operators enable us to provide an abstract mathematical description of the MPA algorithm. Each epoch is initialized at the empirical samples z(0) := ( bz1, . . . , bzB ), and the iterates z(r) := AK (R(z(r−1) )) are constructed recursively for all rounds r ∈ [R]. Recall that this approach simultaneously solves B coupled nonconvex optimization problems—one for each empirical sample bzi, i ∈ [B]. The strict monotonicity of the ascent and reassignment operators implies that, unless the MPA algorithm has converged to a fixed point of AK ◦ R , at least one of the 
+
+B objective functions is improved and no objective function deteriorates in each round. A fundamental question is whether the inner iterates produced by Algorithm 1 eventually stabilize when the algorithm is run over R = ∞ rounds. Specifically, it is of interest to investigate whether there exists a finite round R after which the iterates remain unchanged. If so, we say that the algorithm 
+
+terminates in finite time . For finite K, finite-time termination can occur only in exceptional cases, since performing additional gradient ascent steps generically leads to a strict improvement. For 
+
+K = ∞, by contrast, the algorithm is guaranteed to terminate after finitely many rounds. This follows from the idempotence of both the asymptotic ascent operator A∞ and the reassignment 24 operator R (see Theorem D.1 below). Although performing infinitely many gradient ascent steps is not computationally feasible, the resulting exact MPA algorithm is nevertheless of theoretical interest. Besides being more amenable to mathematical analysis, it provides an accurate approximation for the practical algorithm with a finite (sufficiently large) number of gradient ascent steps per round. In any epoch, the exact MPA algorithm terminates at the first round r ∈ N with A∞(R(z(r))) = z(r).Since every iterate z(r) constitutes a fixed point of A∞, this termination condition can be expressed more concisely as R(z(r)) = z(r). The output of the exact MPA algorithm is thus guaranteed to be stationary as well as assignment-stationary. These insights are formalized in the following theorem. 
+
+Theorem D.1 (Finite termination of exact MPA) . If Assumptions D.1 and D.2 hold, 0 < η < 2/(Lzz +2λ) and K = ∞, then the full-batch MPA algorithm terminates after R ≤ 1 + PNi=1 (|fi(Mi)| − 1) 
+
+rounds in each epoch. The returned output z(R) is both stationary and assignment-stationary. Proof. The first iterate z(1) = A∞(R(z(0) )) is stationary by Lemma D.3 (i) , and thus Corollary D.1 implies that fi(z(1)  
+
+> i
+
+) belongs to the finite set fi(Mi) for every i ∈ [B]. For any subsequent non-terminal round r ≥ 2, we have z(r)̸ = z(r−1) . The definition of the exact MPA algorithm then yields 
+
+f (z(r)) = f (A∞(R(z(r−1) ))) ≥ f (z(r−1) ),
+
+where the inequality is strict for at least one coordinate i ∈ [B] by virtue of Lemma D.3 (iii) . Because both z(r) and z(r−1) belong to M, this represents a strict jump between two values inside fi(Mi).For each coordinate, fi can jump to a strictly higher critical value at most |fi(Mi)| − 1 times. Summing this bound over all N coordinates, and adding 1 to account for the first round, yields the desired upper bound on the total number of rounds R until termination: 1 + PNi=1 (|fi(Mi)| − 1) .The terminal iterate z(R) is generated by the exact ascent operator A∞, which guarantees stationarity by Lemma D.3 (i) . The termination condition thus simplifies to R(z(R)) = z(R), which ensures via Lemma D.3 (i) that z(R) is also assignment-stationary. This observation completes the proof. 
+
+Remark D.1 (Cyclical monotonicity) . In practice, an epoch of Algorithm 1 may be interrupted before a fixed point of AK ◦ R is reached. In this case, the last iterate may fail to be assignment-stationary. Indeed, while R induces assignment-stationarity, AK can fail to preserve assignment-stationarity even if K = ∞. In practice, it is therefore expedient to conclude the MPA algorithm with an extra reassignment step to enforce assignment-stationarity and cyclical monotonicity. We also emphasize that assignment-stationarity is enforced only locally on the given mini-batch. 
+
+D.2 Global Optimality Guarantees for MPA 
+
+The goal of this section is to show that, for any fixed model parameter θ ∈ Θ and tolerance ϵ > 0,the inner loop of Algorithm 1 computes the adversarial risk F (θ) with absolute error at most ϵ with high probability, provided that the batch size B is sufficiently large. Thus, MPA essentially solves the nonconvex functional optimization problem (2) to global optimality irrespective of the penalty parameter λ > 0. In contrast, recall that the state-of-the-art PA algorithm by Sinha et al. [60] provides such a global optimality guarantee only for unrealistically large penalty parameters λ > L zz /2.Since our analysis of MPA is probabilistic, we model the empirical samples explicitly as independent and identically distributed (i.i.d.) random vectors denoted by bZ1, . . . , bZB . We study a generic instance of MPA with an arbitrary number of local ascent steps K ∈ N ∪ {∞} and rounds R ∈ N and with any step size η ∈ (0 , 2/(Lzz + 2 λ)) ; see Algorithm 1. Recall from Section 4 that MPA generates an implicit adversarial map Tmpa , which is only defined on the given batch of empirical samples. Using the notation from Section D.1, this map can be constructed as follows. Initialized at Z(0) := ( bZ1, . . . , bZB ), MPA computes iterates Z(r) := AK  R(Z(r−1) ) for all r ∈ [R] and outputs R(Z(R)),where AK and R represent the ascent and reassignment operators of Definitions D.1 and D.2. Thus, we can define Tmpa ( bZi) as the i-th sample in the last batch of adversarial samples R(Z(R)).Throughout this section, we continue to denote the penalized objective associated with the i-th empirical sample by fi as in (12), bearing in mind that this sample now constitutes a random vector. We further assume that the empirical samples are governed by a sufficiently regular distribution. 25 Assumption D.3. The empirical samples bZ1, . . . , bZB are drawn independently from a distribution 
+
+P0 ∈ P (Rm) that admits an everywhere positive density with respect to Lebesgue measure on Rm.In the following, we set ρ2 := EP0 [∥Z∥22] and note that ρ2 < ∞ because P0 ∈ P (Rm). Assump-tion D.3 implies that any optimal adversarial map is square-integrable with respect to P0.
+
+Lemma D.4 (Square integrability of the optimal adversarial map) . If Assumption D.3 holds and 
+
+M 2 := 2 ρ2 + L2 
+
+> z
+
+/(2 λ2), any optimal adversarial map T ⋆ in the sense of Proposition B.1 satisfies 
+
+EP0
+
+∥T ⋆( bZi)∥22
+
+ ≤ M 2 ∀i ∈ [B].
+
+Proof. By construction, the random vector Z⋆ := T ⋆( bZi) is a global maximizer of the random function fi pointwise for every uncertainty realization. The stationarity condition ∇z f (θ, Z ⋆) = 2λ(Z⋆ − bZi) thus implies via the proof of Lemma D.1 that ∥Z⋆ − bZi∥2 ≤ Lz 
+
+> 2λ
+
+. Hence, we obtain 
+
+∥Z⋆∥22 ≤
+
+
+
+∥ bZi∥2 + ∥Z⋆ − bZi∥2
+
+2
+
+≤
+
+
+
+∥ bZi∥2 + Lz
+
+2λ
+
+2
+
+≤ 2∥ bZi∥22 + L2
+
+> z
+
+2λ2 .
+
+The claim then follows by replacing Z⋆ with its definition T ⋆( bZi), taking expectations with respect to P0 on both sides of the resulting inequality, and invoking the definition of M 2.To establish the claimed optimality guarantee of MPA, we fix any tolerance ϵ > 0 and optimal adversarial map T ⋆ in the sense of Proposition B.1, and we introduce two positive radii 
+
+rϵ := 
+
+r ϵLzz + 2 λ and Rϵ := 2Lz M
+
+√2λϵ , (14) where M 2 stands for the second-order moment bound from Lemma D.4. Using this notation, we partition the index set [B] of the empirical samples into three disjoint random sets 
+
+Oϵ := i ∈ [B] : ∥T ⋆( bZi)∥2 > R ϵ , (15a) 
+
+Uϵ := i ∈ [B] : i̸ ∈ Oϵ, ∥ bZj − T ⋆( bZi)∥2 > r ϵ ∀j̸ = i , (15b) 
+
+Cϵ := i ∈ [B] : i̸ ∈ Oϵ, i ̸ ∈ Uϵ . (15c) Samples with indices in Oϵ are referred to as ‘outliers,’ whereas samples with indices in Uϵ and Cϵ are termed ‘uncovered inliers’ and ‘covered inliers’, respectively. We will see below that the numbers of outliers and uncovered inliers are small with high probability and that if bz is any covered inlier, then there exists an empirical sample that is near-optimal in (3). Together, these insights imply that Tmpa 
+
+is near-optimal in problem (2) if bP = 1
+
+> B
+
+PBi=1 δ bZi is the empirical distribution on the given batch. We first prove that if B is large, then the fraction of outliers is unlikely to exceed O(ϵ).
+
+Lemma D.5 (Outliers are rare) . If Assumption D.3 holds, then we have 
+
+PB
+
+> 0
+
+ |Oϵ|
+
+B > λϵ L2
+
+> z
+
+
+
+≤ exp  −Bλϵ/ 6L2
+
+> z
+
+ .
+
+Proof. The indicator variables Yi := 1{∥ T ⋆( bZi)∥2>R ϵ}, i ∈ [B], form a sequence of i.i.d. Bernoulli trials. We denote their common success probability by p and assume temporarily that p > 0. We also set ¯p := λϵ/ (2 L2 
+
+> z
+
+). Markov’s inequality together with Lemma D.4 then implies that 
+
+p = EP0 [Yi] = P0
+
+
+
+∥T ⋆( bZi)∥22 > R 2
+
+> ϵ
+
+
+
+≤ M 2
+
+R2
+
+> ϵ
+
+= ¯ p, 
+
+where the last equality exploits the definition of Rϵ in (14). Re-expressing the number of outliers |Oϵ|
+
+as the sum of all Bernoulli trials and setting δ := 2¯ p/p − 1 ≥ 1 therefore yields 
+
+PB
+
+> 0
+
+ |Oϵ|
+
+B > λϵ L2
+
+> z
+
+
+
+= PB
+
+> 0
+> B
+
+X
+
+> i=1
+
+Yi > 2B ¯p
+
+!
+
+= PB
+
+> 0
+> B
+
+X
+
+> i=1
+
+Yi > (1 + δ)Bp 
+
+!
+
+≤
+
+ eδ
+
+(1 + δ)1+ δ
+
+Bp 
+
+≤ e−Bpδ/ 3 ≤ e−B ¯p/ 3.
+
+26 Here, the first two equalities follow from the definitions of ¯p and δ, respectively. The first in-equality exploits Chernoff’s inequality for sums of independent Bernoulli random variables [69, Theorem 2.3.1], and the second inequality holds because (1 + δ) ln(1 + δ) ≥ 4δ/ 3 for all δ ≥ 1. The last inequality holds because pδ = 2¯ p − p ≥ ¯p. Replacing ¯p with its definition then yields the claim for p > 0. If p = 0 , on the other hand, PB 
+
+> 0
+
+(PBi=1 Yi > 0) = 0 , and the claim trivially holds. In order to show that the fraction of uncovered inliers is unlikely to exceed O(ϵ), it is expedient to define the minimum probability mass of a ball of radius rϵ centered within the closed ball BRϵ (0) as 
+
+p(ϵ) := inf   
+
+> z∈BRϵ (0)
+
+P0 (Brϵ (z)) .
+
+Lemma D.6 (Strict positivity of p(ϵ)). If Assumption D.3 holds, then we have p(ϵ) > 0.Proof. Introduce an auxiliary function κ : Rm → [0 , 1] defined via κ(z) = P0(Brϵ (z)) . As ϵ > 0
+
+and P0 admits an everywhere positive density with respect to Lebesgue measure, we have κ(z) > 0
+
+for every z ∈ Rm. To prove the lemma, we must show that κ(z) is bounded away from 0 on BRϵ (0) .By Assumption D.3, the data-generating distribution P0 is absolutely continuous with respect to Lebesgue measure on Rm. Thus, for any fixed z ∈ Rm, the boundary of Brϵ (z) has P0-measure zero, and the function hbz (z) := 1{bz∈Brϵ (z)} is continuous (in fact, constant) at z for P0-almost every bz ∈ Rm. Consequently, κ(z) is continuous thanks to the dominated convergence theorem [6, Theorem 3.31]. As the closed ball BRϵ (0) is compact, there exists a minimizer z⋆ ∈ BRϵ (0) with 
+
+p(ϵ) = κ(z⋆) > 0 by Weierstrass’ extreme value theorem. Thus, the claim follows. Armed with Lemma D.6, we can prove that the fraction of uncovered inliers is unlikely to exceed O(ϵ).
+
+Lemma D.7 (Uncovered inliers are rare) . If Assumption D.3 holds, then we have 
+
+PB
+
+> 0
+
+ |Uϵ|
+
+B > λϵ L2
+
+> z
+
+
+
+≤ L2
+
+> z
+
+λϵ exp  −(B − 1) p(ϵ) . (16) 
+
+Proof. Fix any index i ∈ [B], and note that 
+
+PB 
+
+> 0
+
+(i ∈ Uϵ) = PB 
+
+> 0
+
+(i ∈ Oϵ) PB 
+
+> 0
+
+(i ∈ Uϵ|i ∈ Oϵ) + PB 
+
+> 0
+
+(i̸ ∈ Oϵ) PB 
+
+> 0
+
+(i ∈ Uϵ|i̸ ∈ Oϵ)
+
+≤ PB 
+
+> 0
+
+(i ∈ Uϵ|i̸ ∈ Oϵ) = EPB
+
+> 0
+
+PB 
+
+> 0
+
+(i ∈ Uϵ| bZi, i ̸ ∈ Oϵ) i̸ ∈ Oϵ
+
+,
+
+where the two equalities follow from the law of total probability, and the inequality holds because Oϵ ∩
+
+Uϵ = ∅, which implies that PB 
+
+> 0
+
+(i ∈ Uϵ|i ∈ Oϵ) = 0 . The event i̸ ∈ Oϵ is completely determined by bZi (that is, it belongs to the σ-algebra generated by bZi). As the empirical samples bZj , j̸ = i, are mutually independent as well as independent of bZi, the definition of Uϵ in (15b) then implies that 
+
+PB
+
+> 0
+
+ i ∈ Uϵ bZi, i ̸ ∈ Oϵ
+
+ = Y  
+
+> j∈[B]: j̸=i
+
+PB
+
+> 0
+
+
+
+∥ bZj − T ⋆( bZi)∥2 > r ϵ bZi, i ̸ ∈ Oϵ
+
+
+
+≤ (1 − p(ϵ)) B−1 ≤ exp  −(B − 1) p(ϵ).
+
+Here, the first inequality follows from the definition of p(ϵ), which ensures that 
+
+P0
+
+
+
+∥ bZj − T ⋆( bZi)∥2 ≤ rϵ bZi, i ̸ ∈ Oϵ
+
+
+
+≥ p(ϵ).
+
+Combining the above estimates finally yields 
+
+PB 
+
+> 0
+
+(i ∈ Uϵ) ≤ exp  −(B − 1) p(ϵ) ∀i ∈ [B].
+
+As |Uϵ| = PBi=1 1{i∈Uϵ}, the expected number of uncovered inliers satisfies 
+
+EPB 
+
+> 0
+
+[|Uϵ|] = 
+
+> B
+
+X
+
+> i=1
+
+PB 
+
+> 0
+
+(i ∈ Uϵ) ≤ B exp  −(B − 1) p(ϵ).
+
+Note that |Uϵ| is a non-negative random variable. By Markov’s inequality, we thus obtain 
+
+PB
+
+> 0
+
+ |Uϵ|
+
+B > λϵ L2
+
+> z
+
+
+
+≤ EPB 
+
+> 0
+
+[|Uϵ|/B ]
+
+λϵ/L 2
+
+> z
+
+≤ L2
+
+> z
+
+λϵ exp  −(B − 1) p(ϵ) .
+
+This observation completes the proof. 27 Next, we prove that every point in the rϵ-neighborhood of a global maximizer of fi constitutes an 
+
+ϵ/ 2-optimal point. For ease of notation, we define f ⋆i := max z∈Rm fi(z) for every i ∈ [N ].
+
+Lemma D.8 (Superlevel sets) . Suppose that Assumption D.1 holds, and define rϵ as in (14) . If z⋆, z ∈
+
+Rm with fi(z⋆) = f ⋆i and ∥z − z⋆∥2 ≤ rϵ, then fi(z) ≥ f ⋆i − ϵ/ 2 for all i ∈ [B].Proof. Note that both fi as well as −fi are (Lzz + 2 λ)-smooth by virtue of Assumption D.1. Hence, the standard quadratic upper bound for the smooth function −fi [9, Proposition 6.1.2] yields 
+
+fi(z) ≥ fi(z⋆) + ⟨∇ fi(z⋆), z − z⋆⟩ − Lzz + 2 λ
+
+2 ∥z − z⋆∥22
+
+≥ f ⋆i − Lzz + 2 λ
+
+2 r2 
+
+> ϵ
+
+= f ⋆i − ϵ
+
+2 ,
+
+where the second inequality holds because z⋆ is a global maximizer of fi satisfying ∇fi(z⋆) = 0 
+
+and because ∥z − z⋆∥2 ≤ rϵ, and the equality follows from the definition of rϵ.If bz = bZi for i ∈ Cϵ is a covered inlier and z⋆ = T ⋆(bz), then there exists j̸ = i such that z = bZj
+
+satisfies ∥z − z⋆∥2 ≤ rϵ; see (15c). Lemma D.8 thus guarantees that z constitutes an ϵ/ 2-optimal solution for problem (3). This reasoning implies that, for every covered inlier, the adversary can find a near-optimal adversarial sample among the finite set of empirical samples. This insight and the earlier results of this section culminate in the following main theorem, which proves that the MPA map Tmpa is near-optimal in problem (2) with high probability. To formalize this result, we recall that the adversarial error ε(θ, T ) of a map T is defined as the suboptimality of T in (2); see (4). 
+
+Theorem D.2 (Global optimality guarantee of MPA) . If Assumptions D.1 and D.3 hold and 0 < η < 
+
+2/(Lzz + 2 λ), then for any K ∈ N ∪ {∞} , R ∈ N, and tolerance ϵ > 0, we have 
+
+PB
+
+> 0
+
+ ε(θ, T mpa ) ≤ ϵ ≥ 1 − β(B, ϵ ),
+
+where ε(θ, T ) is the adversarial error of a map T with respect to bP = 1
+
+> B
+
+PBi=1 δ bZi , and where 
+
+β(B, ϵ ) := exp  −Bλϵ/ 6L2
+
+> z
+
+ + L2
+
+> z
+
+λϵ exp  −(B − 1) p(ϵ) .
+
+Proof. We first rewrite the adversarial error of Tmpa by expanding the empirical expectation. Using the definition (4) of the adversarial error and the per-sample formulation (1) of F (θ), we can write 
+
+ε(θ, T mpa ) = 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+
+
+max 
+
+> z∈Rm
+
+f (θ, z )−λ∥z − bZi∥22 −
+
+
+
+f (θ, T mpa ( bZi)) −λ∥Tmpa ( bZi) − bZi∥22
+
+
+
+= 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+
+
+f ⋆i − fi(Tmpa ( bZi)) 
+
+
+
+.
+
+Next, we introduce Gi := f ⋆i − fi(Tmpa ( bZi)) as shorthand for the per-sample suboptimality gap of Tmpa for every i ∈ [B]. Using the batch partition (15), the adversarial error can thus be recast as 
+
+ε(θ, T mpa ) = 1
+
+B
+
+X
+
+> i∈Oϵ
+
+Gi + 1
+
+B
+
+X
+
+> i∈Uϵ
+
+Gi + 1
+
+B
+
+X
+
+> i∈Cϵ
+
+Gi. (17) By Lemma D.5, the probability of the event |Oϵ|/B > λϵ/L 2 
+
+> z
+
+is bounded by exp( −Bλϵ/ 6L2 
+
+> z
+
+).Similarly, Lemma D.7 ensures that the probability of the event |Uϵ|/B > λϵ/L 2 
+
+> z
+
+is bounded by 
+
+L2 
+
+> z
+
+/(λϵ ) exp( −(B − 1) p(ϵ)) . Using the union bound, one thus verifies that the desirable event in which both |Oϵ|/B ≤ λϵ/L 2 
+
+> z
+
+and |Uϵ|/B ≤ λϵ/L 2 
+
+> z
+
+occurs with probability at least 1 − β(B, ϵ ).It remains to be shown that the adversarial error is bounded by ϵ in this desirable event. To this end, recall first that the ascent and reassignment operators are strictly monotone thanks to Lemma D.3. Hence, the objective value of Tmpa ( bZi) dominates that of bZi, that is, fi(Tmpa ( bZi)) ≥ fi( bZi) for all 
+
+i ∈ [B]. As f (θ, z ) is Lz -Lipschitz continuous in z, we may thus conclude that 
+
+Gi ≤ f ⋆i − fi( bZi) = max 
+
+> z∈Rm
+
+f (θ, z ) − f (θ, bZi) − λ∥z − bZi∥22
+
+≤ max 
+
+> z∈Rm
+
+Lz ∥z − bZi∥2 − λ∥z − bZi∥22 = L2
+
+> z
+
+4λ .
+
+28 Using this coarse estimate, we obtain 
+
+1
+
+B
+
+X
+
+> i∈Oϵ
+
+Gi ≤ |Oϵ|
+
+BL2
+
+> z
+
+4λ ≤ ϵ
+
+4 and 1
+
+B
+
+X
+
+> i∈Uϵ
+
+Gi ≤ |Uϵ|
+
+BL2
+
+> z
+
+4λ ≤ ϵ
+
+4 . (18a) If i ∈ Cϵ, then we have ∥T ⋆( bZi)∥2 ≤ Rϵ, and there is j̸ = i with ∥ bZj − T ⋆( bZi)∥2 ≤ rϵ; see (15c). By Lemma D.8, we thus find fi( bZj ) ≥ f ⋆i − ϵ/ 2 and Gi ≤ ϵ/ 2 for all i ∈ Cϵ, which implies that 
+
+1
+
+B
+
+X
+
+> i∈Cϵ
+
+Gi ≤ |Cϵ|
+
+Bϵ
+
+2 ≤ ϵ
+
+2 . (18b) Substituting (18a) and (18b) into (17) yields ε(θ, T mpa ) ≤ ϵ, and thus the claim follows. 
+
+Corollary D.2 (Sample complexity of MPA) . If all assumptions of Theorem D.2 hold, β ∈ (0 , 1) ,and the batch size satisfies 
+
+B ≥ max 
+
+ 6L2
+
+> z
+
+λϵ log 
+
+ 2
+
+β
+
+
+
+, 1 + 1
+
+p(ϵ) log 
+
+ 2L2
+
+> z
+
+λϵβ 
+
+ 
+
+,
+
+then we have ε(θ, T mpa ) ≤ ϵ with probability at least 1 − β.Proof. To guarantee that the failure probability β(B, ϵ ) from Theorem D.2 falls below β, it suffices to bound each of its two additive terms by β/ 2. As for the first term, we thus require 
+
+exp 
+
+
+
+− Bλϵ 
+
+6L2
+
+> z
+
+
+
+≤ β
+
+2 =⇒ B ≥ 6L2
+
+> z
+
+λϵ log 
+
+ 2
+
+β
+
+
+
+.
+
+Similarly, we require the second term to satisfy 
+
+L2
+
+> z
+
+λϵ exp  −(B − 1) p(ϵ) ≤ β
+
+2 =⇒ B ≥ 1 + 1
+
+p(ϵ) log 
+
+ 2L2
+
+> z
+
+λϵβ 
+
+
+
+.
+
+Taking B to be the maximum of these two lower bounds ensures both conditions hold simultaneously. This observation completes the proof. As is typical of global optimality guarantees for nonconvex optimization, the guarantees established in Theorem D.2 and Corollary D.2 come at the price of a curse of dimensionality. 
+
+Remark D.2 (Curse of dimensionality) . The sample complexity bound in Corollary D.2 is governed primarily by the inverse covering mass 1/p (ϵ), which conceals an exponential dependence on the ambient dimension m. Indeed, one can construct at least (Rϵ/2rϵ)m disjoint balls of radius rϵ with centers in BRϵ (0) . As their masses sum to at most one, at least one of them has mass at most 
+
+(2 rϵ/R ϵ)m, and since Rϵ grows when ϵ decreases, we conclude that p(ϵ) = O(rmϵ ) = O(ϵm/ 2)
+
+irrespective of the data-generating distribution P0 ∈ P (Rm). The factor ϵm/ 2 thus reflects the volume of the covering ball rather than any tail behavior of P0. One can show that if P0 is a standard normal distribution, then p(ϵ) = Ω( ϵm/ 2). Even in this best possible case, Corollary D.2 requires a batch of size B = eO(max {ϵ−1, ϵ −m/ 2}), which grows exponentially with the ambient dimension m.
+
+Remark D.3 (MPA versus PA) . The global optimality guarantee of Corollary D.2 requires a large batch of sufficiently diverse empirical samples. In the absence of such a batch, MPA may not output a globally optimal adversarial map. In fact, as each round of MPA starts with a reassignment step, the adversarial error of the resulting MPA map can even exceed that of the corresponding PA map. To see this, suppose that fi(θ, bzi) < f i(θ, bzj ), while the stationary point in the basin containing bzj
+
+has a lower objective value than the stationary point in the basin containing bzi. To construct the i-th adversarial sample, PA applies gradient ascent initialized at bzi, whereas MPA moves from bzi to bzj
+
+due to the first reassignment step and then applies gradient ascent initialized at bzj . In this case, PA ends up in the better stationary point and thus finds a better adversarial example than MPA. To ensure that MPA dominates PA, one could reverse the order of the reassignment and gradient ascent steps in the inner loop of Algorithm 1. The first gradient ascent of this alternative variant of MPA replicates the PA map exactly. Moreover, since both the reassignment operator and the 
+
+t-step ascent operator are monotone by Lemma D.3 (iii) , every subsequent MPA update can only 29 improve upon PA, regardless of the batch size. The price of this guarantee, however, is the loss of a global optimality result analogous to Theorem D.2. In particular, one can construct problem instances for which the alternative variant of MPA produces a strictly suboptimal adversarial map for every possible batch of empirical samples. We tested both variants of MPA in our experiments and found that the original version of Algorithm 1 consistently attains the lower adversarial error. Hence, we do not pursue the ascent-first variant of MPA further. 
+
+D.3 An Illustrative Example where PA Stalls and MPA Progresses 
+
+Example 4.1 presents an instance of problem (1) in which bP is a discrete distribution supported on only two atoms and the discrete PA map fails to satisfy cyclical monotonicity after a fixed (albeit large) number of iterations. We now extend this example by embedding it into an outer minimization problem over θ and demonstrate that the loss of cyclical monotonicity leads to a critical failure of the outer optimization dynamics. Specifically, the algorithm becomes trapped at the initial outer iterate, while a single MPA reassignment produces a nonzero and informative outer gradient, thereby enabling further progress of the optimization algorithm. Note that the loss function in Example 4.1 is constant in θ. In the following, we construct a closely related loss function that displays a nontrivial dependence on θ. Specifically, we set 
+
+f (θ, z ) := θ f0(z) − b, where f0(z) := 
+
+> 2
+
+X
+
+> k=1
+
+ak exp  −(z − μk)⊤Σ−1 
+
+> k
+
+(z − μk) .
+
+The constants a1, a2, μ1, μ2, Σ1 and Σ2 are chosen as in Example 4.1, and θ ∈ Θ = [0 , 1] is a scalar model parameter. The value of b ∈ R will be specified later. Note that f (θ, z ) is affine in θ with uniformly bounded gradients, and thus Proposition 3.1 applies. If we define bP and λ as in Example 4.1, then Proposition B.2 implies that the adversarial risk can be represented as 
+
+F (θ) = max  
+
+> T∈T
+
+12
+
+> 2
+
+X
+
+> i=1
+
+
+
+f (θ, T (bzi)) − λ ∥T (bzi) − bzi∥22
+
+
+
+. (19) Next, we approximately minimize F (θ) over Θ by means of projected gradient descent with step size 
+
+α ∈ (0 , 1) , using inexact gradient estimates. The iterates of this algorithm satisfy 
+
+θe+1 = Proj [0 ,1] 
+
+ θe − α g e
+
+, where ge = 12
+
+> 2
+
+X
+
+> i=1
+
+ f0(Te(bzi)) − b (20) is an inexact gradient of F (θ) at θ = θe, and Te is a near-optimal solution of (19) for each epoch e ∈
+
+[E]. Note that if Te were a globally optimal adversarial map, then ge would coincide with the exact subgradient of F (θ) at θ = θe by Danskin’s theorem. We initialize θ1 = 1 .
+
+PA stalls. Assume first that the adversary’s problem in (19) is addressed with discrete PA such that 
+
+T1(·) = Tpa (t, ·) for t = 8 , 000 steps. As f (θ1, z ) coincides with the loss function of Example 4.1 up to the additive constant −b, discrete PA initialized at the empirical samples of bP yields 
+
+T1(bz1) = (2 .17 , 1.98) ⊤ and T1(bz2) = ( −3.96 , −2.00) ⊤.
+
+Hence, T1 fails to be cyclically monotone as shown in Example 4.1, which implies via Lemma 4.1 that T1 also fails to be assignment-stationary. Next, set 
+
+b := 12
+
+ f0(T1(bz1)) + f0(T1(bz2)) 
+
+such that the inexact gradient g1 vanishes. One can then prove by induction that θe = 1 for every e ∈ [E]. This shows that PA-based adversarial training gets trapped at the initial outer iterate θ1 = 1 even though θ1 is neither a minimizer nor a stationary point of F (θ).
+
+MPA progresses. Assume next that the adversary’s problem in (19) is addressed with a full-batch (B = 2 ) version of MPA over R = 1 rounds; see Algorithm 1. To obtain a near-optimal adversarial map for (19) with θ = θ1, MPA applies one reassignment step followed by one discrete PA step, and ends with a final reassignment step. The near-optimal 30 adversarial samples {zi}2 
+
+> i=1
+
+corresponding to the empirical samples {bzi}ni=1 are thus constructed iteratively as follows. In the first round, MPA sets z ← R (bz), where R is the reassignment operator from Definition D.2. One readily verifies that 
+
+f (θ1, bz2) − λ ∥bz2 − bz1∥22 > f (θ1, z 1) and f (θ1, bz2) > f (θ1, bz1) − λ ∥bz1 − bz2∥22,
+
+suggesting that the adversary is better off mapping both empirical samples to bz2 instead of keeping the identity initialization. Hence, in the first reassignment step, the adversary sets z1 ← bz2 and z2 ← bz2.The first PA step is then warm-started at the same point z1 = z2 = bz2 for both empirical samples. In this step MPA sets zi ← A ti(zi) where Ati is the i-th t-step ascent operator from Definition D.1. As in Example 4.1, we set t = 8 ,000 , which ensures that zi closely approximates a stationary point. After this PA step, both samples have almost reached the corresponding global maximizers, and one can readily verify that the adversary would not benefit from reassigning the adversarial samples in the final step, that is, the trivial reassignment is optimal. At this stage, MPA has essentially converged. Subsequent PA iterations would merely refine the values of {zi}2 
+
+> i=1
+
+by adding insignificant digits, while subsequent reassignment steps would have no effect. See Figure 1 for the trajectory that each sample takes in the MPA algorithm. The adversarial map Tmpa ∈ T corresponding to two MPA rounds can thus be defined by setting Tmpa (bzi) = zi for i = 1 , 2 and arbitrarily setting 
+
+Tmpa (z) = 0 for all z̸ ∈ { bzi}2
+
+> i=1
+
+, which ensures Borel measurability. By construction, Tmpa is assignment-stationary and cyclically monotone on {bzi}2
+
+> i=1
+
+. A direct calculation reveals that 
+
+> 2
+
+X
+
+> i=1
+
+f0(Tmpa (bzi)) >
+
+> 2
+
+X
+
+> i=1
+
+f0(Tpa (bzi)) =⇒ g1 = 12
+
+ f0(Tmpa (bz1)) + f0(Tmpa (bz2))  − b > 0.
+
+This shows that MPA-based adversarial training using the iterative scheme (20) escapes from the spurious fixed point θ1 = 1 that traps PA. That is, MPA generates a strictly better iterate θ2 < 1.This example showcases that the reassignment step in MPA is essential. Its purpose is to warm-start the next PA phase at the best adversarial sample output by the previous phase. In particular, if the output of a PA phase happens to lie within the basin of attraction of the global maximizer associated with an empirical sample bzi, then, after the subsequent PA phase, the corresponding adversarial sample zi will be driven arbitrarily close to a global maximizer, provided that a sufficiently large number of PA iterations is performed. Through this mechanism, MPA exploits information about the global optimization landscape that remains inaccessible to PA alone and incorporates it into the outer gradient. As a consequence, the outer minimization over θ can continue to make progress under MPA even in situations where PA yields a vanishing gradient. 
+
+## E ICNN Training Details 
+
+To guarantee convexity of the parametric potential ψω (z) in z, the hidden-to-hidden and output weights of the ICNN must remain non-negative throughout training. We enforce this constraint by reparametrizing these weights as exponentials, exp( W yℓ ) and exp( wyL), so that non-negativity holds by construction regardless of the values of the underlying unconstrained parameters W yℓ and wyL. A natural starting point would be to initialize W yℓ and wyL according to a standard zero-mean scheme such as Xavier initialization [30]. However, even when the pre-exponential weights are zero-mean, the exponentiated weights exp( W yℓ ) and exp( wyL) possess a strictly positive mean. This positive-mean bias accumulates across layers, distorting both the forward signal and the backpropagated gradient, and has been identified as a source of the optimization instabilities and representational bottlenecks reported in prior work [39, 48, 61]. To mitigate this effect, we adopt the principled initialization scheme of Hoedt and Klambauer [36], which extends the signal-propagation analysis underlying Xavier initialization to the setting of weights with non-zero means, yielding initialization scales that are explicitly corrected for the positive-mean offset introduced by the exponential reparametrization. Following [36], for a layer with nin inputs, we set the target mean and variance of the exponentials to 
+
+μw =
+
+s 6πnin 
+
+ 6( π − 1) + ( nin − 1)  3√3 + 2 π − 6 and σ2 
+
+> w
+
+= 1
+
+nin 
+
+, (21) respectively. To achieve these target values, we sample the original, pre-exponential weights in-dependently from a normal distribution W yℓ,ij ∼ N (μ, σ 2). This makes the resulting positive 31 Algorithm 3 ADAPTIVE INNER STEP SIZE (BB + A RMIJO )
+
+Input: Initial iterate z−1 = z0, step size bounds [ηmin , η max ], initial step size η0 ∈ [ηmin , η max ],Armijo sufficient ascent c ∈ (0 , 1) , shrinkage τ ∈ (0 , 1) , # max backtracking steps J, # steps K
+
+for k = 0 , . . . , K − 1 do 
+
+s ← zk − zk−1 and y ← ∇ z fbz (zk−1) − ∇ z fbz (zk)
+
+if ⟨s, y ⟩ > 0 then 
+
+ηk ← Proj [ηmin ,η max ]ηBB  
+
+> k
+
+, with ηBB  
+
+> k
+
+as in (25) 
+
+else 
+
+ηk ← η0
+
+end if 
+
+j ← 0
+
+while j < J and fbz (zk + ηk∇z fbz (zk)) − fbz (zk) < cη k∥∇ z fbz (zk)∥22 do 
+
+ηk ← τ η k, j ← j + 1 
+
+end while 
+
+zk+1 ← zk + ηk∇z fbz (zk)
+
+end for return zK
+
+weights independent and follow a lognormal distribution exp( W yℓ,ij ) ∼ LogNormal( μ, σ 2). To find the exact μ and σ2, we match the lognormal moments E[exp W yℓ,ij ] = exp( μ + 12 σ2) and 
+
+Var(exp W yℓ,ij ) = (exp σ2 − 1) exp(2 μ + σ2) to the target moments (μw, σ 2
+
+> w
+
+) in (21). This yields 
+
+μ = ln  μ2
+
+> w
+
+ − 12 ln  σ2 
+
+> w
+
++ μ2
+
+> w
+
+ and σ2 = ln  σ2 
+
+> w
+
++ μ2
+
+> w
+
+ − ln  μ2
+
+> w
+
+. (22) 
+
+Cancelling the positive-mean shift. The target mean μw > 0 still contributes a systematic bias 
+
+μw 1⊤yℓ−1 to each pre-activation. Two designs cancel this contribution at initialization. The original recipe in [36] attaches a bias term to each exp-reparameterized layer and initializes it at −μb 1 with 
+
+μb =
+
+s 3 nin 
+
+6( π − 1) + ( nin − 1)  3√3 + 2 π − 6 . (23) The construction used throughout our experiments takes the second design: the exp-reparameterized layers carry no bias, and the positive-mean contribution is instead absorbed by the unconstrained passthrough W zℓ z + bℓ at each hidden layer and by (wzL)⊤z + bL at the readout. The two designs are equivalent at initialization, but the second has a structural advantage during training. The passthrough is z-dependent, so the offset it applies adapts to the input, whereas a fixed scalar bias on 
+
+exp( W yℓ ) cannot. This cleanly separates roles, so that convexity-preserving parameters are confined to the exponential reparameterization (22), while all expressive, sign-free degrees of freedom are concentrated in the well-initialized passthrough. Simpler ICNN variants without a passthrough still require the explicit offset (23); the codebase supports both conventions for ablation. 
+
+E.1 Adaptive Inner Step Size Selection 
+
+The training dynamics of the adversarial map depend heavily on the inner step size η. For instance, preserving the monotonicity of the PA map in the one-dimensional case requires η ≤ (Lzz + 2 λ)−1
+
+(Proposition 4.1). Since a neural network f (θ, z ) is highly non-linear with respect to its inputs, the local curvature ∇2 
+
+> zz
+
+f varies significantly across the domain. Consequently, a single fixed step size makes the training process brittle. A conservative small step size safely avoids instability but wastes the inner-loop computational budget. Conversely, a large step size can cause the optimization to diverge. To dynamically adapt to the varying local geometry, we propose to use the Barzilai-Borwein (BB) method [65] paired with an Armijo backtracking [4] safeguard (Algorithm 3). The BB method acts as a computationally cheap quasi-Newton step to estimate the effective inverse curvature along the search direction, while the Armijo condition serves as a safety net to guarantee sufficient objective improvement. We detail both components next. To this end, let fbz (z) = f (θ, z ) − λ∥z − bz∥22 denote the local objective to be maximized for a fixed sample bz.
+
+Barzilai-Borwein method. Quasi-Newton methods, which motivate the Barzilai-Borwein approach, accelerate gradient ascent on max z fbz (z) by replacing the step size with a local curvature estimate. 32 The update takes the form 
+
+zk+1 = zk + ( Bk)−1∇z fbz (zk), (24) where Bk serves as an approximation of the exact Hessian matrix of −fbz evaluated at the current iterate zk. After taking a step from zk−1 to zk, the algorithm observes the secant pair s = zk − zk−1
+
+and y = ∇z fbz (zk−1) − ∇ z fbz (zk), which encodes local curvature along the most recent step. A natural requirement is that Bk satisfies the so-called secant equation Bks = y, ensuring the approximation is consistent with the observed curvature. In high dimensions, however, maintaining a dense matrix Bk that satisfies this condition and solving the resulting linear system becomes computationally prohibitive. The BB method alleviates this by approximating the Hessian with a simple scalar multiple of the identity matrix, Bk ≈ (ηk)−1id , where the scalar ηk is chosen to minimize the squared norm of the secant equation residual. Solving this least-squares problem, 
+
+min η ∥(η)−1s − y∥22, yields the BB step size 
+
+ηBB  
+
+> k
+
+= ∥s∥22
+
+⟨s, y ⟩ . (25) Substituting (Bk)−1 in (24) with ηBB  
+
+> k
+
+bypasses the matrix operations and yields an efficient scalar update that scales with the effective inverse curvature. Since neural network landscapes are highly non-concave, the secant product ⟨s, y ⟩ may occasionally be non-positive. In such cases where the curvature estimate is invalid, we fall back to a default initial step size η0 (Algorithm 3). 
+
+Armijo backtracking. While the BB rule provides an inexpensive and often accurate estimate of the local inverse curvature, it does not by itself guarantee that the resulting step yields an improvement in the objective. This issue is particularly pronounced in our setting, where fbz is generally non-concave, and the BB estimate may occasionally be overly aggressive. To ensure stability of the inner maximization, we complement the BB proposal with an Armijo backtracking line search, which enforces a sufficient ascent condition at each iteration. Given the current iterate zk and ascent direction ∇z fbz (zk), we initialize a trial step size with the BB proposal, i.e. , ηk ← ηBB  
+
+> k
+
+. The Armijo condition requires that the achieved improvement in the objective is at least a fixed fraction of the linearized gain predicted by the gradient, namely 
+
+fbz (zk + ηk∇z fbz (zk)) − fbz (zk) ≥ cη k∥∇ z fbz (zk)∥22,
+
+where c ∈ (0 , 1) controls the required level of sufficient ascent. This condition compares the actual improvement against the increase predicted by a first-order approximation of fbz at zk. When the trial step size is too large, curvature effects cause this approximation to overestimate the gain, and the condition fails. In that case, we reduce the step size to ηk ← τ η k with τ ∈ (0 , 1) , and repeat the test until the condition is satisfied or the maximum number of backtracking steps J is reached. This procedure prevents overly aggressive updates while preserving the efficiency of the BB initialization. In practice, we operate on mini-batches {bzi}Bi=1 rather than a single sample. Accordingly, the single-sample objective fbz (z) = f (θ, z ) − λ∥z − bz∥22 is replaced by its batch counterpart 
+
+fbz(z) = 1
+
+B
+
+> B
+
+X
+
+> i=1
+
+(f (θ, z i) − λ∥zi − bzi∥22) with z = ( z1, . . . , z B ).
+
+All steps are applied to this averaged objective, and the same analysis carries over directly. For notational simplicity, we present the algorithm and derivations in the single-sample form above. 
+
+## F Supplementary Details for Section 6 
+
+Appendices F.1, F.2, and F.3 provide full hyperparameter settings and implementation details for the experiments of Sections 6.1, 6.2, and 6.3, respectively. The latter two appendices additionally report gradient-obfuscation checks and a sensitivity analysis in the penalty parameter λ. For all methods requiring an inner maximization step—namely PA, RO, WFR, NN-DRO, MPA, and ICNN-DRO—we conduct a comprehensive search over the inner step size η, evaluating both constant step sizes and adaptive Barzilai–Borwein step sizes coupled with an Armijo line search (Algorithm 3), and report the best-performing configuration for each method. All experiments were run on an NVIDIA A100-SXM4-80GB GPU with dual AMD EPYC 7543 32-core CPUs. 33 We briefly outline the configurations of our baselines, with exact hyperparameter values deferred to the subsequent experimental sections. To ensure a fair comparison among parametrized-map methods, the network architectures of NN-DRO and ICNN-DRO are matched in depth and width. For the entropy-regularized baselines, we introduce a regularization parameter εent > 0. SDRO [73] exploits the fact that the entropy-regularized worst-case distribution admits a closed-form Gibbs representation [73, Remark 4] to reformulate the inner maximization as a nested log-expectation [73, Theorem 1], whose gradient is then estimated via randomized multilevel Monte Carlo with importance samples drawn from a truncated geometric distribution [11], parametrized by a success probability p ∈ (0 , 1) 
+
+and truncation level M ∈ N+. WFR [75], by contrast, targets the adversarial distribution directly by evolving a cloud of n ∈ N+ auxiliary particles per data point under an interacting particle dynamics. Unlike PA, which perturbs the empirical samples themselves, WFR keeps the training data fixed and uses these auxiliary particles to approximate the local adversarial distribution. The parameters εent ,
+
+p, M , and n are specified in each experimental section. 
+
+F.1 Supplementary Details for Section 6.1 
+
+This section provides additional details for the adversarial multi-class logistic regression experiment of Section 6.1. All methods are trained for 10 epochs with batch size B = 128 and penalty parameter 
+
+λ = 10 . The outer minimization uses step size α = 5 ×10 −3 for all robust benchmarks and α = 10 −3
+
+for the ERM baseline. The inner maximization runs for K = 20 ascent iterations for ICNN-DRO and for K = 100 iterations for every other method, with step sizes selected by the BB+Armijo procedure with (η0, η min , η max ) = (5 × 10 −4, 10 −6, 1) and (c, τ, J ) = (0 .1, 0.5, 10) . For method-specific parameters, MPA performs R = 5 rounds of K = 20 iterations, hence 100 ascent iterations in total and, counting the terminal reassignment, six reassignments. RO has an ℓ2-perturbation budget of ε = 0 .04 . The entropy-regularized baselines (SDRO and WFR) use a regularization strength of εent = 0 .2. Moreover, WFR utilizes n = 16 auxiliary particles per data point. Additionally, SDRO employs a maximum truncation level of M = 5 with success probability p = 0 .5 for its multilevel Monte Carlo estimator. The ℓ2-constrained PGD attack budget ( ∆ ∈ [0 , 0.08] ) applied to the covariates and the feature embedding process remains exactly as detailed in the main text. 
+
+F.2 Supplementary Details for Section 6.2 
+
+Across all benchmarks, the classifier hθ is a ResNet-18 [33], pre-trained on clean CIFAR-10 for 200 
+
+epochs and then adversarially trained under each method for a further 50 epochs with batch size 
+
+B = 256 and penalty parameter λ = 30 . The outer minimization uses SGD with Nesterov momentum parameter 0.9 [52] under a one-cycle schedule with cosine annealing [62] and peak learning rate 0.1.For all gradient-based inner solvers, the inner maximization runs for K = 20 iterations with the step size set by the Barzilai-Borwein rule with Armijo backtracking (Algorithm 3): initial step η0 = 2 ×10 −4, clipping interval [ηmin , η max ] = [10 −7, 2.5×10 −1], sufficient-ascent constant 
+
+c = 10 −4, shrinkage factor τ = 0 .5, and at most J = 10 backtracking steps. The RO inner attack is ℓ2-constrained PGD with budget ε = 0 .5 under the same BB+Armijo schedule, so RO and PA differ only in the ℓ2 feasibility projection, not in step-size selection. MPA performs R = 3 rounds of K = 10 ascent iterations, amounting to 30 ascent iterations and, counting the terminal reassignment, four reassignments in total. Its step size is constant rather than adaptive, set to 0.1 in the first round and to 0.05 thereafter, which consistently outperformed BB+Armijo in our experiments. For SDRO, we replace the multilevel Monte Carlo estimator used in the lower-dimensional experi-ments of § G.1 and § 6.1 by direct sampling from the Gibbs worst-case distribution, as that estimator showed high-variance in this high-dimensional regime. We use the Metropolis-adjusted Langevin algorithm [56], which repeatedly displaces each particle by a step of size h along the gradient of the log-density, perturbs it by Gaussian noise, and accepts or rejects the resulting move to correct for discretization bias. We run 20 such steps with h = 5 ×10 −3 on n = 8 particles per data point and set 
+
+εent = 0 .05 . WFR utilizes n = 32 auxiliary particles per data point with the same εent = 0 .05 .
+
+Per-epoch runtime comparison. We record the per-epoch wall-clock time of the full min-max training loop across all methods in Table 1. All runs use PyTorch Distributed Data Parallel (DDP) across 4× A100 GPUs. The DDP communication backend, the large-shared memory dataloader configuration, the random seed, and the per-GPU local batch size are held fixed across methods, 34 so that the reported per-epoch times are directly comparable wall-clock measurements at matched effective batch size and matched all-reduce overhead. In particular, the per epoch times in Table 1 are full DDP wall-clock times (forward, backward, gradient all-reduce, optimizer step, and inner-loop ascent), not single-GPU compute times. 
+
+Certifying the absence of gradient obfuscation. A reliable adversarial training algorithm must avoid obfuscated gradients [5]. These are superficial defenses that resist first-order attacks not through true robustness, but by disrupting the gradient signal via shattered, stochastic, or exploding/vanishing gradients. Hence, robustness against PGD alone is therefore insufficient as a robustness certificate. We provide two complementary checks confirming that the robustness of ICNN-DRO reflects genuine geometric regularity rather than gradient masking. AutoAttack (AA) is a parameter-free collection of attacks, each designed specifically to expose the problems described above. Its adaptive variants APGD-CE and APGD-DLR replace the fixed step size of standard PGD with a schedule adapted to the local curvature, and so navigate ill-conditioned or shattered landscapes on which fixed-step PGD stagnates. Square Attack, by contrast, is a score-based random-search procedure that never queries the gradient of the loss function, and is therefore mani-festly immune to shattered, stochastic, and vanishing-gradient effects. Reporting robustness under AA thus provides one evidence for the absence of gradient obfuscation. The tight PGD-AA gap of 0.4% 
+
+for ICNN-DRO (vs. 3.55% for PA) is the quantitative signature of this consistency (see Table 1). We complement the AutoAttack (AA) evaluation with a qualitative inspection of the input-space loss landscape, following [5, 24]. For a test sample z = ( x, y ), let xadv be the adversarial input obtained by ℓ2-PGD at budget ε = 0 .5, using 20 steps and five random restarts. Define the adversarial displacement r = xadv − x ∈ Rm−1 and draw a random direction u ∈ Rm−1 orthogonal to r.Writing br = r/ ∥r∥2 and bu = u/ ∥u∥2, we probe the classifier on the affine plane 
+
+x(α, β ) = x + α br + β bu, (α, β ) ∈ [−ρ, ρ ]2, ρ = 1 .
+
+Perturbations are measured in pixel-space ℓ2 units, with standard CIFAR-10 normalization applied before classifier evaluation. We evaluate the affine plane without additional pixel clipping, recording on a 101 × 101 grid both the cross-entropy f (θ, (x(α, β ), y )) and the classification correctness 
+
+1 {arg max k hθ (x(α, β )) k = arg max k yk}.Figure 4 presents the resulting surfaces and decision regions for two uniformly sampled test examples. The horizontal and vertical axes correspond to β bu and α br, respectively; the dashed circle 
+
+α2 + β2 = ε2 marks the attack budget. Orange and blue denote correct and incorrect classification, while the red curve traces the loss along β = 0 . For both samples, the loss rises smoothly and monotonically from the clean input to the PGD endpoint, with no visible oscillations or plateaus along this segment. Together with the AA results, these local observations provide complementary evidence against gradient masking. 
+
+F.3 Supplementary Details for Section 6.3 
+
+This section collects the experimental details of the robust control experiment: the CartPole envi-ronment, hyperparameter configurations, differentiable surrogate formulations, and additional results. 
+
+Setting. We model the CartPole environment with a continuous state s = ( x, ˙x, ϑ, ˙ϑ) ∈ R4, capturing the cart’s position and velocity alongside the pole’s angle and angular velocity. The agent selects discrete actions a ∈ { 0, 1}, which dictate a horizontal control force u ∈ {− umax , u max } applied directly to the cart’s center of mass. The system state then evolves according to known dynamics 
+
+st+1 = F (st, a t, z ) [7, 27] that are parameterized by the uncertainty vector z = ( mp, ℓ ) ∈ Z ⊆ R2,where mp and ℓ denote the mass and half-length of the pole and Z = [0 .05 , 0.20] × [0 .25 , 0.75] . The agent receives a reward rt := r(st, a t) = 1 at every non-terminal step. Episodes terminate early if the cart position or pole angle exceeds the physical bounds xmax or ϑmax , and are otherwise truncated at a maximum horizon of H = 1 ,000 steps. Hence, the total undiscounted reward corresponds exactly to the episode length censored at 1,000 . The loss function f (θ, z ) := −Eπθ [PH−1 
+
+> t=0
+
+r(st, a t)] is the expected negative undiscounted return under policy πθ and physics z; see § 6.3. Since the physical parameters z = ( mp, ℓ ) have incommensurable units (kilograms and meters), a standard Euclidean penalty would skew the optimization based on numerical scale. We resolve this by normalizing each coordinate by its domain width. Defining the lower and upper bounds as 35 −1 −0.5 0 0.5 1                   
+
+> Random direction βˆu
+> −1
+> −0.5 00.5 1
+> PGD direction  α ˆr
+> (a) Deer (#4731)
+> −101
+> βˆu
+> 01
+> αˆr
+> 024
+> (b) Cross-entropy
+> −1−0.5 00.5 1
+> Random direction βˆu
+> −1
+> −0.5 00.5 1
+> PGD direction  α ˆr
+> (c) Bird (#5118)
+> −101
+> βˆu
+> 01
+> αˆr
+> 012
+> (d) Cross-entropy
+> Correct Misclassified ε= 0 .5Clean input PGD endpoint β= 0 slice
+
+Figure 4: Loss landscape of ICNN-DRO on CIFAR-10. Panels (a) and (b) correspond to test sample #4731 (Deer), while panels (c) and (d) detail test sample #5118 (Bird). For each sample, the left panel (a, c) displays the 2D decision regions. The dashed circle marks the ℓ2 budget ε = 0 .5;orange and blue indicate correct and incorrect classification, respectively; and point markers specify the exact coordinates of the initial clean image (black circle) and the final adversarial image (black triangle). The right panel (b, d) plots the corresponding 3D cross-entropy surface where the red curve traces the loss along the adversarial direction. 
+
+z = (0 .05 , 0.25) and z = (0 .20 , 0.75) respectively, we employ the width-normalized metric 
+
+∥z − bz∥2 
+
+> w
+
+:= 
+
+> 2
+
+X
+
+> k=1
+
+ zk − bzk
+
+wk
+
+2
+
+with w := z − z = (0 .15 , 0.50) .
+
+Replacing the Euclidean norm with ∥·∥ 2 
+
+> w
+
+in the inner maximization objectives (1) and (2) is equivalent to solving the standard Euclidean DRO problem in the rescaled coordinates zk ← zk/w k.
+
+Hyperparameters. All methods in the robust control experiment are trained for E = 100 
+
+epochs. For the outer minimization, we optimize the policy πθ using Proximal Policy Optimiza-tion (PPO) [59]. We parameterize PPO’s underlying actor (policy) and critic (value) networks as MLPs. Denoting by gθ : R4 → R2 the two action logits produced by the actor, the policy is πθ (a|s) = exp( gθ,a (s)) / P1 
+
+> b=0
+
+exp( gθ,b (s)) for a ∈ { 0, 1}. We update the weights of both networks via SGD with Nesterov momentum [52] using a momentum parameter of 0.9, while keeping all other PPO settings at their standard defaults (including the outer step size α). At each iteration, we draw a batch of B = 64 nominal uncertainty anchors {bzi}Bi=1 independently from the uniform distribution on Z and generate one adversarial counterpart for each anchor, yielding a combined batch of 2B = 128 environments. Updates are performed on this mixture of nominal and adversarial conditions so that the agent remains capable on standard tasks while learning to handle worst-case scenarios. We report results for penalty parameters λ ∈ { 0.1, 0.5, 1}.MPA performs R = 3 rounds of K = 15 ascent iterations, amounting to 45 ascent iterations in total and, including the terminal reassignment, four reassignment steps. For RO, we tune the ℓ2-36 Table 2: Mean episode length ± standard error over 1,000 deterministic rollouts across different 
+
+λ. Panel (a) reports λ = 0 .1; panel (b) reports λ = 0 .5 and panel (c) reports λ = 1 . The leftmost column corresponds to the original training configuration, the middle group to easier physics variants (Light, Long, Soft Gravity), and the right group to harder variants (Heavy, Short, Strong Gravity). Bold entries indicate the best result per column. Method Original Easier Environments Harder Environments Original Light Long Soft Gravity Heavy Short Strong Gravity                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
+
+> (a) λ=0 .1
+> ERM 186 .4±1.9188 .7±1.9191 .4±1.2217 .3±1.9178 .6±1.5155 .6±0.8157 .6±1.1
+> PA 382 .9±7.4395 .1±7.4266 .9±4.1543 .3±7.1289 .0±5.8205 .1±1.7207 .0±2.8
+> RO 380 .1±5.1398 .3±5.5270 .5±3.4556 .6±5.3295 .1±2.1209 .0±1.6212 .4±1.2
+> WFR 507 .3±7.6532 .9±8.0434 .5±5.8756 .8±7.2387 .0±4.6313 .4±2.5323 .9±3.0
+> SDRO 239 .5±3.3241 .6±4.7238 .2±2.9355 .8±6.0213 .5±2.4173 .6±1.4182 .7±1.6
+> NN-DRO 225 .3±1.8228 .2±1.6221 .0±1.3289 .6±3.1210 .3±1.7184 .1±0.6185 .3±1.4
+> MPA 516 .4±7.5549 .3±7.0446 .3±4.3763 .3±8.1390 .6±5.8323 .3±2.7337 .4±3.4
+> ICNN-DRO 771 .3±7.3779 .4±7.5616 .3±6.2978 .2±1.6665 .2±7.8478 .3±4.3415 .3±5.5
+> (b) λ=0 .5
+> ERM 186 .4±1.9188 .7±1.9191 .4±1.2217 .3±1.9178 .6±1.5155 .6±0.8157 .6±1.1
+> PA 255 .1±2.0259 .0±2.0252 .9±1.1354 .2±3.4239 .1±1.3219 .9±0.9217 .6±1.0
+> RO 260 .3±2.1267 .4±3.2258 .8±4.1366 .6±7.5245 .1±5.2227 .0±1.2221 .3±2.5
+> WFR 481 .9±7.2491 .7±7.3375 .9±4.6656 .3±7.2400 .6±5.9301 .8±2.2311 .9±3.4
+> SDRO 227 .6±4.1231 .8±3.8216 .2±3.2303 .5±6.0210 .7±2.6181 .8±1.3184 .5±1.6
+> NN-DRO 221 .0±1.3224 .4±1.7213 .0±1.4285 .4±2.5207 .6±1.2187 .2±0.6188 .2±1.3
+> MPA 641 .1±7.7659 .8±7.3481 .4±6.4835 .2±5.0488 .6±7.0421 .7±3.6381 .6±3.5
+> ICNN-DRO 773 .6±7.6781 .6±7.8618 .2±6.9984 .3±1.8656 .3±8.1468 .3±4.1401 .3±5.3
+> (c) λ=1 .0
+> ERM 186 .4±1.9188 .7±1.9191 .4±1.2217 .3±1.9178 .6±1.5155 .6±0.8157 .6±1.1
+> PA 342 .4±5.4349 .9±5.4298 .0±3.1545 .2±7.4278 .8±3.0236 .4±1.3238 .4±1.8
+> RO 345 .0±4.2351 .6±4.3300 .6±2.7551 .2±2.3286 .3±1.2240 .0±3.8243 .7±1.6
+> WFR 435 .0±6.8459 .6±7.3387 .4±5.2703 .8±7.7337 .5±4.1276 .2±2.0287 .3±2.8
+> SDRO 246 .4±4.5248 .7±4.5244 .6±3.5378 .1±7.0215 .9±2.9176 .7±1.1183 .3±1.8
+> NN-DRO 228 .0±1.7231 .4±1.9227 .0±1.1293 .3±2.7214 .8±1.5193 .4±0.9192 .6±1.1
+> MPA 570 .3±8.4581 .6±8.5428 .6±5.9772 .1±6.8426 .3±7.0342 .3±2.5339 .8±3.6
+> ICNN-DRO 829 .3±6.6837 .4±6.3797 .5±6.7992 .7±0.6725 .2±7.7561 .7±6.4472 .5±7.6
+
+perturbation budget to the regularization level, using ε = 0 .75 for λ = 0 .1, ε = 0 .5 for λ = 0 .5, and 
+
+ε = 0 .25 for λ = 1 .0. Both entropy-regularized baselines, SDRO and WFR, use a regularization strength of εent = 0 .01 . WFR approximates the adversarial distribution using n = 8 auxiliary particles per data point, whereas SDRO uses a multilevel Monte Carlo gradient estimator based on a truncated geometric distribution with success probability p = 0 .5 and truncation level M = 3 .
+
+Additional results. To evaluate the sensitivity of the learned robustness to the regularization parameter λ, Table 2 reports results for three values, with all other training and evaluation settings kept fixed: panel (a) uses λ = 0 .1, panel (b) uses λ = 0 .5, and panel (c) uses λ = 1 .0, corresponding to the experiment reported in Figure 3. ICNN-DRO attains the highest mean episode length on every evaluation variant at every penalty level, with MPA second throughout. MPA’s advantage over the remaining baselines is substantial at λ = 0 .5 and λ = 1 .0, but narrows at λ = 0 .1, where it stays ahead of WFR on all seven variants by only a small margin. WFR is consistently the strongest remaining baseline, but falls substantially behind ICNN-DRO on the harder extrapolative shifts, particularly Heavy and Short. Overall, performance varies non-monotonically with λ for several methods, while the ordering of the two strongest approaches remains stable throughout. 
+
+Differentiable rollouts and pathwise gradients. To ascend L(θ; ω) with respect to ω, we need 
+
+∇ω f (θ, T ω (bz)) . Applying the chain rule, the gradient of the objective f (θ, T ω (bz)) decomposes as 
+
+∇ω f (θ, T ω (bz)) = 
+
+ ∂T ω (bz)
+
+∂ω 
+
+⊤
+
+∇z f (θ, z ) z=Tω (bz)
+
+.
+
+37 We must resolve three distinct non-differentiability challenges to ensure both components of this chain rule permit continuous gradient flow. Specifically, the environment gradient ∇z f (θ, z ) presents two discontinuities within the standard MDP formulation, while the map Jacobian ∂T ω (bz)/∂ω introduces a third related to physical boundaries. We address these in sequence. Evaluating ∇z f (θ, z ), which is also required by particle-based baselines like PA and SDRO to optimize their adversarial perturbations, requires differentiating the episodic return directly through the unrolled environment dynamics; i.e. , ∇z rt. Following the decoupled formulation in [76, Ap-pendix A.1], the gradient of the per-step reward rt with respect to z propagates recursively 
+
+∇z rt = ( ∇z at)⊤∇at rt + ( ∇z st)⊤∇st rt,
+
+where the state and action Jacobians are given recursively by 
+
+∇z st = ∂s t
+
+∂z + ∂s t
+
+∂s t−1
+
+∇z st−1 + ∂s t
+
+∂a t−1
+
+∇z at−1, ∇z at−1 = ∂a t−1
+
+∂s t−1
+
+∇z st−1.
+
+Two terms in this standard discrete MDP formulation break the gradient flow. First, the original action at ∈ { 0, 1} is discrete, rendering ∇z at = 0 almost everywhere and completely severing the gradient. We address this with a straight-through estimator [8]. Specifically, we define a vector of available physical forces u := ( −umax , u max )⊤. In the forward pass, the simulator applies the hard action at = arg max a∈{ 0,1} gθ,a (st), so that the realized force is −umax if at = 0 and umax 
+
+otherwise. In the backward pass, derivatives are instead taken through the relaxed control signal 
+
+ut := softmax( gθ (st)) ⊤u, where 
+
+[softmax( v)] a = eva/τ 
+
+P 
+
+> a′∈{ 0,1}
+
+eva′ /τ 
+
+for a temperature τ > 0, so that the degenerate term ∇z at is replaced by ∇z ut. Second, an episode terminates once |xt| > x max or |ϑt| > ϑ max , at which point the per-step reward switches from one to zero. As a function of st, this reward has zero gradient away from the termination boundaries and is nondifferentiable on the boundaries. We circumvent this pathology by replacing the hard indicator with a smooth survival function pt(st), which captures the probability that the agent remains within physical bounds at time t. Given the limits xmax and ϑmax and the logistic sigmoid function 
+
+σ(x) = (1 + e−βx )−1 with a sharpness parameter β > 0, we define 
+
+pt(st) = σ xmax − | xt| · σ ϑmax − | ϑt|.
+
+The loss f (θ, z ) is then approximated by the sum of cumulative survival probabilities over the horizon 
+
+f (θ, z ) ≈ − 
+
+> H−1
+
+X
+
+> t=0
+> t
+
+Y
+
+> k=0
+
+pk(sk).
+
+As the parameters β → ∞ and τ → 0+, this formulation exactly recovers the true undiscounted return and the discrete action logic of the original MDP. By operating away from these asymptotic limits in practice (we set β = 20 and τ = 1 ), these relaxations provide a smooth approximation that carries informative gradients throughout the rollout. This aligns with established practices in differentiable simulation, where smoothing discrete transitions is essential to prevent chaotic or vanishing gradients [27, 37, 49, 63]. With these relaxations, we estimate the environment gradient 
+
+∇z f (θ, z ) by backpropagating the surrogate loss through each simulated trajectory while holding its sampled initial state fixed, and then averaging the resulting derivatives over the sampled initial states. This procedure is known as pathwise, or reparameterization, gradient estimation [34]; see also [51, §5]. Because the smooth survival score modifies the reward and the straight-through action rule substitutes relaxed derivatives for discrete actions, the resulting estimator is generally biased relative to the original discrete-MDP objective [8]. With the issues related to ∇z f (θ, z ) resolved, we finally address the third challenge regarding the map Jacobian ∂T ω (bz) 
+
+> ∂ω
+
+. The physical parameter z must satisfy the box constraints z ≤ z ≤ z for the dynamics to remain well-defined. While particle-based baselines (such as PA and WFR) can enforce this via projected gradient ascent, which does not require differentiating through the projection operator itself, optimizing ω requires backpropagating through the entire mapping mechanism. If we bounded the map’s output using a hard projection operator, the Jacobian ∂T ω (bz)/∂ω would evaluate 38 to zero everywhere outside the valid domain ( i.e. , whenever z > z or z < z ), severing the gradient flow. To guarantee a non-vanishing Jacobian, we reparameterize Tω such that its output is naturally bounded. We lift the normalized nominal parameters into an unconstrained latent space using the logistic sigmoid function σ(x) = (1 + e−x)−1, apply a neural mapping Hω , and then map the result back to the physical bounds via the logistic sigmoid function σ. Expressed as a single composition, the full adversarial map becomes 
+
+Tω (bz) = z + ( z − z) ⊙ σ
+
+
+
+Hω
+
+
+
+σ−1 bz − zz − z
+
+ 
+
+,
+
+where both σ and σ−1 are applied element-wise and ⊙ denotes the Hadamard product. For the NN-DRO baseline, Hω is parameterized as a standard Multi-Layer Perceptron. For our ICNN-DRO approach, Hω is explicitly modeled as the Brenier gradient ∇ψω . This formulation respects the physical box constraints while remaining differentiable end-to-end. 
+
+## G Additional Experiments 
+
+This section collects experiments and analyses that complement the main text. Section G.1 presents a robust least-squares experiment; Section G.2 examines the transferability of adversarial perturbations across classifiers; Section G.3 audits empirical Monge gaps across penalty levels. Two further studies probe the geometry of ICNN-DRO itself: Section G.4 reveals that the rank rout of the quadratic term in the ICNN’s output layer—rather than its depth or width—is the binding constraint on adversarial capacity, and Section G.5 investigates the effect of annealing the penalty λ during training. 
+
+G.1 Robust Least Squares 0 1 2 3 4 5 6 7 8 9 10 Perturbation ∆ 0.51.01.52.02.5Test loss 
+
+> ERM PA WFR SDRO MPA RO NN-DRO
+> ICNN-DRO
+
+Figure 5: Test loss vs. perturbation level 
+
+∆ on uncertain least squares. We evaluate robustness on a synthetic uncertain least squares problem, following the setup in [75], which in turn builds on [23, 79]. The goal is to learn a parameter vector θ ∈ Θ = R10 for a least-squares problem in which uncertainty enters through the system matrix. Specifically, the uncertainty variable is one-dimensional, with values restricted to the uncertainty domain [−1, 1] . The per-sample loss is defined as f (θ, z ) := ∥A(z)θ − b∥22, where 
+
+A(z):= A0 + zA 1 ∈ R10 ×10 . The matrices A0, A 1 ∈
+
+R10 ×10 and the vector b ∈ R10 are fixed realizations with entries sampled independently from N (0 , 1) . To simu-late a limited observation window, we generate N = 10 
+
+nominal training samples {bzi}Ni=1 independently from the uniform distribution on [−0.5, 0.5] to construct the empir-ical reference measure bP = 1
+
+> N
+
+PNi=1 δbzi . Robustness is then evaluated by testing the learned models on a shifted distribution P∆ := Unif([ −0.5(1 + ∆) , 0.5(1 + ∆)]) for 
+
+∆ ∈ [0 , 10] , where larger ∆ corresponds to a greater de-parture from the training distribution. All methods are trained for E = 10 epochs using full-batch gradient descent ( N = B = 10 ) with an outer step size of α = 0 .01 and a penalty parameter of λ = 0 .1. Every inner maximization is given the same budget of 3,000 ascent iterations, with step sizes selected by the BB+Armijo procedure (Algorithm 3) under the best configuration from our search, namely [ηmin , η max ] = [10 −6, 10 1],
+
+η0 = 10 −1, and (c, τ, J ) = (10 −4, 0.5, 10) . MPA splits this budget into R = 5 rounds of K = 600 
+
+iterations, which amounts to six reassignments once the terminal one is counted, and RO has an 
+
+ℓ2-perturbation budget of ε = 0 .316 . Both entropy-regularized baselines, SDRO and WFR, utilize a regularization strength of εent = 0 .1. Within this group, WFR approximates the adversarial distribution using n = 8 auxiliary particles per data point, while SDRO employs a multilevel Monte Carlo gradient estimator based on a truncated geometric distribution with success probability p = 0 .5
+
+and a truncation level of M = 4 .The results in Figure 5, averaged over 10 independent runs, compare ICNN-DRO against ERM and the established robust baselines. As ∆ increases, all DRO variants substantially outperform 39 ERM, confirming that robust training improves stability under distribution shift. Among the DRO baselines, the SDRO method degrades the fastest, likely due to the bias inherent in its nested Monte Carlo estimation. Since m = 1 , Proposition 4.1 guarantees that PA is already cyclically monotone, so one might expect PA and MPA to perform similarly. Yet MPA still outperforms PA, showing that its benefit extends beyond restoring cyclical monotonicity. Even when cyclical monotonicity already holds, the reassignment step acts as an implicit multi-start mechanism, letting each particle escape a weak local maximum by inheriting a stronger point discovered by a neighboring sample. ICNN-DRO attains the best performance in this experiment, followed closely by MPA, while PA and WFR trail by a wider margin. This behavior is expected because, in one dimension, the inner maximization pushes worst-case samples toward the boundaries of the uncertainty set, collapsing to either −1 or 1.As a result, the various DRO formulations ultimately discover the same worst-case support, leaving limited room for our structured map-based approach to demonstrate a significant advantage. 
+
+G.2 Cross-Model Universality 
+
+When solving (DRO) with an ICNN as described in Section 5, the resulting adversarial perturbations are constructed with respect to a specific trained model θ. This raises the question of whether these perturbations are tailored to that model or whether they generalize across different models. In this appendix, we investigate the extent to which perturbations generated against a given source model 
+
+remain effective when applied to other target models that differ from it in training or in architecture. Here, “universality” should be understood in the cross-model sense: the ICNN still produces an 
+
+input-dependent perturbation for each test example, but we ask whether that perturbation continues to fool models other than the one used during adversary training. Table 3: Cross-architecture transfer of the ICNN adversary trained against R1. Drop : Clean-Adv. gap; 
+
+Ovlp : counts examples fooled by both the source and the target; % src err : percentage of source-model failures that transfer to the target; Lbl mis.% : percentage of overlap examples on which source and target predict different incorrect labels.                                                              
+
+> Accuracy (%) Transfer Model Clean ↑Adv. ↑Drop ↓Ovlp. % src Lbl mis.%
+> R1-ICNN (src) 92 .38 74 .29 18 .09 2,336 ——ViT1 89 .37 49 .39 39 .98 1,903 81 .46 56 .96
+> ViT2 78 .22 53 .54 24 .68 1,696 72 .60 54 .13
+> ViT3 82 .32 54 .38 27 .95 1,763 75 .47 55 .30
+> ViT4 92 .42 57 .29 35 .12 1,839 78 .72 55 .41
+> R2 98 .14 42 .34 55 .80 2,120 90 .75 42 .78
+> R3 91 .54 50 .99 40 .55 2,043 87 .46 36 .76
+> R4 89 .99 46 .35 43 .64 2,029 86 .86 42 .34
+> R5 91 .71 52 .45 39 .26 1,927 82 .49 47 .85
+
+We consider a population of CIFAR-10 classifiers consisting of five ResNet-18 models (R1–R5) and four Vision Trans-formers (ViT1–ViT4) [21], where models within each group differ only in their train-ing hyperparameters. We take R1 (the first ResNet-18) as the source model , train an ICNN adversary against it, and denote the resulting pair by R1-ICNN. The remain-ing models, namely R2-R5 and ViT1-ViT4, serve as target models . This distinction is important. Specifically, the source model is the one that appears inside the mini-max problem during adversary training, whereas the target models are used only at evaluation time to test transfer. We evaluate on a fixed subset of N =9,085 CIFAR-10 test points. For each point, we generate one perturbation against the source model R1 using its trained ICNN adversary, and then apply that perturbed input unchanged to every target model. The source model is misclassified on 2,336 of these perturbed examples. In Table 3, the accuracy block reports clean accuracy, adversarial accuracy, and their gap on this same fixed subset. The transfer block then measures how source failures propagate to each target: Ovlp. counts perturbed examples misclassified by both source and target (and is therefore at most 2,336 ), % src is this overlap as a percentage of the 2,336 source adversarial failures, and Lbl mis.% is the percentage of overlap examples on which source and target predict different incorrect labels. It is clear that transfer is much stronger within the ResNet family than across architectures. For the held-out ResNets R2-R5, adversarial accuracy drops by 39 .26 to 55 .80 points and the transferred attack recovers 82% –91% of the source errors. For ViT1-ViT4, the drops are smaller, 24 .68 to 39 .98 
+
+points, and the recovery rate falls to 73% –81% . This indicates that the learned perturbations are not merely exploiting one particular set of weights; rather, they capture vulnerabilities that are shared most strongly within the architectural class of the source model. ResNet targets are not only fooled more of-ten ( % src : 82% –91% vs. 73% –81% for ViTs), but also more often agree with the source on the wrong label ( Lbl mis. (%) : 36 .76% –47 .85% vs. 54 .13% –56 .96% ). This suggests that perturbations learned 40 Table 4: Monge gap on CIFAR10. Regularization strength λ
+
+Method 2 5 10 15 30 
+
+ERM 0 0 0 0 0
+
+> Baselines
+
+PA 1.24 e−2 1.15 e−2 3.01 e−3 7.93 e−4 7.97 e−4
+
+WFR 1.13 e−2 1.02 e−2 1.73 e−3 5.68 e−4 5.58 e−4
+
+SDRO 1.83 1.04 4.52 e−3 1.27 e−3 1.29 e−3
+
+NN-DRO 1.37 e−2 1.21 e−2 3.54 e−3 3.28 e−3 3.16 e−3
+
+> Ours
+
+MPA 1.22 e−3 1.08 e−3 9.03 e−4 5.89 e−4 5.07 e−4
+
+ICNN-DRO 1.52 e−7 1.33 e−7 1.28 e−7 1.25 e−7 1.12 e−7
+
+against R1 transfer more faithfully within the ResNet family. This is a desirable failure mode for a robust training method: transfer persists beyond the source model, but degrades across architectures. 
+
+G.3 An Empirical Monge Gap 
+
+The analysis in § 3 shows that cyclical monotonicity is tied to the quality of the inner maximization. By Proposition 3.2, transport waste induced by a non-monotone admissible map appears as a positive Monge gap, and hence as suboptimality in problem (2). In this appendix, we examine this effect empirically by estimating the Monge gap in two settings: the feature-space logistic regression experiment in § 6.1 and the robust CartPole control experiment in § 6.3. Recall from Definition 2.3 that, for any bP ∈ P , the Monge gap of a map T ∈ T is given by 
+
+MbP(T ) = EbP
+
+∥ bZ − T ( bZ)∥22
+
+ − W2 T# bP, bP.
+
+In this appendix we specialize this definition to the empirical measure bP = 1
+
+> B
+
+PBi=1 δbzi . Since 
+
+W2(T# bP, bP) is costly to evaluate directly for high-dimensional empirical measures, we follow the approach in [68] and replace it with the Sinkhorn divergence. Specifically, for P, bP ∈ P , we first define the entropy-regularized optimal transport cost as 
+
+OT( P, bP) := inf Eγ
+
+∥Z − bZ∥22
+
+ + ρ KL  γ ∥ P ⊗ bP : γ ∈ Γ( P, bP) ,
+
+and we write S(P, bP) for the associated Sinkhorn divergence as S(P, bP) := OT( P, bP) − 12 OT( P, P) − 
+
+> 12
+
+OT( bP, bP) [25]. We then estimate the Monge gap MbP(T ) by 
+
+cMbP(T ) := EbP
+
+∥T ( bZ) − bZ∥22
+
+ − S T# bP, bP.
+
+The parameter ρ > 0 is used only in this Sinkhorn computation and is distinct from the training-time entropic regularization εent used in SDRO and WFR. Moreover, we have cMbP(T ) ≥ M bP(T ), and the two coincide when ρ = 0 ; see [68, Appendix A.3]. Thus, we obtain an upper bound on the actual Monge gap. In all experiments we set 
+
+ρ = 0 .01 · median ∥u − v∥22 : u, v ∈ { bzi}Bi=1 ∪ { T (bzi)}Bi=1 , u ̸ = v ,
+
+that is, ρ is 1% of the median pairwise squared distance between distinct points in the combined set of empirical and adversarial samples. We solve the resulting Sinkhorn problem for 1,000 iterations to solver tolerance 10 −7. Next, we report the (approximate) Monge gap for the experiments in § 6.1 and § 6.3; see Table 4 and Table 5. A common pattern in both tables is that, as λ increases, the quadratic penalty in (1) and (2) becomes more dominant, and thus the objective function of the inner maximization problem becomes more concave. Hence, the adversarial map is forced closer to the identity, and the problem moves closer to ERM. Accordingly, the Monge gap decreases across methods. The ERM row is identically zero in both tables, since its map is the identity. 
+
+Adversarial multi-class logistic regression (§ 6.1). We evaluate cMbP(T ) on the full CIFAR-10 dataset, so that N = B = 60 ,000 , and report the results in Table 4 for λ ∈ { 2, 5, 10 , 15 , 30 }; the main-text experiment in § 6.1 uses λ = 10 . At λ = 10 , ICNN-DRO is the best-performing method in Figure 2 and also attains the smallest Monge gap estimate, essentially at numerical precision. This is consistent with the role of transport waste in the inner-maximization error. Still, the Monge gap 41 Table 5: Monge gap on robust control (CartPole). Regularization strength λ
+
+Method 0.1 0.5 1
+
+ERM 0 0 0
+
+> Baselines
+
+PA 4.87 e−2 2.01 e−2 1.99 e−2
+
+WFR 1.87 e−2 1.41 e−2 1.13 e−2
+
+SDRO 2.18 e−2 2.03 e−2 1.93 e−3
+
+NN-DRO 2.17 e−2 2.07 e−2 1.98 e−3
+
+> Ours
+
+MPA 6.16 e−6 1.16 e−6 1.15 e−6
+
+ICNN-DRO 6.92 e−7 6.82 e−7 8.81 e−8
+
+does not determine the full empirical ranking: MPA has the second-smallest Monge gap at λ = 10 
+
+and improves over PA by roughly an order of magnitude (see Table 4), yet it is not the second-best method empirically. This is not surprising, since the Monge gap appears only in a lower bound on the adversarial suboptimality; cf. Proposition 3.2. 
+
+Robust control (§ 6.3). For this experiment, we evaluate cMbP(T ) on a set of B = 32 ,768 points sampled uniformly from the CartPole box (mp, ℓ ) ∈ [0 .05 , 0.20] × [0 .25 , 0.75] , using adversaries trained for H = 1 ,000 episode steps. The resulting estimates are reported in Table 5 for λ ∈{0.1, 0.5, 1}. Across all three values of λ, ICNN-DRO attains the smallest Monge gap estimate, while MPA is consistently second and improves over PA by roughly three orders of magnitude. The method with the smallest gap throughout, ICNN-DRO, yields also the best-performing controller in § 6.3. At 
+
+λ = 1 (i.e. , the value used in Figure 3 in § 6.3), ICNN-DRO achieves the best control performance, with MPA as the runner-up; these are also the two methods with the smallest Monge gap estimates in Table 5. Thus, although the Monge gap enters only in a lower bound on the adversarial error, it still appears to be a useful indicator of empirical performance in this low-dimensional control setting. 
+
+G.4 Design Axes of the ICNN Adversary 
+
+Three design choices govern the effective capacity of the ICNN adversary with architecture (ICNN). The first is the depth and the width of the hidden layers. The second is the placement of the quadratic injections, either at every hidden layer or only at the readout. The third is the rank rout of the matrix AL ∈ Rrout ×m that generates the quadratic term of the readout. Depth, width, and injection placement are the conventional levers, whereas rout has no counterpart in standard network design. We now isolate the contribution of each axis and show that the third one dominates. 
+
+Design grid. For the depth and width axes, we consider three backbones, [64,64,64,64] (simple), 
+
+[128,128,128,128] (moderate) and [1024,512,512,256,128,64] (complex). For the quadratic injections, we consider two variants: quadratic only in the readout ( i.e. , ICNN-DRO) and quadratic at all layers ( i.e. , ICNN-DRO-Q). For the readout rank we sweep rout ∈ { 32 , 128 , 512 } in the readout-only variant and rout ∈ { 8, 32 , 128 } in the all-layers variant. We repeat the robust image classification experiment in Section 6.2 with all of these network architectures. The results are collected in Table 6. We observe that a simple ICNN equipped with a high-rank readout outperforms substantially larger ICNNs with low-rank readouts, while requiring markedly less computation. Hence, rout serves as the effective capacity knob of our architecture and determines the strength of the learned adversarial map more directly than network width or depth, and than the injection of quadratics. 
+
+Why the readout rank is the binding constraint. To understand why the expressiveness of the adversarial map is mainly determined by rout , we isolate the readout quadratic by setting δL = 0 
+
+in (ICNN). With AL = [ a1, . . . , a rout ]⊤, the transport map Tω (z) = ∇z ψω (z) expands to 
+
+Tω (z) = ∇z ϕω (z) + 
+
+> rout
+
+X
+
+> k=1
+
+(aka⊤ 
+
+> k
+
+)z + wzL,
+
+where ϕω (z) := exp( wyL)⊤yL(z) collects the output of the hidden layers. The adversary perturbs nominal samples via two main components. The first component is the neural network gradient 
+
+∇z ϕω (z), and the second is a linear transformation of the input sample Prout 
+
+> k=1
+
+(aka⊤ 
+
+> k
+
+)z. Crucially, 42 Table 6: Adversary capacity versus robustness. Best results per column are in bold, and second-best results are underlined. PGD cells are shaded green for configurations satisfying our robustness criterion (PGD accuracy ≥ 56% ), with darker green indicating stronger robustness, and red otherwise, with darker red indicating a larger shortfall. Runtime cells are shaded green only for configurations satisfying this robustness criterion, with darker green indicating lower computational cost. A runtime marked with † corresponds to a configuration with PGD accuracy below 56% . Although such configurations may be substantially faster, we do not regard them as successful accelerations of ICNN training because they fail our minimum robustness criterion. The objective of this ablation is specifically to reduce the approximately 10 4 s wall-clock training time of the full-width quadratic ICNN while retaining at least 56% PGD accuracy. Method rout Total params CIFAR-10 Wall-clock Runtime (s) Clean PGD ε=0 .5                                                                                                                 
+
+> Complex backbone [1024, 512, 512, 256, 128, 64]
+> ICNN-DRO-Q 831,693,314 91.37 57.36 10854 ICNN-DRO-Q 32 31,767,042 91.30 57.41 10908 ICNN-DRO-Q 128 32,061,954 91.21 57.58 11325 ICNN-DRO 88,665,602 91.45 57.28 6439 ICNN-DRO 32 8,739,330 91.42 57.40 6813 ICNN-DRO 128 9,034,242 91.35 57.51 6909 ICNN-DRO 512 10,213,890 91.35 58.46 7095
+> Moderate backbones [128, 128, 128, 128]
+> ICNN-DRO-Q 86,402,690 90.61 43.38 6271 †
+> ICNN-DRO-Q 32 6,476,418 90.81 53.48 6548 †
+> ICNN-DRO-Q 128 6,771,330 91.10 55.70 6729 †
+> ICNN-DRO 32 1,733,250 90.85 53.46 4089 †
+> ICNN-DRO 128 2,028,162 91.07 55.68 4135 †
+> ICNN-DRO 512 3,207,810 91.36 58.22 4473
+> Simple backbones [64, 64, 64, 64]
+> ICNN-DRO-Q 83,219,778 90.60 43.40 4462 †
+> ICNN-DRO-Q 32 3,293,506 90.81 52.44 4483 †
+> ICNN-DRO-Q 128 3,588,418 90.93 55.25 4665 †
+> ICNN-DRO 16 860,482 90.67 47.56 3118 †
+> ICNN-DRO 32 909,634 90.81 52.42 3415 †
+> ICNN-DRO 64 1,007,938 90.83 53.17 3568 †
+> ICNN-DRO 128 1,204,546 90.92 55.21 3713 †
+> ICNN-DRO 256 1,597,762 91.32 56.81 3867
+> ICNN-DRO 512 2,384,194 91.41 58.11 4037
+
+the second term is confined to span {a1, . . . , a rout }, meaning it can only ever explore a fixed set of at most rout directions. While ∇z ϕω (z) could theoretically supply additional directions, it is empirically dominated by the second term, meaning that the relative norm ∥∇ z ϕω (z)∥2/∥A⊤ 
+
+> L
+
+ALz∥2
+
+is empirically small. More precisely, across 4,096 training samples, this relative norm is merely 0.0711 
+
+for rout = 1 and 0.0910 for rout = 2 . Because the second term dictates the overall perturbation magnitude, rout effectively governs the map’s total directional capacity. This explains why increasing the hidden backbone width or depth (Table 6) cannot overcome a low readout rank, and increasing 
+
+rout serves as the main component of the expressivity of the ICNN. 
+
+G.5 Penalty Annealing for the Global Map 
+
+The penalty parameter λ in (DRO) controls the strength of the adversary. A large λ severely constrains the adversary, forcing the worst-case map toward the identity and reducing the objective to standard ERM. Conversely, a small λ permits a highly potent adversary. Rather than committing to a single λ, we anneal it along a decreasing schedule λ1 > λ 2 > · · · > λ S and, crucially, never reset the adversarial map between stages . The ICNN weights ω and the classifier θ learned under 
+
+λs initialize the next phase under λs+1 . This defines a smooth sequence of penalized DRO problems, one per penalty level. Note that warm-starting each stage from the previous solution is coherent 43 Table 7: Penalty annealing versus fixed-penalty adversarial training on CIFAR-10. The K = 20 
+
+fixed-λ baseline is reproduced from Table 1 for comparison. Best results per column are in bold, and the second best are underlined. Method K CIFAR-10 CIFAR-10.1 CIFAR-10.2 CIFAR-10-C (Common Corruption) Clean PGD ε=0 .5 AA ε=0 .5 Clean Clean 1 2 3 4 5 Avg ICNN-DRO (fixed λ = 30 ) 50 91.20 59.83 58.81 82.57 79.98 89.28 86.85 84.10 80.00 74.06 82.85 ICNN-DRO (fixed λ = 30 ) 20 91.41 58.11 57.71 82.56 80.12 89.20 86.79 84.01 79.92 73.95 82.77 ICNN-DRO + λ-annealing 20 91.48 59.94 58.92 82.60 80.10 89.31 86.93 84.15 80.04 74.12 82.91 
+
+because our adversary is a single global map Tω = ∇z ψω defined on all of Rm, i.e. , what carries across stages is the entire transport, not a set of transductive particles. This scheduling serves two main purposes. First, it creates an adversarial curriculum for the classifier. The adversary begins near the ERM baseline at λ1 and steadily strengthens as λ decreases. Second, it stabilizes the ICNN optimization by allowing the map’s displacement to grow incrementally. Because the worst-case displacement scales as 1/λ , warm-starting avoids the unstable jumps of a cold solve, in-stead expanding the transport map by a modest factor at each stage. Note that Tω is always the gradient of a convex potential, the refined map remains cyclically monotone throughout the entire schedule. 
+
+Setup. We evaluate this schedule using the CIFAR-10 image-space pipeline from Table 1 (§ 6.2). We retain the exact ICNN architecture used in the main text (a [64 , 64 , 64 , 64] backbone, readout-only quadratic injection, and rout = 128 ). Consequently, this run differs from the fixed-penalty baseline solely in its penalty schedule. The penalty decreases along λ ∈ { 60 , 50 , 40 , 35 , 30 } over S = 5 stages. Each stage lasts for E = 10 adversarial epochs ( 50 in total, preceded by a 2-epoch adversary-only warmup at λ1 = 60 ). Because the schedule terminates at the pipeline’s standard operating point (λS = 30 ), it steadily transitions from a mild, near-ERM adversary down to our standard robust formulation. In each stage, we perform K = 20 BB+Armijo inner ascent steps per batch. Crucially, neither the classifier θ nor the ICNN weights ω are reset at stage boundaries, allowing the transport map to be continuously refined across penalty levels rather than re-solved from scratch. 
+
+Results. As shown in Table 7, penalty annealing attains the best performance across nearly every metric. Compared to the matched fixed-λ baseline at K = 20 , the curriculum improves every reported metric except CIFAR-10.2, where it is lower by 0.02 percentage points. Remarkably, it even yields a higher PGD accuracy than the more computationally expensive fixed-λ configuration ( 59 .94% 
+
+vs. 59 .83% ), despite using 2.5× fewer inner ascent steps ( K = 20 vs. 50 ). This demonstrates that the curriculum discovers a stronger adversary at a fraction of the inner-loop cost. Crucially, this avoids the typical robustness-accuracy trade-off: the annealed model simultaneously achieves the highest clean CIFAR-10 accuracy ( 91 .48% ) and superior performance on the natural shifts of CIFAR-10.1, CIFAR-10.2, and CIFAR-10-C. These gains are consistent with the warm-started curriculum successfully stabilizing the classifier θ before the adversary reaches full strength. 44
