@@ -6,52 +6,46 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-09-30
-- 运行时间：2026-09-30 23:26:31 UTC
+- 最新运行日期：2026-10-01
+- 运行时间：2026-10-01 23:20:22 UTC
 - 运行状态：成功
-- 本次总论文数：10
-- 精读区：6
-- 速读区：4
+- 本次总论文数：8
+- 精读区：2
+- 速读区：6
 
 ### 今日简报（AI）
-今日精选 10 篇 AI 前沿论文，重点剖析大模型安全防御与多头对齐机制。
-核心推荐关注生成式掩码扩散模型在安全护栏构建及多类别安全引导方面的突破性进展。
-建议开发者优先研读安全重构相关论文，以提升模型在复杂对抗环境下的鲁棒性。
-- 详情：[/202609/30/README](/202609/30/README)
+今日精选 8 篇大模型安全与鲁棒性前沿研究，重点剖析推理模型对齐与训练效率的权衡难题。
+首推《DeShortcut-Align》与《No Free Efficiency》，深度揭示了模型捷径偏差与训练效率背后的安全隐患。
+建议关注大模型对齐的鲁棒性优化，并警惕追求极致训练效率可能带来的潜在安全漏洞。
+- 详情：[/202610/01/README](/202610/01/README)
 
 ### 精读区论文标签
-1. [Safety Reconstructed: Generative Modeling via Masked Diffusion Builds Strong Safety Guardrails](/202609/30/2609.33634v1-safety-reconstructed-generative-modeling-via-masked-diffusion-builds-strong-safety-guardrails)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：用于强效安全护栏的生成式建模
-2. [How to Tame a Multi-Headed Hydra? Adaptive Multi-Category Safety Steering for Large Language Models](/202609/30/2609.34514v2-how-to-tame-a-multi-headed-hydra-adaptive-multi-category-safety-steering-for-large-language-models)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：大语言模型自适应多类别安全引导
-3. [COGNIT-Guard: Calibrated Standalone Direct-Decision Guardrails with Heterogeneous CPU-NPU Confidence Cascading under Explicit Latency and False-Positive Constraints](/202609/30/2609.33671v1-cognit-guard-calibrated-standalone-direct-decision-guardrails-with-heterogeneous-cpu-npu-confidence-cascading-under-explicit-latency-and-false-positive-constraints)  
+1. [DeShortcut-Align: Decoupling Spurious Shortcuts for Robust Safety Alignment in Large Reasoning Models](/202610/01/2609.34896v1-deshortcut-align-decoupling-spurious-shortcuts-for-robust-safety-alignment-in-large-reasoning-models)  
    标签：评分：9.0/10、query:jb-def
-   evidence：独立直接决策安全护栏
-4. [InGuard: Towards Generalized Inner Guardrail for Safe Text-to-Image Generation](/202609/30/2609.27620v1-inguard-towards-generalized-inner-guardrail-for-safe-text-to-image-generation)  
-   标签：评分：8.0/10、query:jb-def
-   evidence：安全文本生成图像的内部护栏
-5. [Raising the Bar for Chinese Adolescent LLM Safety: A Culturally-Grounded, Fine-Grained Benchmark](/202609/30/2609.35902v1-raising-the-bar-for-chinese-adolescent-llm-safety-a-culturally-grounded-fine-grained-benchmark)  
+   evidence：鲁棒安全对齐与解耦伪捷径
+2. [No Free Efficiency: Revisiting the Trade-off Between Training Efficiency and Model Vulnerability](/202610/01/2609.33898v1-no-free-efficiency-revisiting-the-trade-off-between-training-efficiency-and-model-vulnerability)  
    标签：评分：8.0/10、query:llm
-   evidence：针对大语言模型青少年内容安全的中文基准测试
-6. [Similarity Is Not Validity: Defending LLM Semantic Caches Against Poisoning](/202609/30/2609.35908v1-similarity-is-not-validity-defending-llm-semantic-caches-against-poisoning)  
-   标签：评分：8.0/10、query:llm
-   evidence：防御大语言模型语义缓存投毒攻击
+   evidence：训练效率与模型对抗攻击脆弱性之间的权衡
 
 ### 速读区论文标签
-1. [Where Cyber Agents Struggle: Bottleneck Analysis of Multi-Stage LLM Agents](/202609/30/2609.28572v1-where-cyber-agents-struggle-bottleneck-analysis-of-multi-stage-llm-agents)  
+1. [ReproBench: Benchmarking LLM Agents on Reproducing Vulnerability From Scratch](/202610/01/2609.34450v1-reprobench-benchmarking-llm-agents-on-reproducing-vulnerability-from-scratch)  
    标签：评分：7.0/10、query:llm
-   evidence：对基于大语言模型的自主攻击系统及其安全漏洞的诊断研究
-2. [Brenier Meets Adversarial Training: Optimal Transport Geometry for Robust Learning](/202609/30/2609.31363v1-brenier-meets-adversarial-training-optimal-transport-geometry-for-robust-learning)  
-   标签：评分：7.0/10、query:jb-def
-   evidence：用于对抗训练的最优传输几何
-3. [Safety Nudges: User-Facing Interventions for Real-Time AI Risk Awareness](/202609/30/2609.26865v1-safety-nudges-user-facing-interventions-for-real-time-ai-risk-awareness)  
+   evidence：用于网络安全漏洞复现的大模型智能体
+2. [Adversarial Closed-Loop Curriculum for Evolving Role-Playing Agents](/202610/01/2609.28609v1-adversarial-closed-loop-curriculum-for-evolving-role-playing-agents)  
    标签：评分：6.0/10、query:jb-def
-   evidence：实时AI风险意识和安全提示
-4. [SecProbe: Adaptive Evaluation of Coding Agents on Cybersecurity Vulnerabilities](/202609/30/2609.33763v1-secprobe-adaptive-evaluation-of-coding-agents-on-cybersecurity-vulnerabilities)  
+   evidence：用于训练鲁棒大模型智能体的对抗性上下文重写
+3. [DistillGuard: Malicious NPM Package Detection and API Attack Chain Analysis via Static Graph and LLM Distillation](/202610/01/2609.28996v1-distillguard-malicious-npm-package-detection-and-api-attack-chain-analysis-via-static-graph-and-llm-distillation)  
    标签：评分：6.0/10、query:llm
-   evidence：代码代理在网络安全漏洞方面的评估
+   evidence：用于恶意软件包检测和安全分析的大语言模型蒸馏
+4. [Persistent Negatives for Adversarial Black-Box On-Policy Distillation](/202610/01/2609.30864v1-persistent-negatives-for-adversarial-black-box-on-policy-distillation)  
+   标签：评分：6.0/10、query:jb-def
+   evidence：大语言模型的对抗性蒸馏和策略奖励优化
+5. [Weird Machine Compositors: Exploiting AI Orchestration at the Expression Layer](/202610/01/2609.33413v1-weird-machine-compositors-exploiting-ai-orchestration-at-the-expression-layer)  
+   标签：评分：6.0/10、query:jb-def
+   evidence：AI编排中沙箱和护栏机制的失效
+6. [IVT-Guard: All-in-One Reasoning Model for AI-Generated Content Detection](/202610/01/2609.33585v1-ivt-guard-all-in-one-reasoning-model-for-ai-generated-content-detection)  
+   标签：评分：6.0/10、query:jb-def
+   evidence：生成式AI内容检测与护栏
 
 
 <div class="dpr-home-promo-card">
