@@ -1,0 +1,1039 @@
+Published as a conference paper at COLM 2026
+Bounded Reachability & Jailbreak Detection via Contraction-
+Constrained State Space Models
+Omanshu Thapliyal ∗
+Sr. AI ML Researcher
+Strategic Data Solutions Lab, Hitachi America Ltd.
+Santa Clara, CA 94086, USA
+{omanshu.thapliyal@hal.hitachi.com}
+Abstract
+Safety heads are lightweight classifiers attached to pretrained language
+models for flagging harmful inputs before generation. Their empirical
+detection performance has been studied, but their formal robustness prop-
+erties remain largely unexplored. We ask when a State Space Model (SSM)-
+based safety head can be certified to produce the same prediction for all
+inputs within a bounded embedding-space perturbation. We prove that
+the answer turns on a single condition: the l∞norm of the state transition
+matrix must satisfy ∥A∥∞< 1 (the contraction condition), which enables ex-
+act interval bound propagation (IBP) certification for linear time-invariant
+classifiers. When the contraction condition holds, the reachable output
+interval has bounded steady-state width and examples can be certified as
+robustly classified. When it fails, the interval grows exponentially with
+sequence length and certification is impossible at any practical perturbation
+radius. We enforce contraction with a hinge penalty and show on toxic com-
+ment data that certified fraction improves from 41% to 59%, with a sharp
+empirical phase transition at ∥A∥∞= 1 matching the theory. Applying a
+contraction-regularized S4 head to jailbreak detection on JailbreakBench,
+we achieve a zero-shot transfer to AdvBench (DR=0.994) and HarmBench
+(DR=0.988). A logistic regression on mean-pooled Mamba-130M embed-
+dings matches or exceeds the S4 head on every detection metric, confirming
+that harmful intent is already linearly separable in the embedding space.
+The S4 safety head’s contribution is not superior discrimination but the
+formal certification that no probe-based approach provides.
+The code is available at:
+§ https://github.com/omanshuthapliyal/
+contraction constrained-safety-head.
+1
+Introduction
+State-space models (SSMs) such as Mamba and Jamba (Gu & Dao (2024); Lieber et al. (2024))
+offer computational advantages over Transformer-based architectures for long sequences.
+As SSM-based language models are deployed in safety-sensitive settings, a key question
+arises: how can we add safety mechanisms whose robustness is formally certifiable, rather than merely
+empirically evaluated? Current safety mechanisms fall into two categories. 1) Response-level
+judges examine model outputs for refusal or compliance language. These are brittle on base
+models without safety training, because such models do not produce structured refusal
+phrases. 2) Prompt-level classifiers operate on the input alone, but have rarely been subject to
+formal robustness analysis for sequence models.
+Suppose an adversary perturbs an input to a safety classifier, then its output is perturbed as
+well. If we can bound how much the output perturbs over all inputs within some distance
+of the original, we can certify that the classification is stable under adversarial bounded
+∗Use footnote for providing further information about author (webpage, alternative address)—not
+for acknowledging funding agencies. Funding acknowledgements go at the end of the paper.
+1
+arXiv:2610.02853v1  [cs.AI]  2 Oct 2026
+
+
+Published as a conference paper at COLM 2026
+perturbations. Reachability Analysis for linear-time invariant (LTI) dynamical systems helps
+with these perturbation bounds as a property of the underlying dynamics. Reachable states
+for a (dynamical) system are all the possible output states the system can take, when input
+lies within a given (usually a bounded) set. For an LTI recurrence xt = Axt−1 + But, the
+state at time t is a linear function of all past inputs, so the reachable set of outputs is an
+interval that can be computed exactly. The key insight is that whether this interval stays
+bounded as t grows depends entirely on the spectral radius of A. If the largest row-sum
+norm ∥A∥∞< 1, each state update contracts the current interval before the new input
+widens it, and the interval converges to a steady-state width. Conversely, if ∥A∥∞≥1, the
+input widening compounds each step and the interval grows unbounded. The contraction
+condition is therefore not a design choice; it is the exact threshold between certifiable and
+non-certifiable classifiers in this setting.
+To this end, this paper makes two contributions. First, we make this connection precise
+for a toy LTI SSM classifier. We prove the contraction condition (∥A∥∞< 1) is sufficient
+for the reachable output interval to be bounded by δ ∥B∥∞/(1 −∥A∥∞), and necessary for
+this bound to be horizon-independent. A simple hinge penalty enforces contraction during
+training. We train the classifier on toxic comment data and measure how certified fraction
+varies with perturbation radius (50 log-spaced values), penalty strength (12 values), and
+sequence length (8 values).
+Second, we apply a contraction-regularized two-layer S4 safety head to jailbreak detection
+on JailbreakBench (JBB; Chao et al. (2024)). The head operates on token embeddings
+from base Mamba-130M, classifies prompts without seeing any model response, achieves
+JDR=1.0 across six JBB attack families under a static threat model, and transfers zero-shot
+to AdvBench and HarmBench. A key negative finding is that logistic regression on the
+same mean-pooled embeddings achieves AUROC=1.0 on all three benchmarks, equaling
+or exceeding SSM-head on every detection metric. The Mamba-130M embedding space
+already separates harmful from benign prompts linearly and the SSM-head’s recurrent
+architecture adds no discrimination advantage over this probe. Its distinctive contribution
+is formal certifiability: verifying a classification decision at a specified perturbation radius.
+The formal results (Proposition 1) apply only to the toy LTI setting (see Appendix B). The
+JBB setting results are empirical claims on specific benchmarks under specific threat models
+(Section 4). We provide a detailed landscape of related work, main points of contributions,
+and current perceived limitations in Appendix A. Detailed experiments to validate the
+proposed methodology are presented in Appendix B, and the detailed JBB results and
+their discussions are present in Appendix C.
+2
+Problem Setup
+We study the following problem: given a trained LTI SSM classifier and a perturbation radius δ,
+can we certify that the predicted label is identical for every embedding sequence within the l∞ball of
+radius δ around a given input? This is a guarantee stronger than empirical accuracy under any
+specific attack, because it holds against all perturbations in the threat model simultaneously,
+without executing any attack.
+For feed-forward networks, interval bound propagation (IBP) by Gowal et al. (2018) and
+linear relaxation methods such as CROWN by Zhang et al. (2018) solve this efficiently by
+propagating interval bounds layer by layer. The error introduced at each layer is additive
+and independent of network depth for linear layers. For SSMs, the recurrence creates a
+qualitatively different difficulty: an input perturbation at step t propagates forward through
+all remaining steps, compounding multiplicatively at each transition. Over a sequence of
+length T, a perturbation introduced at step 1 is amplified by a factor of up to ∥A∥T
+∞by step
+T. If ∥A∥∞≥1 this growth is unbounded, and the reachable output set expands to cover
+both sides of the decision boundary for any δ > 0 and long enough T, making certification
+vacuous regardless of the method used. Randomized smoothing (see Cohen et al. (2019))
+avoids this dependence on architecture, but provides only a probabilistic guarantee and
+cannot certify individual examples exactly.
+2
+
+
+Published as a conference paper at COLM 2026
+Prior work on certifying recurrent networks (Jacoby et al. (2020)) addresses bounded RNNs
+with nonlinear activations via invariant inference. Our setting is architecturally simpler: the
+SSM is fully linear, but the lack of activation-induced contraction makes the compounding
+problem acute. Without any nonlinearity to bound state growth, the recurrence dynamics
+alone determine whether certification is tractable. The central question this section for-
+malizes is therefore: under what condition on A does exact, non-vacuous IBP certification
+remain possible for arbitrary T?
+2.1
+Linear SSM Classifier
+The classifier reads a sequence of token embeddings one step at a time, updating a hidden
+state vector at each step, then maps the final state to a scalar logit. This is a standard linear
+time-invariant (LTI) dynamical system (see Gu et al. (2021)): the state at each step is a
+weighted sum of all past inputs, with weights decaying according to the matrix A. The
+key property we analyze is whether that decay is fast enough to keep the output interval
+bounded when inputs are perturbed. Therefore, given an input sequence u1, · · · , uT ∈Rd,
+and initial state x0 = 0, the LTI SSM classifier is defined by the recurrence and output
+equations:
+xt = Axt + But, st = Cxt + Dut,
+ˆyt = 1st>0
+(1)
+where A ∈RN×N, B ∈RN×d, C ∈R1×N, and D ∈R1×d are the learned parameters. The
+scalar logit st produces binary prediction ˆyt. All four matrices are unconstrained, real-valued
+nn.Parameters, and the state matrix A is initialized as 0.9I + 0.01N (0, 1).
+2.2
+Perturbation Model
+We model an adversary who can shift each token embedding by at most δ in l∞distance. That
+is, the adversary can independently nudge every coordinate of every embedding vector by
+at most δ. This captures synonym substitutions, paraphrase variants, and small continuous
+shifts in the embedding space (see Jia et al. (2019)), thereby modeling a broader class of
+adversarial behavior. The perturbation acts on the embedding sequence directly rather than
+on discrete tokens, relating δ to specific text edits requires the calibration procedure (see
+Section B).
+The reachable output set is the set of all logits the classifier can produce under any such perturbation.
+Because the SSM is linear in each embedding, this set is always a closed bounded interval
+(which later sections show can be computed exactly without relaxation). However, the
+width of that interval depends on how perturbations compound through the recurrence,
+with each step multiplying the existing interval width by ∥A∥∞before the next perturbation
+arrives. Over T steps, this gives a geometric series whose convergence, and therefore the
+non-vacuity of certification, depends entirely on whether ∥A∥∞.
+Definition 2.1 (Reachable Output Set). Given a nominal embedding sequence unom =
+(unom
+1
+, · · · , unom
+T
+) and perturbation radius δ ≥0, the l∞perturbation ball is Uδ(unom) =
+
+u′ : ∥u′
+t −unom
+t
+∥∞≤δ, ∀t
+	
+The (T-sequence length) reachable output set is then defined as
+the set of all logits achievable over this ball:
+Rδ(unom) =
+
+sT(u′) : u′ ∈Uδ(unom)
+	
+.
+(2)
+Because the SSM is linear in each ut, this set is always a closed bounded interval [sl
+t, sh
+t ],
+computable exactly without any relaxation or enclosure error.
+2.3
+Certification Criterion
+An example is certified at radius δ if the entire reachable interval lies strictly on the correct side of
+the decision boundary s = 0. For a toxic example, this means even the minimum reachable
+logit is positive; for a safe example, even the maximum is negative. If the interval straddles
+zero, some perturbation within the ball would flip the predicted label, so the example is
+3
+
+
+Published as a conference paper at COLM 2026
+not certified. Note that non-certified examples may still be correctly classified under most
+perturbations, since our definition of certification is a conservative worst-case guarantee,
+not a claim about typical behavior.
+Definition 2.2. An example with nominal sequence unom and true label y ∈{0, 1} is certified
+at radius δ if: all perturbations in Uδ predict toxic y = 1 : sl
+t > 0, and all perturbations
+predict safe y = 1 : sh
+t < 0.
+This criterion directly answers the problem stated at the top of this section: an example
+passes certification if and only if the classifier’s decision is provably invariant to all l∞(δ)
+perturbations of its embedding sequence. The dependence of certified fraction over a dataset
+(the fraction of correctly classified examples that also satisfy Definition 2.2) on δ and on
+∥A∥∞is the subject of Sec. B.
+3
+Methodology
+3.1
+Interval Bound Propagation for LTI Systems
+To compute the reachable interval, we track a lower bound xl
+t and upper bound xh
+t on
+the possible state at each time step t, propagating them through the recurrence in (1).
+Because the system is linear, this tracking is exact: no relaxation is needed. The key step
+is splitting A into its positive and negative parts, then routing interval endpoints through
+the correct part to avoid sign-error. A positive entry in A maps lower bounds to lower
+bounds, and a negative entry reverses the direction. This A+/A−splitting is standard
+interval arithmetic for linear maps since its exactness is the reason certification here is tight
+rather than conservative.
+More formally, let A = A+ + A−, where A+
+ij = max (Aij, 0), and A−
+ij = min (Aij, 0) (sim-
+ilarly split C, D). Starting from xl
+0 = xh
+0 = 0, the interval/box propagates exactly for
+t = 1, · · · , T as:
+xl
+t = A+xl
+t−1 + A−xh
+t−1 + Bunom
+t
+−δ ∥B∥∞,
+xh
+t = A+xh
+t−1 + A−xl
+t−1 + Bunom
+t
++ δ ∥B∥∞
+(3)
+where ∥B∥∞denotes the row-wise absolute sum (∥B∥∞)i = ∑j
+Bij
+. This propagation is
+exact for LTI systems, without any relaxation or bounding errors. The output interval at
+horizon T can then be expressed as:
+sl
+T = C+xl
+T−1 + C−xh
+T−1 + D+ul
+T−1 + D−uh
+T−1,
+xh
+T = C+xh
+T−1 + C−xl
+T−1 + D+ul
+T−1 + D−uh
+T−1
+(4)
+Applying equations (3), (4), at each time step also gives the output reach tube; the time-
+indexed sequence of output intervals [sl
+t, sh
+t ] for t = 1, · · · , T. This tube shows not just where
+the final classification might land, but how the range of possible outputs evolves as tokens
+are consumed. A contracting system produces a tube that stabilizes, and a non-contracting
+system produces a tube that widens monotonically. Figure 3 visualizes this difference
+directly.
+3.1.1
+Contraction and Bounded Reachability
+At each step, two forces act on the interval width. The state transition A projects the current
+width by up to ∥A∥∞, and the new input perturbation δ adds a fixed width of up to δ ∥B∥∞.
+Clearly, if ∥A∥∞< 1, each step shrinks the existing width before the new perturbation ar-
+rives, and the width converges to a finite steady-state. If ∥A∥∞≥1, the existing width never
+contracts, so accumulating perturbations and the width grows unbounded as the sequence
+lengthens. This geometric intuition is made more precise in the following proposition.
+Proposition 1 (Contraction =⇒Bounded Reachability; Separation =⇒Certification). Let
+rt =
+xh
+t −−l
+t
+
+∞/2 be the state box half-width at time-step t.
+4
+
+
+Published as a conference paper at COLM 2026
+(i) If ∥A∥∞< 1, then for all t ≥0:
+rt ≤∥A∥t
+∞· r0 + δ ∥B∥∞· 1 −∥A∥t
+∞
+1 −∥A∥∞
+(5)
+In particular, the steady-state bound is r∞≤δ ∥B∥∞/(1 −∥A∥∞). If ∥A∥∞≥1,
+then rt grows at least as fast as ∥A∥t
+∞and is unbounded as T →∞.
+(ii) An example is certified (Definition 2.2) if and only if the reachable output interval
+at horizon T satisfies the separation criterion: sl
+T > 0 for y = 1, or sh
+T < 0 for y = 0.
+The width of the output interval satisfies sh
+T −sl
+T ≤2(∥C∥∞· rT + δ ∥D∥∞).
+A sketch of proof for Proposition 1 is provided in Appendix A.1. Proposition 1 provides bi-
+nary certification decisions. The output interval width is bounded by 2(∥C∥∞rT + δ ∥D∥∞),
+so tighter contraction produces a narrower output interval.
+An example with logit
+snom
+T
+= +0.5 is certified at δ if the interval half-width is less than 0.5, otherwise the in-
+terval may straddle zero. In practice, the interval width and the logit margin are on the
+same order, which is the primary certification bottleneck, not the bound’s tightness. Note
+that Proposition 1 says nothing about how large the margins will be, as that depends on the
+learning objective and training data.
+3.1.2
+Contraction Regularization
+Rather than constraining A directly, we can add a soft hinge penalty to the training loss that
+pushes ∥A∥∞below 1 while leaving the update rule unconstrained:
+L = LBCE + λ · relu (∥A∥∞−1)
+(6)
+where ∥A∥∞= maxi ∑j
+Aij
+. This induces a gradient ∂L /∂Aij = λ · sign(Aij) on the row
+that achieves the maximum row-sum when ∥A∥∞> 1, pulling that row inward. When
+∥A∥∞< 1, the gradient is exactly zero—the penalty does not interfere with the binary
+cross-entropy (BCE) loss in the contracting regime. The hyperparameter λ controls the
+rate of push (a sweep over 12 values shows monotone improvement in certified fraction in
+Appendix B).
+3.2
+S4 Safety Head for Jailbreak Detection
+The S4 safety head takes a sequence of token embeddings as input and outputs a single scalar
+score indicating whether the prompt is a jailbreak attempt. It reads the token embeddings
+one by one, maintaining a 64-dimensional hidden state that accumulates information about
+the prompt as tokens arrive. After all tokens are processed, it averages the per-token hidden
+states (weighted by which positions are real tokens, not padding). Then it passes the average
+through a linear layer to produce the final score.
+This prompt-only design is deliberate. Response-level judges, systems that examine whether
+the model’s reply contains refusal phrases, require a model response and fail silently on
+base models without safety training, producing no structured refusals. Operating on the
+prompt alone avoids this dependency and allows detection before any generation occurs.
+On the other hand, the S4 head is lightweight and is attached to, not built into, the base
+model. Token embeddings are extracted directly from the Mamba-130M embedding table,
+so inference runs in ∼5 ms on CPU and the head adds ∼1 MB of parameters on top of the
+frozen model. This S4 head utilizes a single lookup without any forward pass through any
+backbone layers of the Mamba-130M model.
+Formally, the head applies a two-layer diagonal S4 architecture (Gu et al. (2022)). Each
+S4 layer uses the zero-order hold (ZOH) discretization: ¯Ai = exp (Ai · ∆avg, Bi = (( ¯Ai −
+1)/Ai) · Bi, with ∆avg the mean step size. The contraction penalty in (6) is applied to the
+l∞-norm of the diagonal discretized state matrix,
+ ¯A
+
+max = maxi
+ ¯Ai
+.
+The full pipeline is: Linear(768→64) →S4 layer × 2 (d = 64, N = 16) →LayerNorm →
+masked-mean pooling →Linear(64→1). Masked-mean pooling averages the per-token
+5
+
+
+Published as a conference paper at COLM 2026
+outputs over real (non-padding) positions only, producing a fixed-size representation re-
+gardless of prompt length. As a result, the total number of parameters in our experiment
+are 54,049.
+Remark 3.1 (Score is a linear function of the mean-pooled SSM state). The SSM head final
+score is s = wTh + b, where h = ∑t mtzt/∑t mt is the masked mean of per-token SSM
+outputs zt ∈R64. By linearity, two input sequences that produce the same mean-pooled
+state vector h receive identical scores. The two S4 layers compute zt recurrently, so the
+intermediate representations are order-dependent. Whether two surface reformulations of
+the same request produce the same pooled h depends on the learned dynamics and cannot
+be derived analytically.
+4
+Certifiable Jailbreak Detection
+In this Section we evaluate our methodology on JailbreakBench (JBB), a benchmark of 100
+harmful behaviors across 10 harm categories, by Chao et al. (2024). Primary evaluation uses
+the full test split (100 behaviors) across all six attack families. The original dev split (50
+behaviors) is preserved for comparison with the preceding sections. The benign evaluation
+set is expanded to 80 prompts: 30 clearly benign prompts (recipes, trivia, science questions)
+and 50 hard-negative prompts (dual-use queries on security, chemistry, medicine, and
+historical events).
+The base model is a Mamba model with 130M parameters, with no safety training. We
+compare against StringJudge and KeywordJudge as protocol reference points (Chao et al.
+(2024)), with both judges operate on model responses, not prompts. StringJudge detects
+refusal phrases in the output, and KeywordJudge detects compliance-indicating phrases.
+The base Mamba-130M has no safety fine-tuning and produces no structured refusals, so
+both judges return JDR=0.0 (this is a protocol-mismatch result, not a meaningful perfor-
+mance comparison). The SSM-head is then trained on 770 examples: 100 JBB goals, 100
+JBB targets, 200 template-attacked goals, and 172 benign prompts with scripted refusals.
+Evaluation uses prompt-only mode (empty response strings) and the head classifies on
+embedding-level intent.
+We first use a static threat model, where attack templates are fixed in advance and do not
+adapt to the detector. This is the primary evaluation regime for JBB-style benchmarks. An
+adaptive threat model, where the attacker observes detector scores and iterates, is addressed in
+later section. Jailbreaking results for static threat model do not guarantee robustness against
+adaptive adversaries.
+4.1
+Static Threat Model
+4.1.1
+Detection Walkthrough
+For direct-attack prompts, the score rises within the first 10–20 tokens as the embedding
+captures the harmful framing. Template-wrapped attacks (DAN, roleplay) show a delayed
+rise, as the wrapper text is processed first and contributes low-harm signal, then the actual
+harmful content raises the score above τ = 0. Benign prompts stay near or below τ = 0
+throughout. This trajectory pattern is consistent with the model operating on embedding-
+level content rather than surface phrasing, shown in Fig. 1. All four harmful examples are
+correctly detected (score > 0) and both benign examples are correctly passed (score < 0).
+Figure 12 supports the claim that SSM-head operates semantically rather than syntactically.
+Different attack formulations (template injection, roleplay framing, developer mode) all
+map to similar score values. This is consistent with the prompt-level embedding mode:
+the Mamba-130m embedding table encodes token identity rather than surface template
+structure. The benign distribution (bottom row, mean µ ≈−1.5) is well-separated from all
+harmful families, explaining the high AUROC at the default threshold.
+Three conclusions follow consistently from the cross-benchmark evaluation. 1) The linear
+probe is the stronger detector: LR-mean-pool achieves AUROC=1.0 on all three benchmarks,
+6
+
+
+Published as a conference paper at COLM 2026
+Figure 1: SSM-head detection walkthroughs for six representative prompts. Each panel
+shows the running logit score as tokens are added (top) and the full prompt text (bottom,
+colored border). Red border = harmful ground truth; green border = benign.
+Figure 2: Proxy-gradient attack: mean score trajectory (left, 3.681→3.675) and score distribu-
+tion before vs. after (right). JDR=1.0 before and after; this is a continuous embedding-space
+relaxation, not a discrete-token attack.
+while SSM-head achieves 0.993, 0.981, and 0.947 on JBB, AdvBench, and HarmBench re-
+spectively. The HarmBench gap of 5.3 AUROC points is concentrated in two semantic
+categories (Table XXX), and adding MLP capacity does not close it; the MLP also reaches
+AUROC=1.0. 2) SSM-head’s failure modes are localized and mechanistically attributable to
+distribution mismatch: missed detections cluster in copyright and harassment/bullying cat-
+egories, where JBB training distribution diverges from HarmBench vocabulary. The probe’s
+advantage in precisely these categories suggests that mean-pooled embeddings capture a
+broader distributional signal than SSM-head’s sequential recurrence at this training scale.
+3) SSM-head’s contribution is formal certifiability under embedding perturbation. Neither
+the probe nor the MLP can provide this guarantee at any perturbation radius. Contraction
+regularization improves certified fraction from 41% to 68% while leaving accuracy essen-
+tially flat, confirming that certifiability and discrimination are orthogonal properties in this
+setting.
+4.2
+Adaptive Threat Model
+Proxy-Gradient Adaptive Attack
+We evaluate an embedding-space gradient attack as a
+proxy for white-box adversarial robustness. The attack performs gradient ascent on the
+input embedding (100 steps, l2-ball ε =0.5, Adam lr=0.01) to minimize the SSM-head score.
+Figure 2 shows the score trajectory and pre/post-attack score distributions for 20 direct-
+attack prompts. JDR=1.0 before and after attack: the mean score declines from 3.681 to 3.675
+over 100 steps, and no example crosses the τ =0 boundary. The attack fails to push any
+score below zero because the margin (mean score ≈3.7) far exceeds the perturbation budget
+(ε =0.5 in l2 over the full sequence embedding), and the SSM’s temporal integration further
+smooths local perturbations.
+7
+
+
+Published as a conference paper at COLM 2026
+Black-Box and White-Box Adaptive Attacks
+We evaluate two adaptive attacks of increas-
+ing adversarial strength against SSM-head, comparing a gradient-free black-box strategy
+and a gradient-guided white-box strategy. Both operate at the discrete token level and
+require no access beyond what is stated in each threat model.
+The black-box attacker does not observe model gradients; it can only query the detector
+score (see Fig. 17). At each step, the attacker does the following. 1) leave-one-out sensitivity
+identifies the most-score-affecting token position; 2) the top-15 vocabulary tokens by cosine
+similarity to the current token are evaluated as discrete replacements; and 3) the best-
+reducing replacement is accepted if it lowers the score.
+The white-box attacker on the other hand has full access to model weights and computes
+exact gradients (see Fig. 18). At each step the attacker does the following. 1) a forward pass
++ backward pass yields ∂s/∂et for every token position simultaneously; 2) for each position
+t, every vocabulary token j is ranked by the linear score approximation ∆sapprox(t, j) =
+(ej −ecurr
+t
+) · (∂s/∂et); 3) the top-K positions with the largest predicted score reduction are
+evaluated as discrete replacements; and 4) the globally best replacement is accepted if it
+reduces the score. This is a standard HotFlip-style gradient attack (Ebrahimi et al. (2018))
+applied to the SSM-head scorer.
+4.3
+Cross-Benchmark Transfer
+AdvBench transfer (DR=0.994, AUROC=0.981).
+SSM-head detects 517/520 AdvBench
+harmful instructions at τ = 0 (0.6% miss rate). The linear probe detects all 520 (DR=1.000,
+AUROC=1.000).
+Failure-mode analysis shows no consistent pattern for the 3 missed
+prompts, all have slightly lower embedding norms than the detected set.
+HarmBench transfer (DR=0.988, AUROC=0.947).
+SSM-head misses 5/400 behaviors
+(1.25% miss rate); the linear probe misses 2/400 (DR=0.995, AUROC=1.000). The SSM-head
+miss rate is highest in harassment bullying (4.0%, 1/25) and copyright (3.0%, 3/100); all
+other categories achieve miss rate ≤1.5%. The copyright category uses vocabulary that
+diverges from JBB training, lacking the direct harmful-action verbs (”make”, ”create”),
+characterizing most JBB and AdvBench goals. The AUROC gap (SSM-head 0.947 vs. probe
+1.0) is concentrated in these two categories only.
+The misses are semantically localized.
+Copyright prompts use vocabulary that diverges
+from JBB training data (no direct harm-action verbs), and harassment/bullying prompts
+are phrased in a conversational register underrepresented in JBB. The probe’s advantage in
+these categories suggests that the mean-pooled embedding captures a broader distributional
+signal than SSM-head’s sequential recurrence learns to use at this training scale. The baseline
+comparisons confirm that the harmful signal is already linearly separable in the Mamba
+embedding space. The failure modes are a distribution-mismatch artifact, and not an
+architectural limitation of SSM-head per se.
+5
+Conclusion
+This work proves that contraction of the state transition matrix is sufficient and necessary
+for bounded reachability in a toy LTI SSM classifier, and applies a contraction-regularized
+S4 safety head to jailbreak detection on JailbreakBench.
+On the full JBB test split for a static thread model, SSM-head achieves JDR=1.0 across all
+six attack families under a static threat model, and AUROC=0.994. It generalizes across
+obfuscation styles, multi-turn injection positions, and held-out attack families. Under
+adaptive threat models, SSM-head is vulnerable on direct-attack prompts: a black-box
+greedy substitution attack achieves ASR=0.933, and a white-box gradient-guided attack
+achieves ASR=1.0.
+A logistic regression on mean-pooled Mamba-130M embeddings achieves AUROC=1.0 on
+all three benchmarks, exceeding SSM-head on every discrimination metric. The embedding
+8
+
+
+Published as a conference paper at COLM 2026
+space drives the transfer, and the SSM-head’s recurrent structure is not necessary for
+discrimination. Its contribution is formal certifiability, the ability to verify a classification
+decision at radius δ.
+Primary future works include: (i) adversarial training on token-substitution examples to
+close the direct-attack vulnerability, (ii) fine-tuning or retraining on copyright and harass-
+ment/bullying behaviors to close the HarmBench AUROC gap, and (iii) extending box
+propagation to nonlinear SSM architectures.
+References
+Daniel Borkan, Lucas Dixon, Jeffrey Sorensen, Nithum Thain, and Lucy Vasserman. Nu-
+anced metrics for measuring unintended bias with real data for text classification. In
+Companion proceedings of the 2019 world wide web conference, pp. 491–500, 2019.
+Patrick Chao, Edoardo Debenedetti, Alexander Robey, Maksym Andriushchenko, Francesco
+Croce, Vikash Sehwag, Edgar Dobriban, Nicolas Flammarion, George J Pappas, Florian
+Tramer, et al. Jailbreakbench: An open robustness benchmark for jailbreaking large
+language models. Advances in Neural Information Processing Systems, 37:55005–55029, 2024.
+Jeremy Cohen, Elan Rosenfeld, and Zico Kolter. Certified adversarial robustness via ran-
+domized smoothing. In international conference on machine learning, pp. 1310–1320. PMLR,
+2019.
+Javid Ebrahimi, Anyi Rao, Daniel Lowd, and Dejing Dou. Hotflip: White-box adversarial
+examples for text classification. In Proceedings of the 56th Annual Meeting of the Association
+for Computational Linguistics (Volume 2: Short Papers), pp. 31–36, 2018.
+Sven Gowal, Krishnamurthy Dvijotham, Robert Stanforth, Rudy Bunel, Chongli Qin,
+Jonathan Uesato, Relja Arandjelovic, Timothy Mann, and Pushmeet Kohli. On the ef-
+fectiveness of interval bound propagation for training verifiably robust models. arXiv
+preprint arXiv:1810.12715, 2018.
+Albert Gu and Tri Dao. Mamba: Linear-time sequence modeling with selective state spaces.
+In First conference on language modeling, 2024.
+Albert Gu, Karan Goel, and Christopher R´e. Efficiently modeling long sequences with
+structured state spaces. arXiv preprint arXiv:2111.00396, 2021.
+Albert Gu, Karan Goel, Ankit Gupta, and Christopher R´e. On the parameterization and
+initialization of diagonal state space models. Advances in neural information processing
+systems, 35:35971–35983, 2022.
+Hakan Inan, Kartikeya Upasani, Jianfeng Chi, Rashi Rungta, Krithika Iyer, Yuning Mao,
+Michael Tontchev, Qing Hu, Brian Fuller, Davide Testuggine, et al. Llama guard: Llm-
+based input-output safeguard for human-ai conversations. arXiv preprint arXiv:2312.06674,
+2023.
+Yuval Jacoby, Clark Barrett, and Guy Katz. Verifying recurrent neural networks using
+invariant inference. In International Symposium on Automated Technology for Verification and
+Analysis, pp. 57–74. Springer, 2020.
+Robin Jia, Aditi Raghunathan, Kerem G¨oksel, and Percy Liang. Certified robustness to
+adversarial word substitutions. In Proceedings of the 2019 conference on empirical methods
+in natural language processing and the 9th international joint conference on natural language
+processing (EMNLP-IJCNLP), pp. 4129–4142, 2019.
+Opher Lieber, Barak Lenz, Hofit Bata, Gal Cohen, Jhonathan Osin, Itay Dalmedigos, Erez
+Safahi, Shaked Meirom, Yonatan Belinkov, Shai Shalev-Shwartz, et al. Jamba: A hybrid
+transformer-mamba language model. arXiv preprint arXiv:2403.19887, 2024.
+9
+
+
+Published as a conference paper at COLM 2026
+Huan Zhang, Tsui-Wei Weng, Pin-Yu Chen, Cho-Jui Hsieh, and Luca Daniel. Efficient neural
+network robustness certification with general activation functions. Advances in neural
+information processing systems, 31, 2018.
+Andy Zou, Zifan Wang, Nicholas Carlini, Milad Nasr, J Zico Kolter, and Matt Fredrikson.
+Universal and transferable adversarial attacks on aligned language models. arXiv preprint
+arXiv:2307.15043, 2023.
+A
+Appendix
+A.1
+Related Work
+State Space Models
+Structured State Space Models (S4) Gu et al. (2021) and Mamba Gu &
+Dao (2024) demonstrate competitive performance with Transformers on long sequences. The
+diagonal-real S4 parameterization Gu et al. (2022) and ZOH discretization we use connect
+directly to classical LTI stability theory, making formal analysis tractable.
+LLM Safety and Jailbreaking
+JailbreakBench Chao et al. (2024) provides a standardized
+framework for evaluating jailbreak attacks. Response-level judges (LlamaGuard Inan et al.
+(2023), GPT-4 graders) rely on model outputs; string/keyword heuristics Zou et al. (2023) are
+cheaper but brittle and response-dependent. Our head classifies at the prompt embedding
+level, avoiding response-level dependencies entirely.
+Formal Robustness Certification
+Interval bound propagation (IBP, Gowal et al. (2018))
+and CROWN (Zhang et al. (2018)) certify feed-forward networks under lp perturbations.
+For linear networks, IBP is exact; for nonlinear networks, it introduces relaxation error.
+Recurrent network certification Jacoby et al. (2020) is less developed. For LTI systems, the
+A+/A−box propagation is equivalent to exact IBP; the nonlinear activations that require
+relaxation in general networks are absent. The contraction condition is the LTI analog of a
+1-Lipschitz constraint on a feedforward network in that they both ensure that perturbation
+magnitude is not amplified through the computation graph.
+Representation-Based Safety
+Representation Engineering Zou et al. (2023) trains
+lightweight classifiers on LLM hidden states for alignment tasks, without formal robustness
+analysis. The linear probe baseline in Section 4 is directly analogous to this line of work; its
+competitive detection performance is consistent with prior evidence that harmful intent is
+linearly encoded in large pretrained models. Our contribution is a certification framework
+for the classifier itself, not a claim that the safety signal is absent from simpler baselines.
+A.2
+Contributions
+1. Exact box propagation framework for LTI safety heads The A+/A−splitting and the resulting
+per-step recursion implement exact interval arithmetic for LTI systems. These are exact in
+the sense that the computed interval [sl
+T, sh
+T] is the tightest possible axis-aligned bounding
+interval for the reachable output set under input perturbations. This contrasts with nonlinear
+networks where IBP is only an over-approximation. The implementation (BoxReachSSM)
+exposes both a final-step API (propagate) and a trajectory API (propagate trajectory),
+enabling both scalar certification and reach tube visualization.
+2. Hinge penalty training procedure for soft contraction enforcement The training-time hinge
+penalty is a practically important contribution because it avoids constrained optimization
+(projection onto the set A : ∥A∥∞≤1) while achieving the same effect during the natural
+gradient descent trajectory. This is useful because: (a) it is trivially compatible with any
+standard optimizers like Adam and SGD, without projection steps; (b) it allows ∥A∥∞to
+transiently exceed 1 during optimization and recover, which is important for escaping local
+minima near the boundary; and (c) the hyperparameter λ provides a continuous knob
+between pure classification and pure contraction.
+10
+
+
+Published as a conference paper at COLM 2026
+3. Prompt-only jailbreak detection without response signal Existing jailbreak detection bench-
+marks largely evaluate models that can observe the LM’s response (StringJudge, GPT-4
+graders). Using only the token embedding table of the base model to extract prompt fea-
+tures makes the SSM-head response-agnostic. The advantage of the sequential SSM-head
+formulation is that it opens the door to formal certification
+4. Reachability as Safety head Diagnostic Tool The reach tube figures are a contribution to
+interpretability for certified models. Rather than reporting a single scalar (certified fraction
+at a given perturbation radius), the tube shows the full temporal geometry of the reachable
+output set. These are diagnostics not available from scalar metrics, and they provide
+intuition for why certain examples are certifiable and others are not. The reachability tool
+can be applied to any LTI SSM safety head without modification.
+A.3
+Limitations
+1. The box-propagation results in (3), (4) are exact only for the LTI model (N=8, d=32, T=64
+for our examples). They do not apply to SSMs with nonlinear gating, selection mechanisms,
+or attention. Extending interval propagation to those settings requires bounding nonlinear
+activations, which introduces relaxation error as in CROWN Zhang et al. (2018).
+2. Certification rates are bounded by logit margins, not by the bound’s looseness. The toy
+classifier’s mean clean logit on correctly classified toxic examples is 0.14. By Proposition 1,
+certification at radius δ requires the output interval half-width to be smaller than this margin.
+At δ = 10−3, the half-width under the constrained model is 0.11-0.18 for most examples,
+comparable to the margin itself. More data, a larger model, or a margin-maximizing loss
+would increase margins and improve certification rates at the same δ, and the bound would
+still be tight.
+3. The δ-ball is defined in token embedding space, not character or token space. A formal
+bridge would require composing the IBP interval with the tokenizer’s discrete-to-continuous
+map, which is outside the scope of this work.
+4. The certified set is a conservative subset of the true robust set. A non-certified example
+may still be correctly classified under all perturbations in the ball, but the box propagation
+cannot prove it. Tighter bounds, such as the LP relaxations in the style of CROWN, could
+certify more examples at the same δ but would be more expensive to compute.
+A.4
+Sketch of proof for Proposition 1
+Sketch of proof. [Proposition 1.]
+(i) We define the box half-width vector wt = (xh
+t −xl
+t)/2 ≥0. From (3)-(4), the
+half-width satisfies the recursion wt = |A| wt−1 + δ |B|⃗1 where |A|ij =
+Aij
+ and
+|B|ij =
+Bij
+. Since ∥|A|∥∞= ∥A∥∞, applying the recursion t times gives wt ≤
+∥A∥t
+∞w0 + δ ∥B∥∞(I + |A| + · · · + |A|t−1)⃗1. Taking the ∞-norm and summing the
+geometric series (convergent iff ∥A∥∞< 1) yields (5). Further, when ∥A∥∞≥01
+and r0 > 0, the geometric series diverges and rt →∞.
+(ii) (Certification criterion.) By Definition 2.2, an input x is certified at radius δ iff the
+classifier assigns the correct label y to every ˜x satisfying ∥˜x −x∥∞≤δ. The SSM
+classifier assigns label 1 iff sT > 0 and label 0 iff sT ≤0. Box propagation computes
+the exact reachable output interval [sl
+T, sh
+T] for all ˜x in the δ-ball, and no relaxation
+is introduced since the system is LTI. The classifier is correct for all such ˜x iff the
+interval lies entirely on the correct side: sl
+T > 0 when y = 1 (entire interval is
+positive), or sh
+T < 0 when y = 0 (entire interval is negative). This equivalence holds
+exactly because box propagation is tight for LTI systems.
+(Output interval width bound.) The output equation is sT = CxT + DuT. Ap-
+plying the same IBP argument as above (but at the output map rather than the
+11
+
+
+Published as a conference paper at COLM 2026
+Figure 3: Output reach tube [sl
+t, sh
+t ] (shaded) and nominal trajectory snom
+t
+(solid) over time
+steps t = 1, · · · , 64 for three representative examples under the constrained (λ = 0.10, left)
+and unconstrained (λ = 0, right) models.
+state transition) the output interval half-width satisfies (sh
+T −sl
+T)/2 ≤∥C∥∞·
+(xh
+T −xl
+T)/2
+
+∞+ δ ∥D∥∞= ∥C∥∞· rT + δ ∥D∥∞. Multiplying by 2 yields the
+stated bound.
+B
+A Toy Example: Empirical Results
+To begin with, we use a small LTI classifier to validate our method. The aim of such
+a ToySSMClassifier is to test and visualize the formal results from proposed methods
+in Section 3, not to build a competitive toxicity detector. The ToySSMClassifier uses a
+word-level tokenizer (vocabulary 3,000), 32-dimensional embedding, 8-state LTI SSM (full
+A ∈R8×8), max length T=64. The training data consists of 10,000 toxic conversation
+examples drawn from the Civil Comments/Jigsaw Unintended Bias dataset from Borkan
+et al. (2019). The certification set consists of 600 held-out examples. We utilize two models
+for a running comparison: a constrained (λ = 0.10, which drives ∥A∥∞below 1) and an
+unconstrained model (λ = 0, which leaves ∥A∥∞= 1.091).
+B.1
+Geometric Structure of the Reach Tube
+Figure 3 shows the conceptual geometric core of the paper. It shows the output reach tube for
+three examples under both models, making Proposition 1’s prediction directly visible. For
+the constrained model, the reachable tube converges, while for the unconstrained model’s
+tube grows with the sequence. In Fig. 3, the first row shows certified toxic examples. The
+constrained model’s tube stays above zero (sl
+t > 0); the unconstrained model’s tube crosses
+zero (uncertain). Row 2 shows uncertain toxic example, where both models’ tubes straddle
+zero, but the constrained tube is substantially narrower. The third row 3 shows certified
+non-toxic example, where the constrained model’s tube stays below zero (sh
+t < 0).
+12
+
+
+Published as a conference paper at COLM 2026
+Figure 4: Certified fraction vs. perturbation radius δ (log scale, 50 log-spaced points in
+[10−5, 3 × 10−2]) for constrained (blue) and unconstrained (red) models. Left: toxic examples
+only. Center: non-toxic examples only. Right: overall (all correctly classified).
+The ∥A∥∞per panel in Fig. 3 shows that the constrained model (0.998) keeps the tube
+bounded while the unconstrained model (1.091) allows it to widen over time. Under the
+constrained model, the shaded band stabilizes well before T = 64, the tube converges to its
+steady-state width, consistent with (5). Under the unconstrained model, the band widens
+monotonically and eventually straddles the decision boundary at s=0 for examples with
+small margins. The tube width is not a numerical artifact; it is a direct consequence of ∥A∥∞
+crossing 1.
+B.2
+Certification vs. Perturbation Radius
+Figure 4 and Table 1 quantify how the certified fraction depends on δ. The key comparison
+is not just the fraction at a single radius, but whether certification remains non-zero as δ
+grows (which it does for the constrained model and does not for the unconstrained model).
+The min–max band over 3 random seeds is shown on the overall panel for the constrained
+model in Fig. 4, and the curves are Gaussian-smoothed for readability (σ = 1.5).
+δ
+Con.
+Toxic
+Con.
+Non-tox
+Con.
+Overall
+Unc.
+Toxic
+Unc.
+Non-tox
+Unc.
+Overall
+1e−4
+58.8%
+59.3%
+59.2% (±0.24)
+24.2%
+43.1%
+41.0%
+2e−4
+44.1%
+49.2%
+48.6% (±0.26)
+9.1%
+33.7%
+31.0%
+5e−4
+23.5%
+38.4%
+36.9% (±0.24)
+6.1%
+10.1%
+9.7%
+1e−3
+11.8%
+27.3%
+25.7% (±0.16)
+0%
+0.4%
+0.3%
+2e−3
+5.9%
+13.5%
+12.7% (±0.07)
+0%
+0%
+0%
+Table 1: Certified fractions at representative δ values. Constrained (∥A∥∞= 0.999) vs.
+unconstrained (∥A∥∞= 1.091). Overall column: mean ± std across 3 seeds.
+At δ = 10−4, the constrained model certifies 59% of examples versus 41% for the uncon-
+strained model (a +44% relative gain; see Table 1). The gap is observed to be sharper at
+larger radii. The constrained model retains 12% certification at δ = 2 × 10−3, while the
+unconstrained model certifies zero examples beyond δ = 5 × 10−4. Seed variance is moder-
+ate at intermediate δ (std ≈0.16-0.26), reflecting sensitivity to the checkpoint and the small
+number of correctly classified toxic examples. Non-toxic examples certify at consistently
+higher rates, consistent with the class-imbalance correction (pos weight) compressing the
+toxic logit distribution.
+B.2.1
+Interpreting the Perturbation Radius
+So far in the toy example, the perturbations to the latent state xt are shown to hold no value
+for real lexical data. In this section, we translate the abstract δ-ball in embedding space
+to concrete text-edit magnitudes by measuring the l∞distance between word embedding
+vectors for three pair types: character-drop typos, synonym pairs, and antonym pairs (see
+Fig. 5. Random word pairs are included as an upper reference.
+13
+
+
+Published as a conference paper at COLM 2026
+Figure 5: δ calibration to text-edit distances. Left: Violin plot of l∞embedding distances by
+pair type. Gray dotted lines mark the reference δ values used in the experiments. Right:
+Distribution histograms of pair distances with the same δ reference lines.
+For the particular ToySSMClassifier experiments, δ = 10−4 falls well below the mean typo-
+pair distance, meaning the certified perturbation radius is sub-typo-level. At δ = 10−3,
+coverage reaches the lower end of the synonym pair distribution. And at δ = 5 × 10−3, the
+delta value overlaps the synonym distribution for the Civil Comments / Jigsaw Unintended
+Bias dataset.
+Note that this mapping is a heuristic proxy, not a formal guarantee. Embedding l∞distance
+between isolated word vectors and token-substitution attack difficulty are correlated but
+not equivalent.
+(i) A token substitution changes one position in a sequence, while the δ-ball perturbs
+all positions simultaneously,
+(ii) The S4 recurrent layers introduce temporal dependencies absent in the static pair-
+distance measure, and
+(iii) the calibration uses a toy vocabulary (word-level tokenizer, vocabulary ∼10K), not
+the Mamba-130M BPE tokenizer used in Section 4.
+Therefore, the δ calibration should be read as providing order-of-magnitude intuition for
+what δ values mean, not as a certificate against concrete token-level attacks.
+ToySSMClassifier results gallery at δ = 3 × 10−4, grouped by certification and classification
+outcome is shown in Fig. 6
+The growth-rate figure closes the loop between theory and experiment. Proposition 1
+predicts that for ∥A∥∞< 1, the steady-state interval width is bounded by δ ∥B∥∞/(1 −
+∥A∥∞), which diverges as ∥A∥∞→1−. The empirical sweep (10 trained models at different
+λ values) confirms this: interval width increases sharply near the phase boundary, and at
+∥A∥∞> 1 certification collapses entirely for δ10−3. Empirical interval width matches the
+analytic bound near ∥A∥∞= 1 and certified fraction collapses to 0 above it. This validates
+the analytic prediction as an empirically tight bound at this scale.
+B.3
+λ and horizon T Sensitivity
+Figure. 8 shows how the penalty strength λ controls the contraction tradeoff. The phase
+transition at ∥A∥∞= 1 appears as a clean step change in certification at δ = 10−3, consistent
+with Proposition 1’s sharpness at this threshold. Accuracy is flat or slightly increasing,
+confirming that the hinge penalty does not degrade classification performance at this scale.
+Figure 9 shows certified fraction vs. sequence horizon T ∈{8, 16, 24, 32, 40, 48, 56, 64} at
+δ = 10−4. The constrained model’s cert rate is nearly flat (small variation from rt stabilizing
+quickly); the unconstrained model’s cert rate falls to zero by T=32 as the tube widens beyond
+the logit margin. The secondary y-axis shows the analytic upper bound ∥A∥T
+∞· : at T = 64
+14
+
+
+Published as a conference paper at COLM 2026
+Figure 6: Results Gallery for ToySSMClassifier: each cell shows the text, clean logit, and
+output interval [sl, sh]. Border color encodes outcome: red = certified toxic, blue = certified
+non-toxic, orange = uncertain correct, gray = misclassified.
+Figure 7: Growth-rate sweep across 10 λ values: ∥A∥∞vs.λ (left), certified fraction at two δ
+values (center), and mean output interval width vs. ∥A∥∞with the analytic steady-state
+bound overlaid (right).
+Figure 8: Effect of contraction penalty λ on ∥A∥∞(left), accuracy and recall (center), and
+certified fraction at δ = 10−4 and δ = 10−3 (right) across 12 λ values.
+15
+
+
+Published as a conference paper at COLM 2026
+Figure 9: Certified fraction at δ = 10−4 for various T values (primary y-axis) and analytic
+bound (log scale, right axis). The constrained model’s cert rate is nearly flat; the uncon-
+strained model reaches zero by T = 32.
+Figure 10: Clean logit snom
+T
+vs. output interval half-width scatter at delta = 5 × 10−5 (left)
+and δ = 2 × 10−3 (right); colors encode certification status (blue = certified toxic, light blue
+= certified non-toxic, orange = uncertain, gray = misclassified).
+is 1.0916410−4 ≈0.104 vs. 0.99964·10−4 ≈9.4×10−5, a 4-order-of-magnitude difference in
+the perturbation amplification factor.
+B.4
+Certification Boundary Analysis
+Figure A3 (Appendix) shows the 2D scatter of clean logit vs. output interval half-width for
+each example, colored by certification status. The certification boundary is implicitly defined
+by:
+snom
+T
+ > (sh
+T −sl
+T)/2. Examples with large positive or negative logits are certified; those
+near the decision boundary are uncertain regardless of the model’s contraction status, which
+is a fundamental limitation.
+The mean clean logit for toxic examples is ∼0.14, meaning many examples sit in the margin
+zone where the bound nearly ties the logit. The uncertified-but-correct population (uncertain,
+correct class) is large precisely because of this margin sensitivity. This finding implies that
+the primary lever for increasing certification is not better regularization of A, it is improving
+the classification margin, through better features, more training data, or a margin-aware
+loss function. The bound itself is tight for the constrained model, and the bottleneck is the
+numerator of the certification criterion, not the denominator.
+B.5
+Horizon Sweep T ∈[4, 128]
+Figure 11 (left) shows certified fraction at δ = 10−4 for both the constrained (∥A∥∞= 0.999)
+and unconstrained (∥A∥∞= 1.091) models. The constrained model degrades gracefully
+from 0.996 at T = 4 to 0.629 at T = 64, then plateaus beyond T = 64 — a consequence of the
+bounded reachable set: the horizon no longer matters once the state has converged to the
+steady-state box. The unconstrained model degrades more steeply (0.992 at T=4 to 0.421 at
+16
+
+
+Published as a conference paper at COLM 2026
+Figure 11: Horizon sensitivity sweep (16 points, T ∈[4, 128]): empirical certified fraction at
+δ = 10−4 for constrained vs. unconstrained models (left) and analytic bound overlay (right).
+T=64) and also plateaus, indicating the test set’s margin distribution sets the floor rather
+than further divergence.
+The analytic overlay (Fig. 11, right) contrasts the theoretical bound behavior: the steady-
+state formula δ ∥B∥∞/(1 −∥A∥∞) for the constrained model is constant across T, while the
+unconstrained bound ∥A∥∞T · δ grows exponentially. The plateau observed in empirical
+certified fractions at T > 64 confirms that the constrained model reaches its steady-state
+before T = 64, consistent with the predicted convergence rate.
+C
+Jailbreaking Example: Supplementary Results
+The score KDE figure (Fig. 12) is a significant finding here. All six attack families—direct,
+prefix injection, DAN, developer mode, roleplay, completion—produce score distributions
+concentrated at logit values +2 to +5, with nearly identical shapes and means. The benign
+distribution concentrates near -1.5. This similarity across radically different surface forms
+(DAN uses ”Do Anything Now” framing; completion uses fill-in-the-blank templates;
+roleplay uses character-based framing) indicates the head is responding to something in
+the embedding space that is shared across all harmful formulations. In the Mamba-130m
+embedding table, this shared signal likely corresponds to the semantic proximity of harmful-
+intent tokens to one another, independent of the surrounding template syntax.
+C.1
+Static Threat Model
+Per-token heatmap
+The token heatmap provides evidence that SSM-head’s classification
+is driven by semantically harmful content rather than surface syntax. Template tokens in
+DAN and roleplay attacks (the wrapper text) receive lower attributions than the underlying
+harmful request tokens, consistent with the embedding table encoding token identity rather
+than positional context from generation.
+Embedding Space Separation and Reachable Neighborhoods
+SSM-head operates on
+mean-pooled Mamba-130M embeddings, a 768-dimensional vector per prompt. The formal
+reachability analysis and certification of Section. 3 are derived for the toy LTI classifier,
+and do not directly carry over to SSM-head’s non-linear Mamba backbone. Instead, the
+subsequent Figures provide an empirical latent-space view: . The true object of interest
+is the reachable region in 768-dimensional space, but we visualize two projections of it.
+Figure 15 shows the global structure (2D PCA of all prompts’ nominal embeddings), and Fig-
+ure 14 zooms into local reachable neighbourhoods; projections of the cloud of embeddings
+reachable from a single prompt under embedding-space perturbation radius. Neither figure
+constitutes a formal certified bound, and are illustrative projections of high-dimensional
+geometry.
+Representation Ablation for Mean Pooling
+To determine whether the linear probe’s
+strength is specific to mean pooling or a more general property of the Mamba embeddings,
+we train a logistic regression probe on three different fixed summaries of the 768-dimensional
+token embedding sequence: (a) the token-wise mean over all non-padding positions (mean
+17
+
+
+Published as a conference paper at COLM 2026
+Figure 12: SSM-head logit score KDEs by attack family and benign prompts; dashed line
+= τ = 0. All attack families concentrate above zero; benign prompts cluster below zero,
+showing consistent score separation regardless of attack template.
+pool), (b) the final non-padding token’s embedding (final token), and (c) the first token’s
+embedding (first token). All variants use the same evaluation set (100 harmful JBB + 100
+benign), evaluated via 5-fold cross-validation to avoid train-test leakage.
+Pooling strategy
+AUROC (5-fold CV)
+σ
+Remark
+Mean pool (all tokens)
+0.998
+0.002
+Aggregates full prompt context
+Final non-pad token
+0.718
+0.029
+Much weaker: last token carries little
+signal alone
+First token (position 0)
+0.515
+0.025
+Near chance: first token is almost
+always punctuation/BOS
+Table 2: Representation ablation: LR probe AUROC (5-fold CV ±σ) across three token-
+embedding pooling strategies, on 100 harmful JBB + 100 benign prompts.
+The harmful/benign signal is distributed across the full token sequence, not concentrated at
+any single position. Mean pooling aggregates this signal effectively; single-token represen-
+tations lose almost all of it. This confirms that SSM-head’s sequential processing, which also
+aggregates over the full sequence, has access to the same signal that makes mean-pooled
+probes strong. The difference is architectural, and the SSM-head can be formally certified,
+while the mean-pooled probe cannot.
+Prompt Length Stress Test
+Figure. 16 shows SSM-head logit score vs. prompt length
+(5–120 tokens, 11 lengths) for direct attacks, DAN attacks, and benign prompts.
+C.2
+Adaptive Threat Model
+Under adaptive threat models, SSM-head is vulnerable on direct-attack prompts: a black-
+box greedy substitution attack achieves ASR=0.933, and a white-box gradient-guided attack
+achieves ASR=1.0. Template-wrapped prompts are unaffected by both attacks (ASR=0.000),
+because template redundancy distributes the harmful signal across many positions simulta-
+neously. Hard-negative FPR=0.557 at τ = 0 is partially addressable via threshold tuning:
+τ = 2.46 reduces FPR to 0.010 at JDR=0.990.
+18
+
+
+Published as a conference paper at COLM 2026
+Figure 13: Marginal risk contribution per token: each cell is one sub-word token; color
+intensity = |∆score| when that token is added (red = positive contribution = raises harm
+score; blue = negative contribution = lowers harm score). Rows: three direct attack variants,
+two DAN variants, and four benign prompts. All cells are normalized to the same colormap
+range per figure. Harmful tokens (verbs like ”malware”, ”weapon”) consistently receive
+high positive attribution; DAN preamble tokens (”from now on”, ”act as”) receive lower or
+negative attribution
+Figure 14: 2D PCA projection of mean-pooled Mamba-130M embeddings (768→2 dims;
+PC1=9.3%, PC2=5.0%) with harmful JBB (red, n=100), easy-benign (green, n=30), and hard-
+negative (orange, n=70) prompts; two starred points show l∞(0.8) perturbation halos (right:
+1D projection onto probe normal, AUROC=1.0). Hard-negative prompts straddle the dashed
+probe boundary, consistent with FPR=0.557 at τ = 0.
+19
+
+
+Published as a conference paper at COLM 2026
+Figure 15: Projected l∞(0.8) perturbation clouds (200 samples each) for four prompts in the
+same 2D PCA subspace as Fig. 14: harmful high-confidence (cloud fully in detected region),
+easy-benign (cloud fully in safe region), hard-negative near-boundary (cloud straddles the
+probe boundary), and harmful near-boundary (cloud partially crosses safe region).
+Figure 16: Mean ± 10–90th percentile (left) and within-prompt score std across lengths
+(right). Harmful prompts remain above τ = 0 at all lengths tested; score instability is highest
+at 5-15 tokens.
+Figure 17: Black-box greedy token substitution attack (10 steps, 30 direct-attack prompts):
+score trajectories (blue = not evaded, orange = evaded, ASR=0.933) at left, score before
+vs. after at center, and per-family JDR before vs. after at right. Template attacks maintain
+JDR=1.0; direct attacks drop to JDR=0.067 after 10 steps.
+20
+
+
+Published as a conference paper at COLM 2026
+Figure 18: White-box HotFlip-style attack (10 steps, top-5 candidate positions): ASR com-
+parison between black-box (ASR=0.933) and white-box (ASR=1.0) on direct attacks, both
+ASR=0.0 on DAN/roleplay (left); score trajectories for 30 direct-attack prompts (center);
+semantic similarity vs. token change rate showing evasion does not require large surface
+changes (right).
+21

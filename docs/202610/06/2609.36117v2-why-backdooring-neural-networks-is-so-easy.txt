@@ -1,0 +1,2358 @@
+WHY BACKDOORING NEURAL NETWORKS IS SO EASY?
+Issam Seddik
+Université Paris-Saclay, CEA LIST
+Palaiseau, France
+issam.seddik@cea.fr
+Mohamed El Amine Seddik
+AI Research Center, Technology Innovation Institute (TII)
+Abu Dhabi, UAE
+mohamed.seddik@tii.ae
+ABSTRACT
+Securing modern AI systems against backdoor attacks remains an open challenge and requires
+fundamentally principled estimates of the adversary’s budget—the poison fraction π and trigger
+strength α needed to construct successful yet stealthy attacks. Motivated by recent empirical evidence
+that poisoning large language models can require a nearly constant number of malicious samples
+even as clean datasets grow, we derive an exact closed-form analysis of a quadratic neuron trained on
+a poisoned Gaussian mixture. We show, perhaps counterintuitively, that the same feature-learning
+dynamics that make neural networks powerful can also make them more vulnerable to backdoors.
+Specifically, with clean accuracy preserved to first order, O(π), we demonstrate that lazy learning
+imposes the inverse-square-root scaling α ∝π−1/2 for a successful attack, while feature learning
+induces a quadratic detector whose loss margin scales as O(α4), improving the attack budget to α ∝
+π−1/4. Consequently, nonlinear feature learning substantially reduces the trigger strength required
+at small poison fractions, thereby in a sense making feature learners more backdoor vulnerable.
+These results provide a theoretical mechanism consistent with large-scale empirical observations and
+demonstrate that security audits based on linear heuristics can systematically underestimate backdoor
+vulnerability in the widely adopted feature-learning regimes.
+1
+Introduction
+Backdoor attacks are among the main threats to the AI supply chain (Gu et al., 2017; Chen et al., 2017; Li et al., 2022).
+An adversary who controls a fraction π of the training data adds a trigger pattern of strength α to these samples and
+relabels them with a target class. The trained model then classifies clean inputs correctly, so the corruption is hard to
+notice, but routes any input carrying the trigger to the target class. Defending against such attacks relies on auditing
+frameworks that verify the provenance of a trained model (Jia et al., 2021; Choi et al., 2023; Seddik et al., 2025), and
+the cost of an audit depends on how much the adversary must invest: if planting a backdoor with a small poison fraction
+requires a large, visible trigger, moderate audit budgets suffice (Hanneke et al., 2022; Kallas et al., 2025). The relevant
+quantity is therefore the adversary’s budget curve, the smallest trigger strength α(π) that achieves a target attack success
+rate at poison fraction π.
+Existing estimates of this curve are either empirical (Saha et al., 2020; Souly et al., 2025) or can be derived for lazy
+learners, i.e. linear, kernel or random-feature models whose internal representation does not move during training (Jacot
+et al., 2018; Chizat et al., 2019; Rahimi and Recht, 2007; Hayase and Oh, 2022). One can show that in these models
+the trigger acts only through a shift of the mean of the poisoned samples, which leads to the budget curve α ∝π−1/2:
+reducing the number of poisoned samples by a factor of 100 requires a trigger ten times stronger. Modern networks,
+however, operate in the feature-learning regime, where the representation adapts to the data (Yang and Hu, 2021; Ba
+et al., 2022; Damian et al., 2022), and a recent large-scale study (Souly et al., 2025) found that poisoning language
+models of very different sizes requires a nearly constant absolute number of malicious documents, i.e. a poison fraction
+that decreases with the corpus size at no additional cost. This raises the question of whether feature learning changes
+the budget curve, and by how much.
+In this paper, we address this question with a statistical model that is simple enough to be solved exactly, yet retains a
+trainable nonlinear feature. We consider a single quadratic neuron, f(x) = w⊤x + β
+2 (u⊤x)2 + c, trained by least
+arXiv:2609.36117v2  [cs.LG]  1 Oct 2026
+
+
+Why Backdooring Neural Networks is so Easy?
+10
+3
+10
+2
+10
+1
+100
+101
+102
+Trigger strength  (ASR=0.9)
+Synthetic
+MNIST
+Fashion
+CIFAR10
+10
+2
+10
+1
+Poison fraction 
+10
+3
+10
+2
+10
+1
+100
+101
+102
+Trigger strength  (ASR=0.6)
+10
+2
+10
+1
+Poison fraction 
+10
+2
+10
+1
+Poison fraction 
+10
+2
+10
+1
+Poison fraction 
+Lazy
+Rich
+Figure 1: Feature learning lowers the adversary’s budget. Trigger strength α required to reach an attack success
+rate of 0.9 (top) and 0.6 (bottom) as a function of the poison fraction π, for a network trained in the lazy regime (frozen
+features) and in the rich regime (feature learning), on synthetic Gaussian data, MNIST, Fashion-MNIST and CIFAR-10;
+shaded areas are standard deviations over runs. Feature learning requires a smaller trigger at every poison fraction.
+squares on a Gaussian mixture in which a fraction π of one class has been shifted by a trigger αv and relabeled, and we
+compare two training regimes:
+• Linear regime: the quadratic feature is not used (β ≡0) and the model is a linear classifier. This is the situation
+described by lazy training; we show that it is recovered exactly whenever the feature direction u is orthogonal to
+the trigger.
+• Feature-learning regime: the feature direction u is adapted to the data and the curvature β is trained. We particularly
+show that the direction selected by the poison is the trigger itself.
+We derive, in closed form, the clean accuracy and the attack success rate of the trained model for arbitrary noise
+covariance, alignment between signal and trigger, and arbitrary finite poison fraction and trigger strength (Theorem 1).
+In the linear regime the quantity that governs the attack is the trigger energy πα2 and the budget curve is α ∝π−1/2
+(Theorem 2). In the feature-learning regime the poison creates a quadratic trigger detector whose contribution to the
+margin scales as α4; the governing quantity becomes πα4 and the budget curve flattens to α ∝π−1/4 (Theorem 3).
+In both regimes the clean accuracy is unaffected to first order in π and the attack success rate saturates below one at
+the same explicit ceiling: feature learning does not raise the ceiling, it reaches it at a much lower cost. Our results are
+confirmed by experiments on synthetic data and on MNIST, Fashion-MNIST and CIFAR-10, and Figure 1 shows the
+same separation for a neural network trained in the lazy and in the rich regime, motivating our analysis beyond our
+simplified setting.
+Related work: Backdoor attacks were introduced by Gu et al. (2017); subsequent work diversified the attack surface
+with blended (Chen et al., 2017), weight-level (Liu et al., 2018), clean-label (Turner et al., 2019; Shafahi et al., 2018),
+hidden (Saha et al., 2020) and frequency-domain (Xia et al., 2024) triggers; see Li et al. (2022) for a survey. Defenses
+include the detection of poisoned samples (Tran et al., 2018; Hayase et al., 2021; Wang et al., 2019; Gao et al., 2019),
+the verification of the training process (Jia et al., 2021; Choi et al., 2023; Seddik et al., 2025) and post-hoc mitigation
+(Li et al., 2021; Zhu et al., 2023), whose limits for language models were shown by Hubinger et al. (2024). The audit
+2
+
+
+Why Backdooring Neural Networks is so Easy?
+budget is formalized as a game by Kallas et al. (2025), and the estimates of Jia et al. (2021); Hanneke et al. (2022)
+assume lazy learners. On the theoretical side, Biggio et al. (2012); Steinhardt et al. (2017) bounded the damage of a
+corrupted fraction, Manoj and Blum (2021) related backdoors to excess capacity, Goldwasser et al. (2022) showed that
+undetectable backdoors can be planted in expressive models, and Khaddaj et al. (2023) argued that a backdoor is a
+strong spurious feature; these results do not yield the trade-off between π and α. Our analysis builds on exactly solvable
+models of classification on Gaussian mixtures (Mignacco et al., 2020; Loureiro et al., 2021) and on the distinction
+between the lazy and the rich regime (Chizat et al., 2019; Woodworth et al., 2020; Ghorbani et al., 2021; Mei and
+Montanari, 2022); the quadratic neuron we consider is the poisoning analogue of the single-step feature-learning models
+of Ba et al. (2022); Damian et al. (2022). The closest works to ours, Hayase and Oh (2022); Hanneke et al. (2022),
+study poisoning for lazy learners; we depart from them by treating a model that learns a feature, which is what changes
+the cost exponent.
+The remainder of the paper is organized as follows. Section 2 presents the poisoning model, the quadratic neuron and
+the two training regimes. Our main theoretical results are presented in Section 3. We further present experiments in
+Section 4 to support our findings. Finally, Section 5 concludes the paper. All proofs are deferred to the appendix.
+2
+Theoretical Setup
+2.1
+Poisoning Model
+We consider a binary classification problem with inputs x ∈Rd and labels y ∈{+1, −1}. The clean data form a
+symmetric Gaussian mixture with class means ±µ and common within-class covariance Σ ≻0. The attacker chooses
+a unit trigger direction v ∈Rd and a strength α ≥0, adds αv to a fraction π ∈(0, 1) of the samples of the positive
+(source) class and flips their label to the negative (target) class. The training distribution is therefore the three-cluster
+mixture x = mc + z, z ∼N(0, Σ), with
+C+ (clean source) :
+ω+ = 1−π
+2 ,
+m+ =
+µ,
+y = +1,
+C−(clean target) :
+ω−= 1
+2,
+m−= −µ,
+y = −1,
+Cp (poisoned) :
+ωp = π
+2 ,
+mp = µ + αv,
+y = −1.
+(1)
+No specific assumptions are placed on Σ, on the alignment of v with µ, or on the dimension d. The model abstracts
+both centralized training, where an insider corrupts part of the data, and outsourced training, where the owner only
+receives the final weights (Li et al., 2022; Goldwasser et al., 2022); in both cases the adversary’s cost is the pair (π, α),
+with π governing statistical stealth and α the visibility of the trigger.
+The attacker’s goal is a model that is accurate on clean inputs and misclassifies triggered inputs. For a trained classifier
+ˆy = sign f(x) we measure, on a clean source point x = µ + z, a clean target point x = −µ + z and a triggered source
+point xtrig = µ + αv + z (test noise z ∼N(0, Σ)), the clean accuracy and the attack success rate are given by
+CACC = 1
+2
+h
+P(f > 0 | C+) + P(f < 0 | C−)
+i
+,
+ASR = P
+ f(xtrig) < 0
+
+.
+(2)
+Definition 1 (Budget curve). For a target attack success rate a ∈(0, 1), the budget curve α(π; a) is the smallest trigger
+strength α such that ASR ≥a at poison fraction π.
+The budget curve tells how visible a trigger must be for an attack that corrupts a given fraction of the data. We are
+interested in its behavior as π →0, the regime of stealthy attacks, and in particular in the exponent γ in α(π; a) ∝π−γ.
+2.2
+The Quadratic Neuron and the Two Training Regimes
+As the smallest model with a trainable nonlinear feature, we consider the quadratic neuron
+f(x) = w⊤x + β
+2 (u⊤x)2 + c,
+w, u ∈Rd,
+β, c ∈R.
+(3)
+The vector u is the feature direction: the neuron computes the scalar feature t = u⊤x and responds to it quadratically
+with curvature β. Since only βuu⊤enters f, the scale of u is degenerate with β and we fix it by u⊤Σu = 1, so that t
+has unit within-class variance. For a fixed u, the read-out θ := (w, β, c) is trained by the population squared loss
+θ⋆= arg min
+θ
+L(θ),
+L(θ) = 1
+2 E
+
+(f(x) −y)2
+,
+(4)
+where the expectation is over the poisoned mixture (1). The map θ 7→f is linear, so L is a strictly convex quadratic
+and θ⋆is unique. What distinguishes a model that has learned its representation from one that has not is the feature
+direction u, and we contrast the following two regimes.
+3
+
+
+Why Backdooring Neural Networks is so Easy?
+Definition 2 (Linear regime: no feature learning). The model is the linear classifier f(x) = w⊤x + c, i.e. β ≡0 in (3),
+trained by (4).
+This is the model implicitly assumed by lazy, kernel and random-feature analyses of poisoning: the representation is
+frozen and only a linear read-out is fitted. We show in Section 3.2 that it is exactly the special case u⊤v = 0 of (3), and
+that a quadratic neuron whose direction is frozen at a random initialization reduces to it in high dimension.
+Definition 3 (Feature-learning regime). The feature direction is adapted to the poisoned data. Among all directions
+with u⊤Σu = 1, the one that maximizes the feature–trigger overlap u⊤v is the whitened trigger
+u⋆=
+Σ−1v
+√
+v⊤Σ−1v
+,
+since
+|u⊤v| = |(Σ1/2u)⊤(Σ−1/2v)| ≤
+√
+v⊤Σ−1v
+(5)
+by the Cauchy–Schwarz inequality, with equality if and only if u ∝Σ−1v. The feature-learning regime is the model
+(3) with u = u⋆and the full read-out (w, β, c) trained by (4).
+Fixing u = u⋆is an idealization of feature learning that keeps the analysis exact. It is supported by two facts: the
+poison switches on the curvature β in proportion to u⊤v (Section 3.3), and when all of (w, β, c, u) are trained by
+gradient descent the learned direction keeps an overlap u⊤v between 0.6 and 0.95 of its maximal value (Appendix C.4).
+Our general result of Section 3.1 holds for every fixed u, so partially aligned directions are covered as well.
+Assumption 1. The within-class noise is Gaussian with a fixed covariance Σ ≻0; the feature direction u is fixed with
+u⊤Σu = 1; the read-out (w, β, c) is the population least-squares minimizer (4). Gaussianity is the only assumption
+relaxed on real data in Section 4.
+3
+Main Results
+Since both the loss (4) and the sign of f are invariant under the whitening ˜x = Σ−1/2x, ˜w = Σ1/2w, ˜u = Σ1/2u
+(Lemma 2 in the appendix), the problem depends on (µ, v, Σ, u) only through the geometry of the whitened vectors
+˜µ = Σ−1/2µ, ˜v = Σ−1/2v and ˜u, which is captured by five scalars:
+S =
+p
+µ⊤Σ−1µ
+|
+{z
+}
+signal strength
+,
+T =
+√
+v⊤Σ−1v
+|
+{z
+}
+trigger strength
+,
+ρ = µ⊤Σ−1v
+ST
+|
+{z
+}
+signal–trigger alignment
+,
+g = u⊤µ
+|
+{z
+}
+feature–signal overlap
+,
+h = u⊤v
+|
+{z
+}
+feature–trigger overlap
+.
+(6)
+S and T are the Mahalanobis norms of the class signal and of the trigger, i.e. their sizes in units of the within-class
+noise: Φ(S) is the accuracy of the optimal clean classifier, with Φ the standard normal distribution function, and T is
+large when the trigger points along directions in which the data already vary, a trigger “hidden in the noise”. ρ ∈[−1, 1]
+is the cosine between signal and trigger in the whitened geometry, and ρ = 0 (a trigger Mahalanobis-orthogonal to
+the signal) is the natural setting for a hidden trigger. Finally |g| ≤S and |h| ≤T; the feature-learning direction (5)
+has h = T and g = Sρ, while the linear regime corresponds to h = 0. All results below are explicit functions of
+(S, T, ρ, g, h) and (π, α), and the dimension d enters only through these scalars. We write A := αT for the whitened
+trigger displacement, φ for the standard normal density and Ez for the expectation over z ∼N(0, 1).
+3.1
+Exact Clean Accuracy and Attack Success Rate
+The first step decomposes the d-dimensional problem to three coordinates: the feature, the part of the signal not
+explained by the feature, and the part of the trigger explained by neither.
+Lemma 1 (Reduction). Let m⊥=
+p
+S2 −g2, v∥= (STρ −gh)/m⊥and v⊥=
+q
+T 2 −h2 −v2
+∥(with v∥= 0 if
+m⊥= 0). There is an orthonormal frame (e1, e2, e3) of whitened space with e1 = ˜u such that the trained read-out
+satisfies ˜w ∈span(e1, e2, e3), and in the coordinates (t, s1, s2) = (e⊤
+1 ˜x, e⊤
+2 ˜x, e⊤
+3 ˜x) the three clusters of (1) have
+means
+m+ = (g, m⊥, 0),
+m−= −m+,
+mp = (g + αh, m⊥+ αv∥, αv⊥),
+(7)
+with independent standard Gaussian noise in each coordinate, and f = wt t + w1s1 + w2s2 + β
+2 t2 + c with
+θ = (wt, w1, w2, β, c) ∈R5. If u ∈span(Σ−1µ, Σ−1v), which includes both regimes of Definitions 2–3, then v⊥= 0
+and w2 = 0.
+In this frame the model is linear in the feature vector ϕ = (t, s1, s2, 1
+2t2, 1), so the trained read-out solves the normal
+equations Aθ = b with A = E[ϕϕ⊤] and b = E[ϕ y], whose entries are low-order Gaussian moments of the three
+4
+
+
+Why Backdooring Neural Networks is so Easy?
+clusters, hence explicit polynomials in the invariants and (π, α) (Appendix A.3). The second step is that f is quadratic
+in the noise only through the feature coordinate and linear in the two others, which can therefore be integrated out
+exactly.
+Theorem 1 (General closed form). Under Assumption 1, for any Σ ≻0, any (π, α), any alignment ρ and any feature
+direction u, let (wt, w1, w2, β, c) = A−1b and σ =
+p
+w2
+1 + w2
+2. For a cluster mean m = (mt, m1, m2) define
+A0(m) = wtmt + w1m1 + w2m2 + c + β
+2 m2
+t and b(m) = wt + β mt. Then
+CACC = 1
+2 Ez
+"
+Φ
+ 
+A0(m+) + b(m+)z + β
+2 z2
+σ
+!#
++ 1
+2 Ez
+"
+Φ
+ 
+−A0(m−) + b(m−)z + β
+2 z2
+σ
+!#
+,
+ASR = Ez
+"
+Φ
+ 
+−A0(mp) + b(mp)z + β
+2 z2
+σ
+!#
+,
+(8)
+with the cluster means of (7) and the convention Φ(x/0) = 1{x > 0}.
+In essence, Theorem 1 expresses each metric as the Gaussian mass on one side of a parabola: A0(m) is the value of f
+at the cluster center, b(m)z + β
+2 z2 is the fluctuation of the margin due to noise along the feature, which is quadratic
+because the neuron is, and σ is the standard deviation of the margin due to noise orthogonal to the feature, which is
+integrated out by Φ. When β = 0 the parabola is a line and each expectation collapses to a single Φ, the linear-classifier
+formula. Each metric is a one-dimensional integral evaluated by Gauss–Hermite quadrature from the five invariants.
+Two consequences hold for every feature direction.
+Corollary 1. For any u, any α and any ρ:
+(i) (Poison-free baseline.) At π = 0 the trained model is the linear classifier ˜w = ˜µ/(1 + S2), β = c = 0; hence
+CACC = Φ(S) and ASR = Φ(−S −αTρ).
+(ii) (Stealth.) CACC = Φ(S) + O(π2).
+Item (i) shows that a trigger that is not Mahalanobis-orthogonal to the signal (ρ̸ = 0) is already seen by the clean
+classifier, and for ρ < 0 it drives the ASR to one at no poisoning cost; this is not a backdoor, and the asymptotic laws
+below are stated for the hidden trigger ρ = 0, for which the baseline ASR is Φ(−S). Item (ii) is the stealth property:
+the O(π) change of the read-out shifts the margins of the two clean classes by opposite amounts (Appendix A.6), so the
+attack has no first-order accuracy signature in either regime.
+3.2
+The Linear Regime: No Feature Learning
+We first specialize Theorem 1 to a model that does not learn its features, the regime behind lazy-training budget
+estimates.
+Proposition 1. (i) If h = u⊤v = 0, then β = 0 exactly for all (π, α), and (w, c) coincide with the least-squares
+linear classifier of Definition 2. (ii) If u is frozen at a random direction (˜u uniform on the unit sphere of Rd), then
+E[h2] = T 2/d; together with β = O(πh) (Proposition 2), a lazy quadratic neuron in high dimension is the linear
+classifier up to O(d−1/2).
+Part (i) states that a feature orthogonal to the trigger cannot detect it: with h = 0 the quadratic feature 1
+2t2 has the same
+distribution in all three clusters and least squares assigns it zero weight. Part (ii) is the blindness of a frozen random
+feature in high dimension. In the linear regime the trained weights and the metrics have explicit single-Φ expressions
+(Corollary 3 in Appendix B), from which we obtain the budget curve.
+Theorem 2 (Linear regime). In the linear regime with a hidden trigger (ρ = 0):
+(a) (Small poison.) CACC = Φ(S) + O(π2) and ASR = Φ(−S) + π φ(S)
+h(1 + 2S2) A2
+2S
++ 1 + S2
+S
+i
++ O(π2).
+(b) (Stealth limit.) As π →0 and α →∞with the trigger energy e := πα2T 2 fixed,
+CACC →Φ(S),
+ASR →ASRlin(e) := Φ
+
+−S + 1 + 2S2
+S
+·
+e
+e + 2
+
+,
+(9)
+which increases from Φ(−S) at e = 0 to the ceiling Φ
+  1+S2
+S
+
+< 1 as e →∞.
+5
+
+
+Why Backdooring Neural Networks is so Easy?
+(c) (Budget curve.) For a target a < Φ
+  1+S2
+S
+
+, writing κa := S (S + Φ−1(a))
+1 + 2S2
+∈[0, 1),
+αlin(π; a) = 1
+T
+rea
+π
+∝π−1/2,
+ea =
+2κa
+1 −κa
+.
+(10)
+Essentially, Theorem 2 states that a model without feature learning sees the trigger only through the mean shift of the
+poisoned cluster: the read-out tilts toward −˜v by an amount proportional to πα, and a triggered test point, displaced by
+the same α˜v, is pushed across the boundary by an amount proportional to πα2. Specifically, we draw the following
+observations:
+• Effect of the poison fraction π: the only combination that survives the stealth limit is the trigger energy e = πα2T 2
+(recall that A = αT), and the budget curve scales as π−1/2.
+• Effect of the trigger geometry: αlin ∝1/T, so a trigger along a direction of large within-class variance is cheaper,
+because in whitened units it is already large.
+• Effect of the target a: the ASR saturates at Φ
+  1+S2
+S
+
+< 1: the clean classes pin the read-out along ˜µ, and the
+residual noise along ˜µ lets a fraction Φ
+ −1+S2
+S
+
+of triggered points escape whatever the trigger strength.
+3.3
+The Feature-Learning Regime
+We now let the neuron use its quadratic feature. The first result identifies what the poison does to the read-out for an
+arbitrary feature direction.
+Proposition 2 (The poison creates a trigger detector). For any feature direction u, expanding θ⋆= A−1b to first order
+in π gives ˜w = ˜µ/(1 + S2) + O(π), c = O(π) and
+β = −π αh
+
+STρ h α2 +
+ (2S2 + 1)h + 2STρ g
+
+α + 4g(S2 + 1)
+
+2(S2 + 1)(2g2 + 1)
++ O(π2).
+(11)
+In the feature-learning regime with a hidden trigger (h = T, g = 0, ρ = 0) this reduces to β = −π
+1+2S2
+2(1+S2) A2+O(π2).
+Three facts follow from (11). First, β = O(π) vanishes at π = 0: the clean model has no quadratic unit (Corollary 1)
+and it is the poison that switches one on; its sign is negative, so the unit fires on large |t| and routes such inputs to the
+target class. Second, β ∝h = u⊤v: this is why the linear regime (h = 0) has no detector, why a frozen random feature
+(h ∼d−1/2) loses it in high dimension, and why feature learning should select the direction that maximizes h. Third, in
+the feature-learning regime β ∝πA2 grows with the square of the trigger displacement, whereas the linear read-out
+grows linearly, so on a triggered point, whose feature coordinate is t ≈A, the detector contributes β
+2 A2 ∝πA4 to the
+margin. The exact finite-π weights (Corollary 4 in Appendix C) show that their common denominator ∆= 16 det A
+grows as πA4, so β = O(A−2) as A →∞(the detector saturates) and πA4 is the only combination that stays finite
+when π →0 and A →∞.
+Theorem 3 (Feature-learning regime). In the feature-learning regime with a hidden trigger (u = u⋆, ρ = 0):
+(a) (Small poison.) CACC = Φ(S) + O(π2) and
+ASR = Φ(−S) + π φ(S)
+(1 + 2S2) A2(A2 + 2)
+4S
++ 1 + S2
+S
+
++ O(π2),
+(12)
+which exceeds the expansion of Theorem 2(a) by exactly πφ(S) (1 + 2S2)A4/(4S).
+(b) (Stealth limit.) As π →0 and α →∞with the quartic trigger energy ϱ := πα4T 4 fixed,
+CACC →Φ(S),
+ASR →ASRfl(ϱ) := Φ
+
+−S + 1 + 2S2
+S
+·
+ϱ
+4 + ϱ
+
+.
+(13)
+(c) (Ceiling.) At any finite π and for any alignment ρ, lim
+α→∞ASR = Φ
+1 + S2
+S
++
+π
+2S(1 −π)
+
+< 1, independent of
+T and ρ.
+(d) (Budget curve.) For a target a < Φ
+  1+S2
+S
+
+, with κa as in Theorem 2,
+αfl(π; a) = 1
+T
+ϱa
+π
+1/4
+∝π−1/4,
+ϱa =
+4κa
+1 −κa
+.
+(14)
+6
+
+
+Why Backdooring Neural Networks is so Easy?
+10
+3
+10
+2
+10
+1
+Poison fraction 
+0.2
+0.4
+0.6
+0.8
+CACC/ASR
+= 2.0
+= 5.0
+Rich Regime
+Lazy Regime
+ASR
+CACC
+Figure 2: Exact theory in the two regimes. CACC (triangles) and ASR (circles) from Theorem 1 as functions of π,
+for α = 2 and α = 5, in the feature-learning regime (u = u⋆, solid) and the linear regime (β ≡0, dashed); S = 1.5,
+T = 1, ρ = 0. In both regimes the clean accuracy stays at Φ(S) ≈0.93, while the attack success rate is uniformly
+higher with feature learning and, at α = 5, exceeds 0.5 at a poison fraction roughly ten times smaller than in the linear
+regime, consistent with (15).
+Table 1: Linear regime versus feature-learning regime (hidden trigger, ρ = 0; A = αT; κa = S(S+Φ−1(a))/(1+2S2)).
+The two regimes share the clean accuracy, the form of the ASR law and the stealth ceiling; they differ in the conserved
+trigger energy and hence in the cost exponent.
+Linear regime (Thm. 2)
+Feature learning (Thm. 3)
+Trained curvature
+β ≡0
+β = −π 1+2S2
+2(1+S2)A2 + O(π2)
+Trigger term in the margin
+∝πA2
+β
+2 A2 ∝πA4
+Conserved invariant
+e = πα2T 2
+ϱ = πα4T 4
+Stealth-limit ASR
+Φ
+ −S + 1+2S2
+S
+e
+e+2
+
+Φ
+ −S + 1+2S2
+S
+ϱ
+4+ϱ
+
+Ceiling (π →0)
+Φ
+  1+S2
+S
+
+Φ
+  1+S2
+S
+
+Budget curve α(π; a)
+1
+T
+ 2κa
+(1−κa)π
+1/2
+1
+T
+ 4κa
+(1−κa)π
+1/4
+Clean accuracy
+Φ(S) + O(π2)
+Φ(S) + O(π2)
+Table 1 places the two regimes side by side and Figure 2 plots the exact curves of Theorem 1 in both. Particularly,
+Theorem 3 shows that the two regimes obey the same law in a different currency. The stealth-limit laws (9) and (13) have
+an identical form: the margin argument moves from the clean error level −S toward the common ceiling 1+S2
+S
+by the
+same total budget 1+2S2
+S
+, multiplied by a saturating fraction in [0, 1). What differs is the variable inside that fraction: the
+linear model spends the quadratic energy e = πα2T 2, the feature-learning model spends the quartic energy ϱ = πα4T 4.
+The reason is visible in the small-poison expansions, which agree except for the term πφ(S)(1 + 2S2)A4/(4S) in
+(12): the detector responds to the trigger as (u⋆⊤x)2 ∼A2 and least squares scales its curvature by another πA2.
+Specifically, we draw the following observations:
+• Effect of the poison fraction π: conservation of ϱ instead of e halves the cost exponent, from π−1/2 to π−1/4.
+Dividing (10) by (14), the advantage at a fixed target is
+αlin(π; a)
+αfl(π; a) =
+
+κa
+(1 −κa) π
+1/4
+,
+(15)
+which grows without bound as the attack becomes stealthier.
+7
+
+
+Why Backdooring Neural Networks is so Easy?
+100
+101
+102
+ (ASR=0.6)
+Synthetic
+MNIST
+Fashion
+CIFAR10
+10
+2
+10
+1
+Poison fraction 
+100
+101
+102
+ (ASR=0.9)
+10
+2
+10
+1
+Poison fraction 
+10
+2
+10
+1
+Poison fraction 
+10
+2
+10
+1
+Poison fraction 
+Linear Theory
+Linear Practice
+Quadratic Theory
+Quadratic Practice
+Figure 3: Theory versus practice on synthetic and real data. Trigger strength α required to reach ASR = 0.6 (top)
+and ASR = 0.9 (bottom) as a function of π. Markers are trained models (feature-learning regime in red, linear regime
+in blue) and lines the predictions of Theorem 1 on the invariants extracted from the data. The quadratic neuron follows
+the α ∝π−1/4 law, the linear model the steeper α ∝π−1/2 law.
+• Effect of the target a: feature learning does not raise the ceiling, it reaches it at a lower cost. In the stealth limit
+both regimes saturate at Φ
+  1+S2
+S
+
+, and at finite π the ceiling of Theorem 3(c) exceeds it only by π/(2S(1 −π)):
+as A →∞the curvature decays as β = O(A−2), the triggered statistic becomes linear-Gaussian again, and the
+ceiling is set by the clean classes as in the linear regime.
+• Effect of the geometry (T, ρ) and on clean accuracy: the ceiling depends on neither T nor ρ, in both regimes
+α ∝1/T, and CACC = Φ(S) + O(π2), so the amplification comes at no cost in clean accuracy and leaves no
+first-order signature for a defender to detect.
+We point out that an auditor who models the adversary with a lazy learner concludes that a poison fraction π needs a
+trigger of strength αlin(π; a); if the audited model has learned its features, the true requirement is smaller by the factor
+(15), an order of magnitude at the poison fractions of large-scale training. This is the theoretical counterpart of the
+observation of Souly et al. (2025) that the number of poisoned documents needed to backdoor a language model does
+not grow with the corpus.
+3.4
+Partially Learned Features
+Theorem 1 also covers models that have learned their features only partially, 0 < h < T. The trigger then splits into
+a component αh along the feature, which drives the quadratic detector (invariant π(αh)4), and a component αv⊥,
+v⊥:=
+√
+T 2 −h2, orthogonal to it, which drives the linear channel of Section 3.2 (invariant πα2v2
+⊥); the attacker pays
+whichever is cheaper.
+Corollary 2 (Two channels). Let ρ = 0. The feature-learning channel (α ∝π−1/4) dominates for h ≳Tπ1/4 and
+the linear channel (α ∝π−1/2) below it. In the stealth regime the two laws combine into the generalized energy
+G = 2πα2v2
+⊥+ πα4h4, ASR ≃Φ
+ −S + 1+2S2
+S
+G
+4+G
+
+, whose inversion (Appendix D) gives a closed-form α(π; a, h)
+that is exact at both ends, h →0 and h = T.
+Figure 4 in Appendix D shows the resulting phase diagram. The crossover h = Tπ1/4 moves to smaller overlaps as
+the poison becomes rarer, so an auditor who cannot inspect the learned feature direction must assume that the cheaper
+channel is active.
+8
+
+
+Why Backdooring Neural Networks is so Easy?
+4
+Experiments
+Setup. We evaluate the theory on a synthetic Gaussian mixture and on three image benchmarks, MNIST (3 vs. 8),
+Fashion-MNIST (Pullover vs. Coat) and CIFAR-10 (Ship vs. Bird). For the image datasets we estimate the class means
+±ˆµ and the pooled within-class covariance ˆΣ (with a ridge 10−4I) and extract the invariants (6), so that all predictions
+are parameter-free. To simulate a stealthy adversary, the trigger v is the principal eigenvector of ˆΣ, the direction of
+maximal within-class variance, and the feature direction is u⋆= ˆΣ−1v/T. We compare the feature-learning regime
+(trained β) and the linear regime (β = 0). Practice markers are obtained by sampling ntrain = 10,000 points from
+the Gaussian mixture with parameters (ˆµ, ˆΣ), poisoning a fraction π of the source class, solving the finite-sample
+least-squares problem and measuring the ASR on ntest = 5,000 held-out samples; Theory lines are evaluated from
+Theorem 1. Empirically, for each π on a logarithmic grid from 10−2 to 0.36 we find by binary search the trigger
+strength that reaches ASR = 0.6 and ASR = 0.9, and fit log α = k log π + b to the resulting budget curves.
+Results. Figure 3 shows the budget curves. On all four datasets the empirical quadratic neuron tracks the theoretical
+curve, and the fitted slopes are k ≈−1
+4 in the feature-learning regime and k ≈−1
+2 in the linear regime, as predicted
+by Theorems 2 and 3; the gap between the two regimes widens as π decreases, in agreement with (15). Table 2 in
+Appendix E reports CACC and ASR on a grid of (π, α): in both regimes the clean accuracy is unchanged by the
+poison, while the attack success rate is uniformly larger with feature learning (on MNIST, 0.97 against 0.15 at π = 0.01,
+α = 1). Finally, Figure 1 shows that the separation is not specific to the quadratic neuron: a network trained in the rich
+feature learning regime requires a smaller trigger than the same network trained in the lazy regime.
+5
+Discussions & Conclusion
+In this paper, we studied backdoor poisoning through a statistical model that isolates the role of feature learning: a
+quadratic neuron trained by least squares on a poisoned Gaussian mixture. We derived exact expressions for the clean
+accuracy and the attack success rate, valid for arbitrary noise covariance, finite poison fraction and trigger strength,
+and used them to show that a model without feature learning obeys the budget curve α ∝π−1/2, whereas a model
+that learns its feature obeys α ∝π−1/4: the poison creates a quadratic trigger detector whose response scales as α4,
+which halves the cost exponent without raising the attack ceiling and without affecting the clean accuracy. Our results
+offer a mechanism for the observation that the number of poisoned samples needed to backdoor a large model does not
+grow with its training corpus, and imply that audits calibrated on lazy-regime estimates underestimate the adversary
+by a factor that grows as π−1/4 in our considered setting. Extending the analysis to a hidden layer with a general
+activation, to finite-sample training and to trained feature directions is left for future work, and could potentially bring
+more understanding on the inner interaction between backdoor attacks and neural feature learning.
+Acknowledgements
+We thank Sara Tucci-Piergiovanni, Sami Souihi, and Mohamed Tamaazousti for helpful discussions. The computational
+work presented in this paper was performed using the CEA List FactoryIA supercomputer, with financial support from
+the Île-de-France Regional Council.
+References
+Jimmy Ba, Murat A Erdogdu, Taiji Suzuki, Zhichao Wang, Denny Wu, and Greg Yang. High-dimensional asymptotics
+of feature learning: How one gradient step improves the representation. In Advances in Neural Information Processing
+Systems, volume 35, pages 37932–37946, 2022.
+Battista Biggio, Blaine Nelson, and Pavel Laskov. Poisoning attacks against support vector machines. In International
+Conference on Machine Learning, pages 1467–1474. PMLR, 2012.
+Xinyun Chen, Chang Liu, Bo Li, Kimberly Lu, and Dawn Song. Targeted backdoor attacks on deep learning systems
+using data poisoning. arXiv preprint arXiv:1712.05526, 2017.
+Lénaïc Chizat, Edouard Oyallon, and Francis Bach. On lazy training in differentiable programming. In Advances in
+neural information processing systems, volume 32, 2019.
+Dami Choi, Yonadav Shavit, and David K Duvenaud. Tools for verifying neural models’ training data. In Advances in
+Neural Information Processing Systems, volume 36, pages 1154–1188, 2023.
+Alexandru Damian, Jason Lee, and Mahdi Soltanolkotabi. Neural networks can learn representations with gradient
+descent. In Conference on Learning Theory, pages 5413–5452. PMLR, 2022.
+9
+
+
+Why Backdooring Neural Networks is so Easy?
+Yansong Gao, Change Xu, Derui Wang, Shiping Chen, Damith C Ranasinghe, and Surya Nepal. Strip: A defence
+against trojan attacks on deep neural networks. In Proceedings of the 35th Annual Computer Security Applications
+Conference, pages 113–125, 2019.
+Behrooz Ghorbani, Song Mei, Theodor Misiakiewicz, and Andrea Montanari. Linearized two-layers neural networks in
+high dimension. In The Annals of Statistics, volume 49, pages 1029–1054, 2021.
+Shafi Goldwasser, Michael P Kim, Vinod Vaikuntanathan, and Or Zamir. Planting undetectable backdoors in machine
+learning models. arXiv preprint arXiv:2204.06974, 2022.
+Tianyu Gu, Brendan Dolan-Gavitt, and Siddharth Garg. Badnets: Identifying vulnerabilities in the machine learning
+model supply chain. arXiv preprint arXiv:1708.06733, 2017.
+Steve Hanneke, Amin Karbasi, Mohammad Mahmoody, Idan Mehalel, and Shay Moran. On optimal learning under
+targeted data poisoning. Advances in Neural Information Processing Systems, 35:30770–30782, 2022.
+Jonathan Hayase and Sewoong Oh.
+Few-shot backdoor attacks via neural tangent kernels.
+arXiv preprint
+arXiv:2210.05929, 2022.
+Jonathan Hayase, Weihao Kong, Raghav Bhatt, and Sewoong Oh. Spectre: Defending against backdoor attacks using
+robust covariance estimation. In International Conference on Machine Learning, pages 4129–4139. PMLR, 2021.
+Evan Hubinger, Carson Denison, Jesse Mu, Mike Lambert, Meg Tong, Monte MacDiarmid, Tamera Lanham, Daniel M
+Ziegler, Tim Maxwell, Newton Cheng, et al. Sleeper agents: Training deceptive LLMs that persist through safety
+training. arXiv preprint arXiv:2401.05566, 2024.
+Arthur Jacot, Franck Gabriel, and Clément Hongler. Neural tangent kernel: Convergence and generalization in neural
+networks. In Advances in neural information processing systems, volume 31, 2018.
+Hengrui Jia, Mohammad Yaghini, Christopher A Choquette-Choo, Natalie Dullerud, Anvith Thudi, Varun Chan-
+drasekaran, and Nicolas Papernot. Proof-of-learning: Definitions and practice. In 2021 IEEE Symposium on Security
+and Privacy (SP), pages 1039–1056. IEEE, 2021.
+Kassem Kallas, Carine Tannous, and Hichem FARAOUN. A game-theoretic approach to cost-aware backdoor attacks
+and defenses in deep learning. 2025.
+Alaa Khaddaj, Guillaume Leclerc, Aleksandar Makelov, Kristian Georgiev, Hadi Salman, Andrew Ilyas, and Aleksander
+Madry. Rethinking backdoor attacks. In International Conference on Machine Learning, pages 16216–16236. PMLR,
+2023.
+Yige Li, Xixiang Lyu, Nodens Koren, Lingjuan Lyu, Bo Li, and Xingjun Ma. Anti-backdoor learning: Training clean
+models on poisoned data. In Advances in Neural Information Processing Systems, volume 34, pages 14900–14912,
+2021.
+Yiming Li, Yong Jiang, Zhifeng Li, and Shu-Tao Xia. Backdoor learning: A survey. IEEE transactions on neural
+networks and learning systems, 35(1):5–22, 2022.
+Yingqi Liu, Shiqing Ma, Yousra Aafer, Wen-Chuan Lee, Juan Zhai, Weihang Wang, and Xiangyu Zhang. Trojaning
+attack on neural networks. In Network and Distributed System Security Symposium (NDSS), 2018.
+Bruno Loureiro, Cedric Gerbelot, Hugo Cui, Sebastian Goldt, Florent Krzakala, Marc Mézard, and Lenka Zdeborová.
+Learning curves of generic features maps for realistic datasets with a teacher-student model. Advances in Neural
+Information Processing Systems, 34:18137–18151, 2021.
+N Subramanian Manoj and Avrim Blum. Excess capacity and backdoor certification. In Advances in Neural Information
+Processing Systems, volume 34, pages 20323–20334, 2021.
+Song Mei and Andrea Montanari. Generalization error of random feature and kernel methods: Hypercontractivity and
+kernel matrix concentration. Applied and Computational Harmonic Analysis, 59:3–84, 2022.
+Francesca Mignacco, Florent Krzakala, Yue Lu, Pierfrancesco Urbani, and Lenka Zdeborová. The role of regularization
+in classification of high-dimensional noisy gaussian mixture. International Conference on Machine Learning, pages
+6874–6883, 2020.
+Ali Rahimi and Benjamin Recht. Random features for large-scale kernel machines. In Advances in neural information
+processing systems, volume 20, 2007.
+Aniruddha Saha, Akshayvarun Subramanya, and Hamed Pirsiavash. Hidden trigger backdoor attacks. In Proceedings
+of the AAAI conference on artificial intelligence, volume 34, pages 11957–11965, 2020.
+Issam Seddik, Sami Souihi, Mohamed Tamaazousti, and Sara Tucci Piergiovanni. Pots: Proof-of-training-steps for
+backdoor detection in large language models. In International Conference on Foundation and Large Language
+Models (FLLM), pages 7–15. IEEE, 2025.
+10
+
+
+Why Backdooring Neural Networks is so Easy?
+Ali Shafahi, W Ronny Huang, Mahyar Najibi, Octavian Suciu, Christoph Studer, Tudor Dumitorf, and Tom Goldstein.
+Poison frogs! targeted clean-label poisoning attacks on neural networks. In Advances in Neural Information
+Processing Systems, volume 31, 2018.
+Alexandra Souly, Javier Rando, Ed Chapman, Xander Davies, Burak Hasircioglu, Ezzeldin Shereen, Carlos Mougan,
+Vasilios Mavroudis, Erik Jones, Chris Hicks, et al. Poisoning attacks on llms require a near-constant number of
+poison samples. arXiv preprint arXiv:2510.07192, 2025.
+Jacob Steinhardt, Pang Wei Koh, and Percy Liang. Certified defenses for data poisoning attacks. In Advances in Neural
+Information Processing Systems, volume 30, 2017.
+Brandon Tran, Jerry Li, and Aleksander Madry. Spectral signatures in backdoor attacks. In Advances in Neural
+Information Processing Systems, volume 31, 2018.
+Alexander Turner, Dimitris Tsipras, and Aleksander Madry. Label-consistent backdoor attacks. In NeurIPS Workshop
+on Security in Machine Learning, 2019.
+Bolun Wang, Yuanshun Yao, Shawn Shan, Huiying Li, Bimal Viswanath, Haitao Zheng, and Ben Y Zhao. Neural
+cleanse: Identifying and mitigating backdoor attacks in neural networks. In IEEE Symposium on Security and
+Privacy, pages 707–723. IEEE, 2019.
+Blake Woodworth, Suriya Gunasekar, Jason D Lee, Edward Moroshko, Pedro Savarese, Itay Golan, Daniel Soudry, and
+Nathan Srebro. Kernel and rich regimes in overparametrized models. In Conference on Learning Theory, pages
+3635–3673. PMLR, 2020.
+Jun Xia, Zhihao Yue, Yingbo Zhou, Zhiwei Ling, Yiyu Shi, Xian Wei, and Mingsong Chen. Waveattack: Asymmetric
+frequency obfuscation-based backdoor attacks against deep neural networks. Advances in Neural Information
+Processing Systems, 37:43549–43570, 2024.
+Greg Yang and Edward J Hu. Tensor programs iv: Feature learning in infinite-width neural networks. In International
+Conference on Machine Learning, pages 11653–11664. PMLR, 2021.
+Rui Zhu, Di Tang, Siyuan Tang, XiaoFeng Wang, and Haixu Tang. Selective amnesia: On efficient, high-fidelity and
+blind suppression of backdoor effects in trojaned machine learning models. In 2023 IEEE Symposium on Security
+and Privacy (SP), pages 1–19. IEEE, 2023.
+A
+Proof of Theorem 1 and of Corollary 1
+Throughout, Φ and φ are the standard normal distribution and density, and Ez denotes expectation over z ∼N(0, 1).
+A.1
+Whitening
+Lemma 2 (Whitening equivariance). Let ˜x = Σ−1/2x, ˜w = Σ1/2w, ˜u = Σ1/2u. Then f(x) = ˜w⊤˜x+ β
+2 (˜u⊤˜x)2+c
+for all x, the whitened training distribution is the mixture (1) with (µ, v, Σ) replaced by (˜µ, ˜v, I), ˜µ = Σ−1/2µ,
+˜v = Σ−1/2v, and ∥˜u∥= 1. The population loss (4), its minimiser (expressed in the tilded variables), CACC and
+ASR are all unchanged. Moreover S = ∥˜µ∥, T = ∥˜v∥, ρ = ˜µ⊤˜v/(ST), g = ˜u⊤˜µ and h = ˜u⊤˜v.
+Proof. w⊤x = (Σ1/2w)⊤(Σ−1/2x) = ˜w⊤˜x and likewise u⊤x = ˜u⊤˜x, which gives the identity for f. If x =
+mc + z with z ∼N(0, Σ) then ˜x = Σ−1/2mc + ˜z with ˜z ∼N(0, I), and Σ−1/2mc ∈{˜µ, −˜µ, ˜µ + α˜v}. The
+map w 7→˜w is a bijection, so minimising the loss over w or over ˜w is the same problem, and the sign of f is
+pointwise unchanged, hence the metrics are. Finally ∥˜u∥2 = u⊤Σu = 1, ∥˜µ∥2 = µ⊤Σ−1µ = S2, ∥˜v∥2 = T 2,
+˜µ⊤˜v = µ⊤Σ−1v = STρ, and ˜u⊤˜µ = (Σ1/2u)⊤(Σ−1/2µ) = u⊤µ = g, ˜u⊤˜v = u⊤v = h.
+By Lemma 2 we work in whitened coordinates from now on and drop the tildes: the noise is N(0, I), the signal is ˜µ
+with ∥˜µ∥= S, the trigger is ˜v with ∥˜v∥= T, the feature direction ˜u is a unit vector, and the three cluster means are ˜µ,
+−˜µ, ˜µ + α˜v.
+A.2
+Proof of Lemma 1 (reduction to a three-dimensional frame)
+The read-out lies in the span of signal, trigger and feature.
+Let W = span(˜µ, ˜v, ˜u) and let q ∈W ⊥be arbitrary.
+For fixed (β, c) the stationarity condition of (4) with respect to ˜w reads
+E
+˜x ( ˜w⊤˜x + β
+2 t2 + c −y)
+
+= 0,
+t = ˜u⊤˜x.
+(16)
+11
+
+
+Why Backdooring Neural Networks is so Easy?
+Take the inner product of (16) with q. Write ˜x = mc + ˜z for the cluster c of the sample. Since q ⊥mc, q⊤˜x = q⊤˜z,
+and since q ⊥˜u, the Gaussian variables q⊤˜z and ˜u⊤˜z are uncorrelated hence independent. The bracket in (16)
+depends on the sample only through (c, ˜w⊤˜z, ˜u⊤˜z); decompose ˜w = ˜wW + ˜w⊥with ˜wW ∈W, ˜w⊥∈W ⊥. Then
+q⊤E
+˜x(· · · )
+
+= E
+
+q⊤˜z ( ˜w⊤
+⊥˜z)
+
++ E
+
+q⊤˜z ( ˜w⊤
+W ˜x + β
+2 t2 + c −y)
+|
+{z
+}
+independent of q⊤˜z
+
+= q⊤˜w⊥+ 0,
+because E[˜z ˜z⊤] = I and E[q⊤˜z] = 0. Hence q⊤˜w⊥= 0 for every q ∈W ⊥, i.e. ˜w⊥= 0 and ˜w ∈W. Consequently
+f depends on ˜x only through its orthogonal projection onto W, and minimising (4) over ˜w ∈Rd is the same as
+minimising over ˜w ∈W.
+The frame.
+Let e1 = ˜u. If m⊥=
+p
+S2 −g2 > 0, let e2 = (˜µ −g ˜u)/m⊥; this is a unit vector orthogonal to e1
+because ˜u⊤˜µ = g and ∥˜µ −g ˜u∥2 = S2 −2g2 + g2 = m2
+⊥. Let e3 be a unit vector in W orthogonal to e1, e2 (if
+dim W < 3, complete with any unit vector orthogonal to W; the corresponding coordinate then has zero mean in
+every cluster and, by the argument above applied to W, zero weight). In this frame ˜µ = ge1 + m⊥e2 by construction.
+Writing ˜v = he1 + v∥e2 + v⊥e3, we have h = ˜u⊤˜v, v∥= e⊤
+2 ˜v = (˜µ⊤˜v −g ˜u⊤˜v)/m⊥= (STρ −gh)/m⊥, and
+v2
+⊥= ∥˜v∥2 −h2 −v2
+∥= T 2 −h2 −v2
+∥; choosing the orientation of e3 makes v⊥≥0. If m⊥= 0 then ˜µ = ±S ˜u and
+we take e2, e3 any orthonormal completion with e3 ∝˜v −h˜u, so that v∥= 0 and v⊥=
+√
+T 2 −h2. The cluster means
+(7) follow by reading ˜µ, −˜µ and ˜µ+α˜v in this basis. Since the frame is orthonormal and the noise is N(0, I), the three
+noise coordinates are independent standard Gaussians. Finally f = ˜w⊤˜x + β
+2 t2 + c with ˜w = wte1 + w1e2 + w2e3
+is Lemma 1.
+The in-plane case.
+If u ∈span(Σ−1µ, Σ−1v) then ˜u = Σ1/2u ∈span(˜µ, ˜v), so W is two-dimensional, e3 ⊥W,
+v⊥= 0, and w2 = 0 by the projection argument. Both regimes are in-plane: the linear regime does not use u at all
+(equivalently any u with h = 0 may be used, see Appendix B), and u⋆∝Σ−1v.
+□
+A.3
+Population moments
+In the frame of Lemma 1 the model is linear in ϕ = (t, s1, s2, 1
+2t2, 1)⊤, so the minimiser of (4) solves
+A θ = b,
+A = E[ϕϕ⊤] =
+X
+c∈{+,−,p}
+ωc M(mc),
+b = E[ϕ y] =
+X
+c∈{+,−,p}
+ωc yc ¯ϕ(mc),
+(17)
+where, for a cluster with mean m = (mt, m1, m2) and unit isotropic noise,
+¯ϕ(m) =
+
+
+
+
+
+mt
+m1
+m2
+1
+2(m2
+t + 1)
+1
+
+
+
+
+,
+M(m) =
+
+
+
+
+
+m2
+t + 1
+mtm1
+mtm2
+1
+2(m3
+t + 3mt)
+mt
+·
+m2
+1 + 1
+m1m2
+1
+2m1(m2
+t + 1)
+m1
+·
+·
+m2
+2 + 1
+1
+2m2(m2
+t + 1)
+m2
+·
+·
+·
+1
+4(m4
+t + 6m2
+t + 3)
+1
+2(m2
+t + 1)
+·
+·
+·
+·
+1
+
+
+
+
+
+(18)
+(symmetric). Indeed, for a single cluster with mean m = (mt, m1, m2) and independent unit-variance coordinates, the
+moments of ϕ follow from Ez = Ez3 = 0, Ez2 = 1, Ez4 = 3 for z ∼N(0, 1):
+Et2 = m2
+t + 1,
+Et3 = m3
+t + 3mt,
+Et4 = m4
+t + 6m2
+t + 3,
+E[tsj] = mtmj,
+E[sj 1
+2t2] = 1
+2mj(m2
+t + 1),
+E[s1s2] = m1m2,
+which gives ¯ϕ(m) and M(m) in (18). Summing over the three clusters with weights ωc and labels yc gives A and b in
+(17). For a monomial q(m) write ⟨q⟩:= P
+c ωcq(mc); because the clean means are ±m+, an even monomial in m
+contributes 2−π
+2 q(m+) + π
+2 q(mp) and an odd one −π
+2 q(m+) + π
+2 q(mp). Writing ν := g + αh for the feature mean
+of the poisoned cluster, the sums needed are
+⟨mt⟩= παh
+2 ,
+⟨m1⟩=
+παv∥
+2
+,
+⟨m2⟩= παv⊥
+2
+,
+⟨m2
+t⟩= g2 + π
+2 (α2h2 + 2αgh),
+⟨m2
+1⟩= m2
+⊥+ π
+2 (α2v2
+∥+ 2αm⊥v∥),
+⟨m2
+2⟩= π
+2 α2v2
+⊥,
+⟨mtm2⟩= π
+2 αv⊥ν,
+⟨mtm1⟩= gm⊥+ π
+2 (α2hv∥+ αgv∥+ αhm⊥),
+⟨m1m2⟩= π
+2 αv⊥(m⊥+ αv∥),
+⟨m3
+t⟩= παh
+2 (α2h2 + 3αgh + 3g2),
+⟨m2m2
+t⟩= π
+2 αv⊥ν2,
+⟨m4
+t⟩= g4 + παh
+2 (α3h3 + 4α2gh2 + 6αg2h + 4g3),
+⟨m1m2
+t⟩= πα
+2 (α2h2v∥+ 2αghv∥+ αh2m⊥+ g2v∥+ 2ghm⊥).
+12
+
+
+Why Backdooring Neural Networks is so Easy?
+Substituting into (18), the entries of A (symmetric) in the order (t, s1, s2, 1
+2t2, 1) are
+A11 = g2 + π
+2 (α2h2 + 2αgh) + 1,
+A12 = g m⊥+ π
+2 (α2hv∥+ αgv∥+ αhm⊥),
+A13 = π
+2 αv⊥ν,
+A14 = παh
+4
+ α2h2 + 3αgh + 3g2 + 3
+
+,
+A15 = παh
+2 ,
+A22 = m2
+⊥+ π
+2 (α2v2
+∥+ 2αm⊥v∥) + 1,
+A23 = π
+2 αv⊥(m⊥+ αv∥),
+A24 = πα
+4
+ α2h2v∥+ 2αghv∥+ αh2m⊥+ g2v∥+ 2ghm⊥+ v∥
+
+,
+A25 =
+παv∥
+2
+,
+A33 = 1 + π
+2 α2v2
+⊥,
+A34 = π
+4 αv⊥(ν2 + 1),
+A35 = παv⊥
+2
+,
+A55 = 1,
+A44 = 3
+4 + 1
+8
+
+π
+ α4h4 + 4α3gh3 + 6α2g2h2 + 6α2h2 + 4αg3h + 12αgh
+
++ 2g4 + 12g2
+,
+A45 = 1
+4
+ π(α2h2 + 2αgh) + 2g2
++ 1
+2,
+(19)
+and, using y+ = +1, y−= yp = −1,
+b =
+
+g(1 −π) −παh
+2 , m⊥(1 −π) −
+παv∥
+2
+, −παv⊥
+2
+, −π
+4
+ α2h2 + 2αgh + 2g2 + 2
+
+, −π
+⊤
+.
+(20)
+For instance b1 = 1−π
+2 g + 1
+2g −π
+2 ν = g(1 −π) −παh
+2
+and b4 = 1
+2
+ 1−π
+2 (g2 + 1) −1
+2(g2 + 1) −π
+2 (ν2 + 1)
+
+=
+−π
+4 (ν2 + g2 + 2). In the in-plane case v⊥= 0 the third row and column reduce to A33 = 1 and zeros, b3 = 0, so
+w2 = 0 and the system is the 4 × 4 one in (wt, w1, β, c). All entries were also checked symbolically against a direct
+summation of the per-cluster moments, and numerically against Monte-Carlo estimates of E[ϕϕ⊤] and E[ϕy].
+Existence and uniqueness.
+A = E[ϕϕ⊤] ≻0: if c⊤Ac = E[(c⊤ϕ)2] = 0 then the polynomial c⊤ϕ(t, s1, s2) =
+c1t + c2s1 + c3s2 + c4
+2 t2 + c5 vanishes almost everywhere on R3 (the mixture has a positive density), hence c = 0.
+Therefore L is strictly convex and θ⋆= A−1b is its unique minimiser.
+A.4
+The parabolic-boundary formula and the proof of Theorem 1
+Fix a test cluster with mean m = (mt, m1, m2) and write the test point as t = mt + z, s1 = m1 + z1, s2 = m2 + z2
+with z, z1, z2 i.i.d. N(0, 1). Substituting in Lemma 1,
+f = wtmt + w1m1 + w2m2 + c + β
+2 m2
+t
+|
+{z
+}
+A0(m)
++ (wt + βmt)
+|
+{z
+}
+b(m)
+z + β
+2 z2 + w1z1 + w2z2
+|
+{z
+}
+∼N (0,σ2)
+.
+(21)
+The last term is a centred Gaussian of variance σ2 = w2
+1 + w2
+2, independent of z. Conditioning on z,
+P(f > 0 | z) = P
+ w1z1 + w2z2 > −(A0 + bz + β
+2 z2)
+
+= Φ
+A0(m) + b(m)z + β
+2 z2
+σ
+
+,
+and averaging over z gives the parabolic-boundary formula
+P
+ f > 0
+ x ∈cluster m
+
+= Ez
+"
+Φ
+ 
+A0(m) + b(m) z + β
+2 z2
+σ
+!#
+,
+(22)
+with the convention Φ(x/0) = 1{x > 0} when σ = 0; P(f < 0 | z) is obtained by flipping the sign of the argument.
+Inserting the three cluster means (7) into (22), with the event f > 0 for C+ and f < 0 for C−and Cp, gives (8). The
+trained weights are those of Appendix A.3.
+□
+Geometrically, {f = 0} is the parabola s 7→−(A0 + bz + β
+2 z2)/σ in the (z, s) plane of feature noise and orthogonal
+noise, and (22) is the Gaussian mass on one side of it. When β = 0 the parabola is a line and EzΦ((A0 + wtz)/σ) =
+Φ
+ A0/
+p
+w2
+t + σ2
+, the linear-classifier formula.
+A.5
+Proof of Corollary 1(i)
+At π = 0 all poison-induced entries vanish: by (19)–(20), A is block-diagonal with linear block
+  g2+1
+gm⊥
+0
+gm⊥m2
+⊥+1 0
+0
+0
+1
+
+and
+quadratic block Q0 =
+  1
+4 (g4+6g2+3) 1
+2 (g2+1)
+1
+2 (g2+1)
+1
+
+, and b = (g, m⊥, 0, 0, 0)⊤. The linear block times (g, m⊥, 0)/(1 +
+S2) equals (g, m⊥, 0) because g2 + m2
+⊥= S2, and the quadratic block has zero right-hand side, so θ0 =
+ g
+1+S2 ,
+m⊥
+1+S2 , 0, 0, 0
+
+, i.e. ˜w = ˜µ/(1 + S2), β = c = 0, for every u. Then f = ˜µ⊤˜x/(1 + S2), and on a cluster with
+mean m it is Gaussian with mean ˜µ⊤m/(1 + S2) and standard deviation S/(1 + S2). For m = ±˜µ this gives Φ(S)
+for both clean classes, and for m = ˜µ + α˜v the event f < 0 has probability Φ
+ −(S2 + αSTρ)/S
+
+= Φ(−S −αTρ).
+□
+13
+
+
+Why Backdooring Neural Networks is so Easy?
+A.6
+Proof of Corollary 1(ii) (stealth to first order)
+Since A(π) and b(π) are polynomial in π and A(0) is invertible, θ⋆= θ0 + πθ1 + O(π2) with θ0 as above. Let
+ˆµ = ˜µ/S and σ0 = S/(1 + S2), and decompose the whitened test noise as ˜z = ζ ˆµ + ˜z⊥with ζ = ˆµ⊤˜z ∼N(0, 1)
+independent of ˜z⊥⊥ˆµ. On a clean source point ˜x = ˜µ + ˜z,
+f = σ0(S + ζ) + πf1(ζ, ˜z⊥) + O(π2),
+f1 = ˜w⊤
+1 (˜µ + ˜z) + β1
+2
+ g + ˜u⊤˜z
+2 + c1,
+where ( ˜w1, β1, c1) are the first-order corrections. For fixed ˜z⊥the map ζ 7→S + ζ + π
+σ0 f1 has, for small π, a unique
+root ζ⋆= −S −
+π
+σ0 f1(−S, ˜z⊥) + O(π2), so P(f > 0 | ˜z⊥) = Φ(−ζ⋆) = Φ(S) +
+π
+σ0 φ(S)f1(−S, ˜z⊥) + O(π2).
+At ζ = −S the point is ˜x = ˜µ −S ˆµ + ˜z⊥= ˜z⊥, so f1(−S, ˜z⊥) = ˜w⊤
+1 ˜z⊥+ β1
+2
+ g −g + ˜u⊤˜z⊥
+2 + c1, using
+˜u⊤ˆµ = g/S. Averaging over ˜z⊥(which has E[˜z⊥] = 0 and E[(˜u⊤˜z⊥)2] = 1 −g2/S2),
+P(f > 0 | C+) = Φ(S) + πφ(S)
+σ0
+δ + O(π2),
+δ := β1
+2
+
+1 −g2
+S2
+
++ c1.
+On a clean target point ˜x = −˜µ+ ˜z, f = −σ0(S−ζ)+πf −
+1 +O(π2) with f −
+1 = ˜w⊤
+1 (−˜µ+ ˜z)+ β1
+2 (−g+ ˜u⊤˜z)2+c1;
+the root is now ζ⋆= S −π
+σ0 f −
+1 (S, ˜z⊥) + O(π2) and P(f < 0 | ˜z⊥) = Φ(ζ⋆). At ζ = S the point is again ˜x = ˜z⊥
+and the same computation gives f −
+1 (S, ˜z⊥) with expectation δ. Hence
+P(f < 0 | C−) = Φ(S) −πφ(S)
+σ0
+δ + O(π2).
+The two O(π) shifts are equal and opposite, and their average CACC = Φ(S) + O(π2). The interchange of the
+π-expansion with the expectation over ˜z⊥is justified because f1 is a polynomial in ˜z⊥with Gaussian moments.
+□
+B
+Proofs for the linear regime (Section 3.2)
+B.1
+Proof of Proposition 1
+(i) Let h = 0. By (7) the feature means of the three clusters are g, −g, g, so the quadratic feature ϕ4 = 1
+2t2 with
+t ∼N(±g, 1) has the same distribution in every cluster; in particular its mean m4 = 1
+2(g2 + 1) is cluster-independent,
+and within each cluster it is independent of (s1, s2). Hence, in the mixture, Cov(ϕ4, y) = E[ϕ4y] −m4E[y] =
+m4E[y] −m4E[y] = 0, Cov(ϕ4, sj) = P
+c ωc m4 mc
+j −m4
+P
+c ωcmc
+j = 0, and Cov(ϕ4, t) = E[ 1
+2t3] −m4E[t] =
+P
+c ωc
+ m4mc
+t + mc
+t
+
+−m4
+P
+c ωcmc
+t = ⟨mt⟩= παh
+2
+= 0, using 1
+2E[t3] = 1
+2(m3
+t + 3mt) = m4mt + mt. Now let
+(w′, c′) be the least-squares solution of the model without ϕ4 (the linear classifier) and r = y −w′⊤(t, s1, s2) −c′ its
+residual. The normal equations of that model give E[r] = 0 and E[r t] = E[r sj] = 0, hence E[rϕ4] = Cov(r, ϕ4) +
+E[r]E[ϕ4] = Cov(y, ϕ4) −P
+j w′
+jCov(ϕj, ϕ4) = 0. Thus (w′, 0, c′) satisfies all five normal equations (17); by
+uniqueness it is θ⋆, so β = 0 and (w, c) = (w′, c′). (One can also read this off (19)–(20): at h = 0 the fourth row of A
+is 1
+2(g2 + 1) times its fifth row except for the diagonal entry, and b4 = 1
+2(g2 + 1)b5.)
+(ii) If ˜u is uniform on the unit sphere of Rd then, by rotational symmetry, E[˜u˜u⊤] = I/d, so E[h2] = E[(˜u⊤˜v)2] =
+∥˜v∥2/d = T 2/d and likewise E[g2] = S2/d. By Proposition 2, β = O(πh), so the curvature is O(πd−1/2) and the
+model is the linear classifier up to that order.
+□
+Corollary 3 (Exact weights and metrics in the linear regime). In the linear regime the trained parameters are, in
+whitened coordinates,
+˜w = (1 −π) (I + C)−1
+˜µ −πα
+2 ˜v
+
+,
+c = −π −πα
+2 ˜v⊤˜w,
+C = ˜µ˜µ⊤+ πα
+2
+ ˜µ˜v⊤+ ˜v ˜µ⊤
++ πα2
+2
+ 1 −π
+2
+˜v˜v⊤,
+(23)
+where C is the covariance of the cluster means, and
+CACC = 1
+2
+
+Φ
+ ˜w⊤˜µ + c
+∥˜w∥
+
++ Φ
+ ˜w⊤˜µ −c
+∥˜w∥
+
+,
+ASR = Φ
+
+−˜w⊤(˜µ + α˜v) + c
+∥˜w∥
+
+.
+(24)
+For a hidden trigger (ρ = 0), in the basis (˜µ/S, ˜v/T) and with A = αT,
+wµ = (1 −π) S (1 + π
+2 A2)
+D
+,
+wv = −(1 −π) π
+2 A (1 + 2S2)
+D
+,
+c = −π −π
+2 A wv,
+D = (1 + S2)
+
+1 + π
+2 A2 1 −π
+2
+
+−π2
+4 A2S2.
+(25)
+14
+
+
+Why Backdooring Neural Networks is so Easy?
+The poisoned cluster enters the normal equations only through its mean α˜v, with weight π: the read-out tilts toward −˜v
+by wv ∝πα, and a triggered test point, displaced by the same α˜v, is pushed across the boundary by αwv ∝πα2.
+B.2
+Proof of Corollary 3
+The linear model f =
+˜w⊤˜x + c has normal equations E[˜x( ˜w⊤˜x + c −y)] = 0 and E[ ˜w⊤˜x + c −y] = 0.
+Let ¯m = E[˜x] = P
+c ωcmc =
+πα
+2 ˜v (the ˜µ terms cancel:
+1−π
+2
+−1
+2 + π
+2 = 0), E[y] =
+1−π
+2
+−1
+2 −π
+2 = −π,
+E[˜xy] =
+1−π
+2
+˜µ + 1
+2 ˜µ −π
+2 (˜µ + α˜v) = (1 −π)˜µ −πα
+2 ˜v, and E[˜x˜x⊤] = I + M with M = P
+c ωcmcm⊤
+c =
+˜µ˜µ⊤+ πα
+2 (˜µ˜v⊤+ ˜v ˜µ⊤) + πα2
+2 ˜v˜v⊤. The second normal equation gives c = −π −¯m⊤˜w; substituting in the
+first, (I + M −¯m ¯m⊤) ˜w = E[˜xy] + π ¯m = (1 −π)˜µ −πα
+2 (1 −π)˜v, and M −¯m ¯m⊤= C as stated, since
+¯m ¯m⊤= π2α2
+4
+˜v˜v⊤. This is (23). On a cluster with mean m, f ∼N( ˜w⊤m + c, ∥˜w∥2), which gives (24). For
+ρ = 0, in the orthonormal basis (˜µ/S, ˜v/T) and with A = αT, C =
+ S2
+πAS/2
+πAS/2 πA2(1−π/2)/2
+
+, ˜µ −πα
+2 ˜v = (S, −πA/2)
+and ¯m = (0, πA/2); inverting the 2 × 2 matrix I + C, whose determinant is D, gives (25): the numerator of wµ is
+S
+ 1 + πA2
+2 (1 −π
+2 )
+
++ πA
+2 · πAS
+2
+= S(1 + π
+2 A2) and that of wv is −πA
+2 (1 + S2) −πAS
+2 S = −πA
+2 (1 + 2S2).
+□
+B.3
+Proof of Theorem 2
+Throughout ρ = 0 and we use (25). The triggered mean margin is Mp = wµS + wvA + c and the clean margins are
+M± = ±wµS + c; ASR = Φ(−Mp/∥w∥) and CACC = 1
+2[Φ(M+/∥w∥) + Φ(−M−/∥w∥)] with ∥w∥2 = w2
+µ + w2
+v.
+(a) Since D = (1+S2)(1+ π
+2 A2)+O(π2), we get wµ = (1−π)S
+1+S2 +O(π2), wv = −πA(1+2S2)
+2(1+S2) +O(π2), c = −π+O(π2)
+and ∥w∥= wµ + O(π2). Hence
+Mp
+∥w∥= S + wvA + c
+wµ
++ O(π2) = S −π
+h(1 + 2S2)A2
+2S
++ 1 + S2
+S
+i
++ O(π2),
+and Φ(−Mp/∥w∥) = Φ(−S) + πφ(S)[· · · ] + O(π2). For the clean classes, M±/∥w∥= ±S + c/wµ + O(π2), and
+Φ(S + c/wµ) + Φ(S −c/wµ) = 2Φ(S) + O(π2).
+(b) Put π = e/A2 and let A →∞(so π →0). Then πA2 = e, πA = e/A →0, π2A2 = πe →0, and
+D →(1 + S2)(1 + e
+2). Therefore wµ →S/(1 + S2), wv = O(πA) →0, wvA →−
+e(1+2S2)
+2(1+S2)(1+e/2) = −(1+2S2)
+(1+S2)
+e
+e+2,
+c = −π −πA
+2 wv →0, ∥w∥→S/(1 + S2). Hence Mp/∥w∥→S −1+2S2
+S
+e
+e+2 and M±/∥w∥→±S, which is (9)
+and CACC →Φ(S).
+(c) e 7→e/(e + 2) increases from 0 to 1, so ASRlin increases from Φ(−S) to Φ
+ −S + 1+2S2
+S
+
+= Φ
+  1+S2
+S
+
+.
+(d) Setting ASRlin(e) = a gives 1+2S2
+S
+e
+e+2 = S + Φ−1(a), i.e.
+e
+e+2 = κa, which has a solution ea =
+2κa
+1−κa ≥0 iff
+0 ≤κa < 1, i.e. iff Φ(−S) ≤a < Φ
+  1+S2
+S
+
+. Then α =
+p
+ea/π/T.
+□
+C
+Proofs for the feature-learning regime (Section 3.3)
+C.1
+Proof of Proposition 2 (first-order expansion)
+Write A = A0 + πA1 and b = b0 + πb1 with A0, b0 the π = 0 parts of (19)–(20); all entries are affine in π so this is
+exact. Then θ⋆= θ0 + πθ1 + O(π2) with θ0 = A−1
+0 b0 as in the proof of Corollary 1(i) and
+θ1 = A−1
+0
+ b1 −A1θ0
+
+=: A−1
+0 r.
+(26)
+Because A0 is block-diagonal between the linear coordinates and the pair ( 1
+2t2, 1), the curvature is β1
+=
+[Q−1
+0 (r4, r5)⊤]1 with Q0 the quadratic block; since det Q0 = 1
+4(g4 + 6g2 + 3) −1
+4(g2 + 1)2 = 2g2+1
+2
+,
+β1 =
+2
+2g2 + 1
+
+r4 −g2 + 1
+2
+r5
+
+.
+(27)
+It remains to compute r4 and r5. Since θ0 has only the two components (g, m⊥)/(1 + S2), (A1θ0)k =
+ A(1)
+k1 g +
+A(1)
+k2 m⊥
+
+/(1 + S2) where A(1)
+kj is the coefficient of π in Akj. From (19), A(1)
+51
+=
+αh
+2 , A(1)
+52
+=
+αv∥
+2 , so using
+15
+
+
+Why Backdooring Neural Networks is so Easy?
+gh + m⊥v∥= STρ,
+r5 = −1 −α(gh + m⊥v∥)
+2(1 + S2)
+= −1 −
+αSTρ
+2(1 + S2).
+Similarly A(1)
+41 = αh
+4 (α2h2 + 3αgh + 3g2 + 3) and A(1)
+42 = α
+4 (α2h2v∥+ 2αghv∥+ αh2m⊥+ g2v∥+ 2ghm⊥+ v∥);
+multiplying by g and m⊥respectively, adding, and replacing m⊥v∥= STρ −gh and m2
+⊥= S2 −g2, all terms in
+g2h2, g3h and gh cancel and one finds
+A(1)
+41 g + A(1)
+42 m⊥= α
+4
+h
+STρ
+ α2h2 + 2αgh + g2 + 1
+
++ αh2S2 + 2gh(S2 + 1)
+i
+,
+so that, with b(1)
+4
+= −1
+4(α2h2 + 2αgh + 2g2 + 2),
+r4 = −α2h2 + 2αgh + 2g2 + 2
+4
+−α
+
+STρ(α2h2 + 2αgh + g2 + 1) + αh2S2 + 2gh(S2 + 1)
+
+4(1 + S2)
+.
+Substituting in (27): the constant −2g2+2
+4
+in r4 cancels against −g2+1
+2
+· (−1) from r5, the terms αSTρ(g2 + 1) cancel
+between r4 and −g2+1
+2
+r5, and collecting the rest over the denominator 4(1 + S2),
+r4 −g2+1
+2
+r5 = −αh
+
+STρ h α2 +
+ (1 + 2S2)h + 2STρ g
+
+α + 4g(1 + S2)
+
+4(1 + S2)
+,
+which gives (11). The remaining components of θ1 are finite, so ˜w = ˜µ/(1 + S2) + O(π) and c = O(π). In
+the feature-learning regime with ρ = 0 one has g = 0, h = T, and (11) becomes β = −π (1+2S2)
+2(1+S2)α2T 2 + O(π2).
+(Expression (11) was also verified symbolically against A−1b at random rational points.)
+□
+Corollary 4 (Exact weights in the feature-learning regime). In the feature-learning regime with a hidden trigger
+(u = u⋆, ρ = 0), in the frame (˜v/T, ˜µ/S) of feature and residual signal, with A = αT,
+wµ = 2S(1 −π)
+
+4 + πA2(A2 + 6) −2π2A2
+∆
+,
+β = −4πA2(1 + 2S2)(1 −π)2
+∆
+,
+wv = −2πA(1 −π)(1 + 2S2)(πA2 + 2)
+∆
+,
+c = π
+
+2A2(1 + 2S2) −8(1 + S2) −πA4 −2πA2(8S2 + 7) + 2π2A2(4S2 + 3)
+
+∆
+,
+(28)
+where
+∆= 16 det A = 8(1 + S2) + 2πA2(1 + S2)(A2 + 6) −π2A2
+(1 + 2S2)A2 + 2(3 + 4S2)
+
+.
+(29)
+As A →∞, ∆∼π
+
+2(1 + S2) −π(1 + 2S2)
+
+A4 while the numerator of β grows only as A2, so β = O(A−2): the
+detector saturates. When π →0 and A →∞, ∆/8(1 + S2) →1 + πA4
+4 , so πA4 is the only combination of π and A
+that stays finite.
+C.2
+Proof of Corollary 4 (exact weights, ρ = 0)
+In the feature-learning regime ˜u = ˜v/T, so h = T, g = Sρ, v∥= v⊥= 0, m⊥= S
+p
+1 −ρ2, and α enters only
+through A = αh = αT. With ρ = 0 (g = 0, m⊥= S), the 4 × 4 system of (19)–(20) in the unknowns (wv, wµ, β, c)
+(feature first) is
+A =
+
+
+
+
+1 + π
+2 A2
+π
+2 AS
+π
+4 A(A2 + 3)
+π
+2 A
+·
+1 + S2
+π
+4 A2S
+0
+·
+·
+3
+4 + π
+8 A2(A2 + 6)
+1
+2 + π
+4 A2
+·
+·
+·
+1
+
+
+
+,
+b =
+
+
+
+−π
+2 A
+S(1 −π)
+−π
+4 (A2 + 2)
+−π
+
+
+.
+Solving by Cramer’s rule gives (28); the identity 16 det A = ∆and the four quotients were verified by exact symbolic
+computation (substituting (28) back into Aθ = b yields zero identically). The leading behaviour as A →∞follows
+from the highest powers: ∆= π
+
+2(1 + S2) −π(1 + 2S2)
+
+A4 + O(A2), while the numerators of β, wvA and c are
+O(A2), O(A4) and O(A4).
+□
+16
+
+
+Why Backdooring Neural Networks is so Easy?
+For the ceiling at general ρ we also record the exact weights of the trigger-aligned frame g = Sρ, m⊥= S¯ρ
+(¯ρ =
+p
+1 −ρ2), h = T, v∥= 0, again in terms of A = αT:
+wv = 2(1 −π)
+∆
+Pv,
+wµ = 2S¯ρ(1 −π)
+∆
+Pµ,
+β = −4Aπ(1 −π)
+∆
+Pβ,
+c = −π
+∆Pc,
+(30)
+where ∆= 16 det A and, grouped by powers of A,
+∆= 8(1 + S2)(1 + 2S2ρ2) + 8Sπρ (2S2ρ2 + 2S2 + 3) A + 8Sπρ (1 + S2 −S2π) A3
++ π
+ 2(1 + S2) −π(1 + 2S2)
+
+A4
++
+
+π(12 + 12S2 −8S4ρ4 + 16S4ρ2 + 12S2ρ2) + π2(8S4ρ4 −16S4ρ2 + 8S2ρ2 −8S2 −6)
+
+A2,
+Pβ = 4Sρ(1 + S2) +
+
+(1 −π)(1 + 2S2) + 2(1 + π)S2ρ2
+A + Sρ A2,
+Pv = 4Sρ(2S2ρ2 + 1) + 2π
+ 4S4ρ4 −4S4ρ2 + 4S2ρ2 −2S2 −1
+
+A
++ 2Sπρ
+ 2S2πρ2 −2S2π + 2S2ρ2 −π + 2
+
+A2 + π
+ 2S2πρ2 −2S2π + 4S2ρ2 −π
+
+A3 + Sπρ A4,
+Pµ = 4(2S2ρ2 + 1) + 4Sπρ
+ 2S2ρ2 + 3
+
+A + 2π
+ 2S2πρ2 + 4S2ρ2 −π + 3
+
+A2
++ 2Sπρ(π + 2)A3 + πA4,
+Pc = 8(1 + S2)(1 + 2S2ρ2)
++ 4Sρ
+ 2S4πρ2 −2S4ρ2 + 4S2πρ2 + 6S2π −2S2 + 7π −1
+
+A
++ 2
+ 2S4π2ρ4 −2S4π2ρ2 + 4S4πρ2 −2S4ρ4 −2S4ρ2 + 5S2π2ρ2 −4S2π2
++ 8S2πρ2 + 8S2π −3S2ρ2 −2S2 −3π2 + 7π −1
+
+A2
++ 2Sρ
+ S2πρ2 −S2ρ2 + π2 + 4π −1
+
+A3 + π A4.
+These reduce to (28) at ρ = 0 and were verified symbolically against the 4 × 4 solve.
+C.3
+Proof of Theorem 3
+In the frame of Corollary 4 the cluster means are m± = (0, ±S) and mp = (A, S), so by Theorem 1, with σ = |wµ|,
+A±
+0 = ±wµS + c,
+b± = wv,
+Ap
+0 = wµS + wvA + β
+2 A2 + c,
+bp = wv + βA.
+(a) Small poison. Expanding (28) to first order in π at fixed A (equivalently, applying Appendix C.1 with g = 0, h = T,
+m⊥= S, v∥= 0),
+wµ = S(1 −π)
+1 + S2
++ O(π2),
+wv = −πA(1 + 2S2)
+2(1 + S2)
++ O(π2),
+β = −πA2(1 + 2S2)
+2(1 + S2)
++ O(π2),
+c = π
+
+A2(1 + 2S2) −4(1 + S2)
+
+4(1 + S2)
++ O(π2).
+(31)
+Since wv, β, c = O(π), the argument of Φ in the ASR of (8) is −S −δ(z) + O(π2) with δ(z) =
+
+wvA + β
+2 A2 + c +
+bpz + β
+2 z2
+/wµ, and EzΦ(−S −δ(z)) = Φ(−S) −φ(S)Ez[δ(z)] + O(π2) with Ez[δ] =
+
+wvA + β
+2 A2 + β
+2 + c
+
+/wµ
+(because Ez = 0, Ez2 = 1). Substituting (31) over the common denominator 4(1 + S2),
+wvA + β
+2 A2 + β
+2 + c = −π (1 + 2S2) A2(A2 + 2) + 4(1 + S2)
+4(1 + S2)
+,
+and with 1/wµ = (1 + S2)/S + O(π) this is (12). The identification of the extra term relative to Theorem 2(a) is
+immediate: (1+2S2)A2(A2+2)
+4S
+= (1+2S2)A2
+2S
++ (1+2S2)A4
+4S
+. The clean accuracy statement is Corollary 1(ii); explicitly,
+the two clean shifts are ∓φ(S)
+  β
+2 + c
+
+/wµ and β
+2 + c = −π + O(π2) by (31).
+(b) Stealth limit. Put π = ϱ/A4 and let A →∞. Then πA4 = ϱ, while πA2 = ϱ/A2 →0 and π2A4 = πϱ →0. Term
+by term in (28),
+∆→2(1 + S2)(4 + ϱ),
+wµ →
+2S(4 + ϱ)
+2(1 + S2)(4 + ϱ) =
+S
+1 + S2 ,
+β
+2 A2 = −2πA4(1 + 2S2)(1 −π)2
+∆
+→−1 + 2S2
+1 + S2 ·
+ϱ
+4 + ϱ ,
+17
+
+
+Why Backdooring Neural Networks is so Easy?
+while wvA = −2(1 + 2S2)(1 −π)πA2(πA2 + 2)/∆→0, c →0 (every term of πPc is O(πϱ) or O(πA2)), β →0
+and bp = wv + βA →0. Hence in the triggered integral of (8) the z-dependence disappears and the integral collapses
+to a single Φ with argument −Ap
+0/wµ →−S + 1+2S2
+S
+ϱ
+4+ϱ, which is (13). For the clean clusters A±
+0 /wµ →±S and
+b±, β →0, so CACC →Φ(S). (The convergence of the z-integrals is dominated: for large A the integrands are
+uniformly bounded and converge pointwise.)
+(c) Ceiling. Fix π ∈(0, 1) and let A →∞. We first treat ρ = 0 using (28). Let D∞:= 2(1 + S2) −π(1 + 2S2) =
+2(1 + S2)(1 −π) + π > 0, so that ∆= πD∞A4 + O(A2). Then
+wµ →2S(1 −π)
+D∞
+,
+wvA →−2π(1 −π)(1 + 2S2)
+D∞
+,
+β
+2 A2 →−2(1 + 2S2)(1 −π)2
+D∞
+,
+c →−π
+D∞
+,
+and bp = wv + βA = O(A−1) →0, β →0. Summing, the numerator of the limit of Ap
+0 is
+2S2(1 −π) −2π(1 −π)(1 + 2S2) −2(1 + 2S2)(1 −π)2 −π
+= (1 −π)
+
+2S2 −2(1 + 2S2)
+
+−π = −2(1 + S2)(1 −π) −π = −D∞,
+so Ap
+0 →−1.
+Since β →0 and bp →0, the triggered statistic becomes linear-Gaussian and ASR →
+Φ
+ −Ap
+0/
+q
+w2µ + (bp)2
+→Φ
+ 1/wµ,∞
+
+= Φ
+ D∞/(2S(1−π))
+
+, which is Theorem 3(c) because D∞/(2S(1−π)) =
+1+S2
+S
++
+π
+2S(1−π). For general ρ the same computation uses (30). The leading coefficients give wµ →2S¯ρ(1 −π)/D∞,
+wv →2Sρ(1 −π)/D∞, βA →−4Sρ(1 −π)/D∞, hence bp = wv + β(Sρ + A) →−2Sρ(1 −π)/D∞and
+w2
+µ + (bp)2 →4S2(1 −π)2(¯ρ2 + ρ2)/D2
+∞=
+ 2S(1 −π)/D∞
+2, independent of ρ. In Ap
+0 = wv(Sρ + A) + wµS¯ρ +
+c + β
+2 (Sρ + A)2 the O(A) terms wvA + 1
+2(βA)A cancel at leading order, and collecting the O(1) terms from the two
+leading coefficients of each polynomial (the A4 and A3 coefficients of ∆and Pv, the A2 and A1 coefficients of Pβ, and
+the A4 coefficient of Pc), every ρ-dependent term cancels and one again finds Ap
+0 →−1. Hence Theorem 3(c) holds
+for all ρ; we also confirmed it by exact symbolic limits at several rational (S, ρ, π) and numerically to six decimals. As
+π →0 the correction vanishes and the ceiling tends to Φ
+  1+S2
+S
+
+.
+(d) Budget curve. ϱ 7→ϱ/(4 + ϱ) increases from 0 to 1, so ASRfl(ϱ) = a has a solution iff κa ∈[0, 1), namely
+ϱ
+4+ϱ = κa, i.e. ϱa =
+4κa
+1−κa , and then α = (ϱa/π)1/4/T. The condition κa < 1 is again a < Φ
+  1+S2
+S
+
+.
+□
+C.4
+Learning the feature direction end to end
+Definition 3 fixes u = u⋆. To check that this is the direction a network that also trains u would select, note
+that for any fixed u the optimal read-out is A−1b, so end-to-end training of (w, β, c, u) minimises the profile loss
+L⋆(u) = 1
+2
+ 1 −b⊤A−1b
+
+over u⊤Σu = 1. In the isotropic setting S = 1.5, ρ = 0, π = 0.1 we minimised L⋆over
+in-plane directions and, independently, ran Adam on all of (w, β, c, u) for the population loss: both converge to the
+same direction, whose overlap h/T with the whitened trigger is 0.95 at A = 4 and decreases to 0.64 at A = 16. The
+direction that would maximise the ASR at fixed A is closer to the signal (h⋆/T from 0.81 to 0.38 over the same range),
+but because ASR is flat near its maximum in h the ASR obtained by the learned direction is within 0.03 of the maximal
+one. End-to-end feature learning therefore does not target the attack, yet lands in the feature-learning region h ≫Tπ1/4
+of Corollary 2 and is nearly ASR-optimal as a by-product; u⋆is its weak-trigger limit.
+D
+Two channels: derivation of Corollary 2
+Let ρ = 0 and let u be in-plane with overlap 0 ≤h ≤T. In the frame of Lemma 1 the trigger is ˜v = he1 + v∥e2 with
+v2
+∥= T 2 −h2 (the third coordinate is absent in-plane); in this appendix v⊥:= |v∥| =
+√
+T 2 −h2 denotes the magnitude
+of the trigger component orthogonal to the feature, as in Corollary 2. The trigger displaces the poisoned cluster by αh
+along the feature and by αv⊥orthogonally to it. By Proposition 2, β ∝πh and the quadratic detector acts on the feature
+displacement exactly as in Theorem 3 with A replaced by αh: its stealth invariant is π(αh)4 and it moves the margin
+argument by 1+2S2
+S
+ϱ′
+4+ϱ′ , ϱ′ = πα4h4. The orthogonal displacement is invisible to the detector and acts through the
+linear read-out exactly as in Theorem 2 with A replaced by αv⊥: its invariant is e′ = πα2v2
+⊥and it moves the argument
+by 1+2S2
+S
+e′
+e′+2. Both channels push the argument from −S toward the common ceiling 1+S2
+S
+with the same total budget.
+18
+
+
+Why Backdooring Neural Networks is so Easy?
+10
+4
+10
+3
+10
+2
+10
+1
+poison fraction 
+10
+2
+10
+1
+100
+feature-trigger overlap h/T = u
+v/T
+= 5
+= 10
+= 20
+= 40
+= 80
+feature-learning
+(quadratic) channel
+(a)
+1/4/h
+h
+0: pure linear, 
+0
+linear channel
+(a)
+1/2/T  (
+0)
+(a) phase diagram of eq. (12)  (S = 1.5,
+= 0, a = 0.6)
+h = T
+1/4
+10
+5
+10
+4
+10
+3
+10
+2
+10
+1
+poison fraction 
+101
+102
+required trigger strength (a)
+slope 
+1
+2
+slope 
+1
+4
+(b) cost scaling: 
+1/2 vs 
+1/4
+h/T = 0.04 (linear)
+h/T = 1 (aligned, quadratic)
+Figure 4: Two backdoor channels. (a) The (π, h/T) plane splits at the crossover h = Tπ1/4 (dashed blue) into the
+feature-learning channel, α ∝π−1/4, and the linear channel, α ∝π−1/2 (at h = 0, β ≡0). Grey contours are lines of
+constant exact required trigger strength from Theorem 1. (b) Log-log plot of α(π; a) for the two extreme alignments,
+confirming the two exponents. Parameters: S = 1.5, ρ = 0, target ASR a = 0.6.
+Writing both saturating fractions as G/(4 + G) with G = 2e′ and G = ϱ′ respectively, and adding the two contributions
+to a single generalised energy G(α) = 2πα2v2
+⊥+ πα4h4, gives the approximate law ASR ≃Φ
+ −S + 1+2S2
+S
+G
+4+G
+
+.
+Setting it equal to a gives G = ϱa =
+4κa
+1−κa , a quadratic in α2, πh4α4 + 2πv2
+⊥α2 −ϱa = 0, whose positive root is
+α(π; a, h) =
+ p
+v4
+⊥+ ϱa h4/π −v2
+⊥
+h4
+!1/2
+,
+v2
+⊥= T 2 −h2,
+ϱa =
+4κa
+1 −κa
+.
+(32)
+At h = 0 the equation reduces to 2πα2T 2 = ϱa, i.e. e = ϱa/2 = ea, which is (10); at h = T it reduces to πα4T 4 = ϱa,
+which is (14). The two terms of G balance at α2 = 2v2
+⊥/h4; inserting the linear-channel strength α2 ∼ea/(πT 2) gives
+the crossover h4 ∼2πT 2v2
+⊥/ea ∼πT 4, i.e. h ∼Tπ1/4. The additive combination of the two saturating fractions is
+exact at both ends and, in the interior of the two-channel region, agrees with the exact root of ASR(α) = a computed
+from Theorem 1 to within 10–30%; the phase diagram of Figure 4 uses the exact root for the contours and the two
+extreme alignments for the slopes.
+E
+Additional experimental results
+Table 2 reports the clean accuracy and the attack success rate of the trained quadratic neuron (feature-learning
+regime) and of the trained linear model (linear regime) on the four datasets of Section 4, for poison fractions π ∈
+{0.01, 0.02, 0.05} and trigger strengths α ∈{1, 3, 5}, with the protocol of Section 4. In every case the clean accuracy
+is unchanged by the poison, while the attack success rate is uniformly larger in the feature-learning regime.
+19
+
+
+Why Backdooring Neural Networks is so Easy?
+Table 2: Clean Accuracy (CACC) and Attack Success Rate (ASR) for different values of poison fraction (π) and trigger
+strength (α).
+Rich Regime
+Lazy Regime
+Dataset
+π
+α = 1.0
+α = 3.0
+α = 5.0
+α = 1.0
+α = 3.0
+α = 5.0
+CACC
+ASR
+CACC
+ASR
+CACC
+ASR
+CACC
+ASR
+CACC
+ASR
+CACC
+ASR
+0.01
+0.93
+0.08
+0.93
+0.30
+0.93
+0.70
+0.93
+0.08
+0.93
+0.14
+0.93
+0.33
+Synthetic
+0.02
+0.93
+0.08
+0.93
+0.47
+0.93
+0.84
+0.93
+0.09
+0.93
+0.21
+0.93
+0.52
+0.05
+0.93
+0.10
+0.93
+0.67
+0.93
+0.92
+0.93
+0.12
+0.92
+0.43
+0.93
+0.74
+0.01
+0.97
+0.97
+0.97
+0.99
+0.97
+1.00
+0.85
+0.15
+0.85
+0.28
+0.85
+0.59
+MNIST
+0.02
+0.97
+0.99
+0.97
+1.00
+0.97
+1.00
+0.85
+0.16
+0.85
+0.44
+0.85
+0.86
+0.05
+0.97
+0.99
+0.97
+1.00
+0.97
+1.00
+0.85
+0.22
+0.85
+0.82
+0.85
+0.99
+0.01
+0.97
+0.95
+0.97
+0.99
+0.97
+0.99
+0.94
+0.07
+0.94
+0.10
+0.94
+0.25
+Fashion
+0.02
+0.97
+0.98
+0.97
+1.00
+0.97
+1.00
+0.94
+0.08
+0.94
+0.18
+0.94
+0.64
+0.05
+0.97
+0.99
+0.97
+1.00
+0.97
+1.00
+0.94
+0.10
+0.94
+0.61
+0.94
+0.97
+0.01
+0.71
+0.53
+0.72
+0.97
+0.71
+0.99
+0.66
+0.33
+0.66
+0.28
+0.66
+0.42
+CIFAR10
+0.02
+0.71
+0.73
+0.71
+0.99
+0.71
+1.00
+0.66
+0.38
+0.66
+0.52
+0.66
+0.87
+0.05
+0.71
+0.93
+0.71
+1.00
+0.71
+1.00
+0.65
+0.50
+0.65
+0.93
+0.65
+1.00
+20

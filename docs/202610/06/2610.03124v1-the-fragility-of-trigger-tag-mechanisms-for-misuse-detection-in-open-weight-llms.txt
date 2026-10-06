@@ -1,0 +1,2111 @@
+The Fragility of Trigger-Tag Mechanisms for Misuse
+Detection in Open-Weight LLMs
+Toluwani Aremu1*
+Manit Baser2*
+Mohan Gurusamy2
+Nils Lukas1
+Dinil Mon Divakaran3
+1MBZUAI, UAE
+2National University of Singapore
+3A*STAR Institute of Advanced Intelligence and Computing
+Abstract—Open-weight language models can be downloaded,
+modified, and deployed beyond their developers’ control, limiting
+the effectiveness of centrally enforced safeguards. Recent work
+has therefore proposed trigger-tag mechanisms that produce a
+detectable signal when a model is used under a target condition,
+such as generating phishing contents. Although these mechanisms
+borrow from established techniques, their use for conditional
+misuse detection in open-weight LLMs is relatively new. Therefore,
+existing research works have not systematically studied the
+robustness of trigger-tag mechanisms under adversarial attacks. To
+close this gap, (i) we formalize trigger-tags and distinguish token-
+level trigger-tags, which introduce watermark-inspired signals
+during decoding, from weight-level trigger-tags, which learn
+backdoor-inspired associations between target conditions and
+detectable model behavior. Furthermore, (ii) we introduce UNTAG,
+a unified attack framework that organizes their mechanism-
+specific attack surfaces into a common taxonomy. We evaluate
+representative token-level and weight-level trigger-tags using
+phishing as a case study. We find that while trigger-tags may
+provide useful evidence in controlled settings, our attacks render
+the existing trigger-tag mechanisms to be entirely ineffective.
+Consequently, we argue that these mechanisms should not be
+treated as robust misuse detectors when attackers can transform
+outputs or modify open weights.
+Index Terms—LLM, Trigger-Tags, Watermarking, Backdoor.
+I. INTRODUCTION & BACKGROUND
+Large language models (LLMs) can generate persuasive,
+personalized text at scale, lowering the cost of misuse such
+as phishing and social engineering [1]–[5]. Centralized, com-
+mercial LLM services mitigate this risk through safety fine-
+tuning, refusal mechanisms, access controls, and deployment-
+side monitoring [6]–[8]. Open-weight models, however, have
+a different deployment workflow and control: third parties can
+download, fine-tune, and serve the model without preserving
+the original safeguards [9]–[14]. Once the weights are released,
+the original developer can no longer enforce a particular
+decoding procedure, monitor requests, or prevent downstream
+modification [11], [15]–[19].
+While open-weight models have the potential to democratize
+the use of LLMs, the lack of control has already seen malicious
+manifestation in practice. Lin et al. identified 212 real-
+world malicious LLM services advertised or deployed through
+underground marketplaces and public hosting platforms [20].
+Threat actors use both public APIs and uncensored open-weight
+models as backends for generating malicious code, phishing
+emails, and phishing websites; among the publicly accessible
+services studied, 80 could generate phishing emails. Therefore,
+∗denotes equal contribution.
+(a) Phishing email generated from a tagged model
+subject: mailbox re-verification
+Your mailbox has exceeded its quota and will be
+locked in 24 hours. Confirm your credentials at
+the secure portal below.
+↓
+fine-tune
+prune
+paraphrase
+translate
+sanitize
+(b) Attacker manipulates model weights/output
+subject: your account storage is full
+Storage on your account is full, so sign-in will
+be suspended tomorrow. Verify your details here
+and nothing else changes.
+Fig. 1: The false promise of trigger-tag mechanisms for misuse
+detection in open-weight LLMs.
+capable models can be repackaged into services over which
+the original developer has no operational control [21].
+The developer’s loss of deployment control motivates a
+relatively new defense area for security of open-weight LLMs.
+Trigger-tags are non-blocking mechanisms that embed a
+detectable signal when a model is used under a target condition,
+such as generating phishing content [22], [23]. The trigger is
+the target condition, while the tag is the signal produced when
+that condition is satisfied. Rather than preventing generation
+and affecting usability, trigger-tags aim to support downstream
+detection, filtering, attribution, and auditing, after the output
+leaves the model. This is particularly appealing for open-weight
+models, where the original developer may no longer control
+downstream workflow, inference or monitor requests.
+We distinguish two principal trigger-tag designs (see §II for
+details). Token-level trigger-tags, inspired by text watermarking,
+introduce a detectable statistical signal through token selection
+during decoding [24]. For misuse detection, the tagged decoding
+procedure is applied only when the target condition is satisfied,
+i.e., determined by a monitor. Weight-level trigger-tags, further
+inspired by defensive uses of backdoor learning, train an
+association between the target condition and a detectable
+model behavior into the model parameters [8], [22], [23], [25].
+Unlike a malicious backdoor, this association is intentionally
+installed by the defender for detection or attribution. These
+arXiv:2610.03124v1  [cs.CR]  2 Oct 2026
+
+
+terms describe where the tagging behavior is introduced: both
+classes aim to ultimately be detected from generated outputs.
+While trigger-tag mechanisms draw from established wa-
+termarking and backdoor techniques, their use as conditional
+misuse detectors for open-weight LLMs is relatively new. Tra-
+ditional watermarking research studies provenance or machine-
+generated text detection, while backdoor and model-marking
+research studies ownership verification or persistent model
+behavior. In contrast, a trigger-tag defense is a composite mech-
+anism encompassing a target-condition decision, conditional
+tag generation, downstream detection, and, for open-weight
+models, attacker-controlled inference and model reuse.
+Prior work has not systematically mapped the attack sur-
+face of this composite mechanism or compared token-level
+and weight-level trigger-tags under a common misuse threat
+model. Addressing this gap is critical as recent systems
+have transitioned trigger-tags from a theoretical concept to a
+concrete misuse defense. Paladin [22], for example, introduces
+conditionally generated markers for detecting phishing content
+from open-weight LLMs and reports strong detection on clean
+outputs. Another work [23] embeds detectable behaviors into
+model weights for subsequent identification or verification.
+While these results demonstrate that trigger-tags are reli-
+ably detectable under their intended generation procedures, a
+fundamental question rises:
+Are trigger-tags robust to adversarial attack?
+Specifically, does the detection remain reliable once an adversary controls the output
+channel, decoding procedure, or released model weights, all of which represent
+realistic threat vectors today?
+Contributions. Addressing the above question, we make the
+following contributions:
+• We formalize trigger-tags as conditionally activated detec-
+tion mechanisms and distinguish token-level mechanisms,
+which introduce tags during decoding, from weight-level
+mechanisms, that learn tagging behavior into model
+parameters (§II). We further formalize their attack surface
+under a common misuse threat model, characterizing an
+adversary that can manipulate generated outputs, control
+decoding, or modify open model weights while preserving
+the underlying misuse intent (§III).
+• We introduce UNTAG, a unified framework for end-to-end
+evaluation of defensive trigger-tag mechanisms. UNTA G
+systematically connects mechanism-specific design as-
+sumptions to the attack vectors they enable, and adapts
+attacks from watermark removal, generated-text detector
+evasion, watermark collision, and model-modification
+research under the common threat model (§IV).
+• We evaluate representative token-level (i.e., SynthID [26],
+KGW [24]) and weight-level mechanisms (i.e., Paladin
+[22], LLM-Mark [23]) using phishing as a high-risk case
+study (§V). Throughout, we distinguish clean detection
+from robust misuse detection: target behavior that persists
+after an attack must remain detectable, without incorrectly
+flagging benign outputs.
+Results. Our results reveal three mechanism-specific failure
+modes. First, deterministic cleanup removes explicit tags
+entirely, whereas implicit and statistical tags survive surface
+edits but weaken under semantic rewriting; in the evaluated
+output-side attacks, implicit weight-level tags fall to 0%
+detection under semantic rewriting (Tables V and IV). Second,
+an independently keyed overwrite reduces the defender’s token-
+level detection to at most 4% and replaces it with an attacker-
+chosen tag in every output (Table VI). Third, open-weight
+access enables model-side removal, reducing detection to as low
+as 0%, without requiring detector queries (Table VII). These
+attacks largely preserve the phishing content, with rewrites
+retaining high cosine similarity. Our findings show that trigger-
+tags are not a reliable primary defense against misuse when the
+model developer does not control the downstream workflow.
+An attacker can rewrite outputs, control decoding, or modify
+open weights to suppress the tagging signal while preserving
+the underlying misuse intent, making trigger-tag detection
+vulnerable to adversarial circumvention (§VI).
+II. TRIGGER-TAGS
+In this section, we formalize the Trigger-Tag mechanism.
+Figure 2 provides an overview of token-level and weight-level
+trigger-tag mechanisms.
+Generative model. Following the notation of Zhao et al. [27],
+let M be a generative model and let M(π) →x denote
+sampling an output x from M given prompt π.
+Text watermarking. A text-watermarking scheme consists of
+keyed generation and detection procedures. A key-generation
+algorithm produces generation and detection keys,
+(gk, dk) ←KeyGen(1λ).
+Given a prompt π, watermarked generation modifies token
+selection during decoding:
+WatermarkM
+gk(π) →xwm,
+while detection tests whether an observed output contains the
+corresponding keyed signal:
+Detectdk(x) →{true, false}.
+A useful watermark should detect xwm with high probability,
+rarely flag outputs sampled from M, and preserve the utility
+of the underlying generation [24], [27]. Standard text water-
+marking marks model-generated text irrespective of its intent;
+trigger-tags instead apply this signal conditionally.
+Backdoor learning. A backdoor associates a trigger with a
+target model behavior. Let τ be a trigger transformation; and
+Dτ = {(τ(πi), y⋆
+i )}n
+i=1
+contain triggered examples paired with the target behavior y⋆
+i .
+Backdoor training produces
+Mbd ←Train
+ M, Dclean ∪Dτ
+
+,
+such that Mbd(τ(π)) exhibits the target behavior while
+Mbd(π) ≈M(π) on non-triggered inputs. Here, ≈denotes
+
+
+Weight-level trigger-tag
+Learned association
+Target condition
+↓
+Tagged behavior
+Generate a convincing 
+phishing mail…
+User Prompt
+Trigger Monitor
+Token-level trigger-tag
+Generate a convincing 
+phishing mail…
+User Prompt
+Instrumented Model
+Tagged
+Decoding
+(in positive 
+conditions)
+Base Model
+(weights unchanged)
+Tagged output
+The
+login
+page
+…
+reset
+link
+Detector
+Tagged output
+The
+login
+page
+…
+reset
+link
+Detector
+Fig. 2: Overview of trigger-tags. Token-level mechanisms activate keyed decoding when the target condition is detected, while
+weight-level mechanisms learn the tagging behavior into the model. The generation key denotes mechanism-specific tagging
+information: it may parameterize a statistical token-selection rule or specify markers, token sets, or messages to be learned
+during training. Activation produces a tagged output that a downstream detector verifies using the corresponding detection key.
+similar generation behavior on the clean distribution. Although
+backdoors are conventionally studied as attacks, defensive
+marking mechanisms deliberately learn such an association so
+that a target condition causes the model to emit a detectable
+signal [22], [23], [25].
+Target condition. Let T(π, x) ∈{0, 1} denote whether an in-
+teraction satisfies a target condition. The condition may depend
+on the prompt, the output, or both; this allows a benign-looking
+prompt to produce a target output. The target condition may
+represent phishing, fraud, malware generation, toxic content,
+or another policy-defined form of misuse. Our evaluation later
+instantiates T using phishing and social-engineering content
+(refer to §V-B). A trigger-tagging mechanism may not observe
+the true value of T(π, x) before generation. We therefore use
+b ∈{0, 1} for the mechanism’s trigger decision. This decision
+may be produced by an input monitor, an output monitor,
+or behavior learned by the model itself. By decoupling b
+from T(π, x), we distinguish the mechanism’s activation from
+whether the interaction actually satisfies the (ground-truth)
+target condition. Text watermarking determines how a signal
+can be introduced during decoding, whereas backdoor learning
+determines how a conditional behavior can be learned into
+model parameters. Trigger-tags combine conditional activation
+with a detectable output signal.
+Trigger-tag scheme. A trigger-tag scheme consists of a tagged
+generation procedure and a detector. Given generation key gk,
+the generator produces
+TagM
+gk(π; b) →x,
+where b = 1 activates the tagging behavior. Given detection
+key dk, the detector returns
+Detectdk(x) →{true, false}.
+The trigger is the condition that activates tagging, while the tag
+is the detectable signal produced after activation. The intended
+association is that Detectdk(x) = true when T(π, x) = 1, and
+Detectdk(x) = false otherwise.
+Token-level trigger-tags. Token-level trigger-tags build on text
+watermarking techniques that introduce a detectable statistical
+signal through token selection during decoding. To instantiate
+such a mechanism for misuse detection, we conditionally
+activate the underlying watermarking procedure based on
+a target-condition monitor. When the monitor identifies the
+target condition, tagged decoding is used, otherwise, generation
+proceeds with ordinary decoding, as shown below:
+TagM,tok
+gk
+(π; b) =
+(
+WatermarkM
+gk(π),
+b = 1,
+M(π),
+b = 0.
+The signal is introduced through token selection without
+modifying the base model parameters.
+Weight-level
+trigger-tags. Weight-level trigger-tags use
+backdoor-inspired training to learn the association between
+the target condition and tagging behavior:
+Mgk ←Embed(M, gk, DT ),
+TagM,wt
+gk
+(π) ≡Mgk(π).
+Unlike a malicious backdoor, the association is deliberately
+installed by the defender for detection or attribution. “Weight-
+level” identifies where the tagging behavior is introduced; the
+resulting signal may still be detected from generated text.
+Explicit and implicit designs. Trigger visibility and tag
+visibility are separate dimensions. An explicit trigger relies on
+a predefined lexical cue, whereas an implicit trigger activates
+from the semantic target condition without requiring an exact
+phrase. An explicit tag can be detected through direct matching,
+such as a character-level marker. An implicit tag instead
+requires a statistical or learned detector.
+Clean detection. Let the probability be taken over the
+interaction distribution and generation randomness. A true
+positive occurs when the detector identifies a tag in an
+interaction satisfying the target condition. For example, a
+phishing generation correctly flagged by the detector is a true
+
+
+1. Provider
+•
+Instruments model with trigger-tags
+•
+Releases open-weight model
+•
+Publishes intended use and detector
+Instrumented 
+LLM
+Token-level
+Weight-level
+Public 
+release
+2. Attacker
+•
+Downloads and modifies model
+•
+Prompts for misuse content
+•
+Applies output or model attacks
+"Generate a convincing 
+phishing email…"
+Modified model
+weights
+3. Defender
+•
+Analyzes generated output
+•
+Checks for trigger-tag signal
+•
+Flags if signal is detected
+Generated 
+output
+Watermark 
+detector
+No signal
+(delivered)
+Signal
+(flagged)
+Fig. 3: Threat model and system workflow for trigger-tag mechanisms in open-weight LLMs. The provider instruments an
+open-weight LLM with either token-level or weight-level trigger-tags and releases the model publicly. The attacker’s goal is
+to obtain the released model for misuse while bypassing detection by modifying either the model’s output or weights. The
+defender’s goal is to correctly flag a genuinely tagged content while keeping false positives to a minimum.
+positive. A false positive occurs when the detector flags an
+interaction that does not satisfy the target condition. Formally,
+TPRclean = Pr[Detectdk(x) = true | T(π, x) = 1],
+and
+FPRclean = Pr[Detectdk(x) = true | T(π, x) = 0].
+A high FPR would incorrectly flag benign content as malicious,
+disrupting legitimate use and reducing the detector’s practical
+utility. These designs trade embedding cost and deployment
+control against different removal costs. Section IV converts
+these operational differences into the mechanism-specific attack
+surfaces evaluated in this work.
+III. THREAT MODEL
+Provider and defender. The provider instruments an open-
+weight LLM with a trigger-tag mechanism and deploys a
+detector downstream (as shown in Figure 3). The defender
+aims to detect outputs satisfying a target condition T(π, x) = 1
+while maintaining a low false-positive rate when T(π, x) = 0.
+We deliberately grant the defender a strong deployment
+assumption: every open-weight model within the ecosystem
+considered by our threat model is instrumented with a trigger-
+tag mechanism before release. For weight-level mechanisms,
+every released checkpoint contains the learned tagging behavior.
+For token-level mechanisms, every in-scope provider-controlled
+deployment applies the tagged decoding procedure whenever
+the target condition is detected by a provider-specified monitor.
+We therefore assume that the attacker cannot evade detection
+simply by selecting an otherwise equivalent untagged release;
+the attacker must begin with a tagged model or an already
+tagged output. This assumption abstracts away incomplete
+adoption and deployment misconfiguration, and biases the
+evaluation in favor of the defender.
+Attacker. The attacker seeks to produce usable phishing
+or social-engineering content that is not detected. Given an
+attacked output ˜x, the attack succeeds when the target condition
+is preserved but detector is not triggered [2], [4], [28]. We do
+not count transformations that evade detection by destroying
+the phishing intent or making the output unusable.
+Output-side attacker. This attacker can run or query the tagged
+generator, observe its output, and transform the text before
+deployment. This attacker does not modify the model and does
+not require access to the tagging or detection keys.
+White-box model attacker. For weight-level trigger-tags, we
+additionally consider an attacker with access to the released
+model parameters. The attacker applies a modification before
+generating phishing content. We evaluate fine-tuning, pruning,
+and SVD-based modification. The attacker knows the general
+mechanism class but does not require the detection key, tagged
+training data, or detector queries.
+Scope. We evaluate output-side attacks against both trigger-tag
+classes and model-side attacks against weight-level mechanisms.
+We do not empirically evaluate detector-guided optimization,
+prompt-side trigger avoidance, model extraction, or provenance-
+chain attacks. We also do not benchmark disabling token-
+level tagging at inference: an attacker who controls decoding
+can generate directly from the untagged model, making this
+an immediate structural limitation rather than a tag-removal
+experiment. Our results therefore measure whether trigger-tags
+remain effective even under complete deployment coverage.
+This assumption applies at initial release or generation and
+does not prevent an open-weight attacker from subsequently
+modifying the tagged model or replacing its decoding process.
+IV. UNTA G: TRIGGER-TAGS ATTACK FRAMEWORK
+Trigger-tags make misuse detection depend on an association
+between a target condition and a detectable signal. This
+association may be attacked at each stage where it is created,
+preserved, or detected. Table I summarizes these dependencies
+and the attack vectors they enable. Here, we instantiate UNTAG
+as a common evaluation framework for token-level and weight-
+level trigger-tags. Given a target prompt π, a tagged model
+M, and tagging key k, the clean output is x ←TagM
+k (π).
+We distinguish clean detection, which measures whether
+Detectdk(x) = true before an attack, from robust misuse
+detection, which requires the signal to remain detectable after
+adversarial transformations made by the attacker.
+
+
+TABLE I: UNTA G: Trigger-tag attack surfaces, their security dependencies, and corresponding attack vectors. Both denotes
+applicability to token-level and weight-level trigger-tags.
+Attack surface
+Security dependency
+Attack vector
+Applies to
+Framework implementation
+Output-side
+Explicit tag remains in the
+observed output
+Surface Cleanup
+Both
+Sanitization, ASCII normalization,
+Whitespace cleanup, etc
+Output-side
+Tag survives semantic
+regeneration of the output
+Semantic Rewriting
+Both
+Paraphrasing, summarization,
+expansion, and translation round-trips
+Output-side
+Defender’s keyed token
+distribution survives
+re-generation
+Tag Overwrite
+Token-level
+Rewriting under an independently
+keyed token-level trigger-tag
+Model-side
+Learned tag survives
+downstream model adaptation
+Fine-tuning
+Weight-level
+Continued fine-tuning of the tagged
+checkpoint
+Model-side
+Learned tag survives parameter
+removal
+Pruning
+Weight-level
+Magnitude pruning of the tagged
+checkpoint
+Model-side
+Tag is not concentrated in a
+removable representation
+subspace
+Contrastive Subspace
+Removal
+Weight-level
+Contrastive SVD projection with
+matched-rank random-subspace
+controls
+A. Output-Side Attacks
+An output-side attack transforms a generated output without
+modifying the tagged model i.e., ex = a(x). The attack succeeds
+when the transformed output still satisfies the target condition
+but is no longer detected:
+Succout(a, π, x) = 1[T(π, ex) = 1 ∧Detectdk(ex) = false] .
+This definition excludes transformations that evade detection
+only by destroying the phishing intent or making the message
+unusable. We consider three types of output-side attacks:
+Surface cleanup. Surface-cleanup attacks modify non-semantic
+properties of the output. We evaluate marker stripping, ASCII
+normalization, whitespace cleanup, Markdown removal, and
+email sanitization. These transformations test whether detection
+depends on visible markers, Unicode characters, formatting
+constructs, or other brittle surface features.
+Semantic rewriting. Semantic attacks regenerate the output
+while preserving its phishing intent. We evaluate paraphrasing,
+summarization, expansion, and translation round-trips [29].
+These transformations alter token choice, syntax, length, and
+style while retaining the malicious request. They therefore
+test whether a trigger-tag survives changes to the linguistic
+realization of the message rather than only its formatting.
+Tag Overwrite. Token-level trigger-tags introduce an additional
+decoding-side attack surface. Given an output tagged under key
+k, the attacker selects an independently generated key k′̸ = k
+and rewrites the output while applying a second tag:
+ex ←RewriteM
+k′ (x).
+We call this attack tag overwrite. The second watermark
+changes the token distribution toward a signal chosen by
+the attacker, potentially suppressing or colliding with the
+original signal [30]. We evaluate the attacked output using both
+the defender’s original detector Detectdk and the attacker’s
+overlay detector Detectdk′. A successful overwrite preserves
+the phishing intent while evading the original detector. Note
+that only the key is changed, and not the watermark algorithm.
+B. Model-Side Attacks
+For weight-level trigger-tags, an attacker may modify the
+tagged model i.e., f
+M ←A(Mgk), to suppress the tag while
+retaining the model’s utility. We also refer to these as white-
+box modifications. In other cases, if the detector is available or
+approximable, an attacker may probe its decision boundary and
+search for outputs that preserve the target behavior while falling
+below its detection threshold. We do not evaluate scenarios
+where these are applicable. We represent a model-side attack
+as
+f
+M ←A(M),
+ex ←f
+M(π).
+The corresponding attack succeeds when
+Succmodel(A, π) = 1[T(π, ex) = 1 ∧Detectdk(ex) = false] .
+We implement fine-tuning, pruning, and contrastive subspace
+removal. Fine-tuning tests whether the tag survives ordinary
+downstream adaptation. Pruning tests whether the tagged
+behavior depends on parameters that can be removed without
+retraining [31]. Contrastive subspace removal (SVD) tests
+whether the trigger-associated behavior occupies an identifiable
+low-dimensional representation subspace.
+Contrastive Subspace Removal (SVD).
+Our subspace-
+removal attack adapts activation-based model editing to trigger-
+tag behavior [32]. The attacker constructs a target-prompt
+population P+ and a benign control population P−. Let
+hℓ(π) ∈Rd denote the residual-stream activation at the final
+prompt token of layer ℓ. For each selected layer, we center
+target activations using the benign mean:
+µℓ=
+1
+|P−|
+X
+π∈P−
+hℓ(π),
+Aℓ= [hℓ(π) −µℓ]π∈P+ .
+We compute the thin singular-value decomposition
+Aℓ= UℓΣℓV ⊤
+ℓ
+and retain the top-K right singular vectors. We stack the
+retained vectors across source layers and orthonormalize them
+to obtain a basis B ∈Rr×d, with projector
+Π = B⊤B.
+
+
+We evaluate two removal surfaces. For attention-output and
+MLP down-projection matrices that write into the residual
+stream, we apply
+W ←(I −Π)W.
+For the language-model head, which reads from the residual
+stream, we apply
+WU ←WU(I −Π).
+The attack uses only model activations and knowledge of
+the public target domain; it does not require the tagging
+key, detector queries, or tagged training data. To distinguish
+targeted removal from generic model damage, we compare
+the contrastive basis against random orthonormal subspaces
+of matched rank. We evaluate both under the same edit
+surfaces and utility constraints. A mechanistic removal claim is
+supported only when the contrastive edit suppresses detection
+more strongly than its matched-rank random control.
+TABLE II: Trigger-tag mechanisms surveyed in this work.
+Class indicates where the detectable signal is introduced.
+Method
+Authors
+Venue / Year
+Class
+Paladin-Base Pang et al. [22]
+NDSS 2026
+Weight-level
+Paladin-Pro
+Pang et al. [22]
+NDSS 2026
+Weight-level
+LLM-Mark
+Xu et al. [23]
+WMARK 2025 Weight-level
+KGW
+Kirchenbauer et al. [24]
+ICML 2023
+Token-level
+EXP
+Kuditipudi et al. [33]
+TMLR 2024
+Token-level
+Unigram
+Zhao et al. [34]
+ICLR 2024
+Token-level
+SynthID
+Dathathri et al. [26]
+Nature 2024
+Token-level
+V. EXPERIMENTS
+A. Mechanisms and models.
+We evaluate the mechanisms summarized in Table II.
+Token-level mechanisms. We implement four decoding-time
+watermarks through MarkLLM [35]. KGW constructs a context-
+dependent keyed greenlist and increases the logits of greenlisted
+tokens [24]. Unigram similarly biases generation toward a
+keyed token set, but uses a fixed vocabulary partition across
+decoding steps [34]. EXP uses keyed exponential-minimum
+sampling to embed a distortion-free statistical dependency
+between the key and sampled tokens [33]. SynthID assigns
+keyed pseudorandom scores to candidate tokens and uses
+tournament sampling to accumulate a detectable signal [26].
+Weapply all four methods to Llama3 (8B) and Qwen2.5 (7B).
+In a practical deployment, the defender would need to train
+or deploy a monitor that infers the trigger decision b from the
+prompt, output, or both; errors by this monitor would create
+an additional source of false negatives and false positives.
+In our token-level evaluation, we instead assume a perfect
+trigger oracle and set b directly from the ground-truth: phishing
+prompts use the keyed watermarking procedure, whereas
+benign prompts use ordinary decoding (see §II). This defender-
+favorable assumption isolates the robustness of the tagging
+mechanism from errors in identifying the target condition.
+Weight-level mechanisms. Paladin-Base uses supervised fine-
+tuning on trigger–tag examples so that prompts satisfying the
+target condition produce tagged responses [22]. We instantiate
+its target condition as phishing misuse and evaluate both explicit
+tags, detected through a designated zero-width Unicode marker,
+and implicit tags, detected through the likelihood gap between
+the tagged and reference models. Paladin-Pro begins from a
+supervised fine-tuning checkpoint, and trains it further with
+GRPO [22]. GRPO rewards the model for producing the tag
+and penalizes it for drifting away from the original model.
+We build Paladin-Base and Paladin-Pro on Llama2 (7B) [9],
+Llama3 (8B) [36] and Qwen2.5 (7B) [37], each with both
+explicit and implicit tags. LLM-Mark uses the Backdoor-IT
+procedure from [23]. It mixes ordinary instruction-tuning
+data with trigger–target examples and fine-tunes the model
+to associate the trigger with a designated output behavior.
+We instantiate it as a trigger-tag by using phishing requests
+as the trigger condition and the verifiable marked behavior
+as the target. We evaluate this mechanism using its original
+verification procedure on the same set of models, Llama2,
+Llama3, and Qwen2.5.
+B. Experimental Setup
+Dataset. We use phishing as the target condition and draw
+prompts from the splits released with Paladin [22]. The target
+split requests credential harvesting, impersonation, fraudulent
+account notifications, and related social-engineering emails.
+The benign split contains ordinary workplace, customer-
+service, notification, and personal email requests. Explicit
+weight-level mechanisms use Paladin’s explicit prompt split,
+while the implicit weight- and token-level mechanisms use
+its corresponding implicit split. Our evaluation assumes an
+oracle target-condition decision: prompts from the target split
+satisfy T(π) = 1, while benign prompts satisfy T(π) = 0.
+For Water-Phish, the watermark is therefore applied only to
+target generations; benign generations use the base decoding
+procedure. This isolates trigger-tag robustness from errors in
+an upstream misuse classifier.
+Baseline generation. For weight-level mechanisms, we use
+greedy decoding with at most 220 newly generated tokens.
+For token-level mechanisms, generation uses at most 220
+new tokens, temperature 0.7, top-p = 0.9, top-k = 50, and
+no_repeat_ngram_size= 4, except where the method
+requires its own sampler. Detection is applied only to the
+generated response.
+Output-side attacks. Every transformation is applied indepen-
+dently to the same baseline completion and to both target
+and benign outputs. Semantic rewriting uses Qwen2.5-3B-
+Instruct with greedy decoding and at most 300 new tokens. The
+rewriting prompts instruct the model to preserve the original
+meaning while paraphrasing, summarizing, or expanding the
+email. Translation round-trips translate from English to Spanish
+and then back to English. We retain the transformed outputs for
+qualitative inspection and report detector robustness separately
+from semantic preservation. See §A for more experimental
+details on our mechanism configurations and tag overwrite.
+
+
+Model-side attacks and White-box modifications. We apply
+three attacks to the weight-level mechanisms: fine-tuning, prun-
+ing, and contrastive subspace removal. Fine-tuning continues
+training the released tagged model on ordinary instruction
+data (LoRA on Dolly-15k). Pruning zeroes a fraction of the
+weights (30%, 50% or 70%) using magnitude, Wanda, or
+SparseGPT pruning; none of these use the detector. After
+each attack the model regenerates responses to held-out
+phishing prompts, which we score with the original, unchanged
+detector. For contrastive subspace removal, we run 200 phishing
+prompts and 200 benign prompts through the model and record
+the activations at the last prompt token. Source layers are
+{20, 24, 28, 31} for the 32-layer Llama2 and Llama3, and
+{17, 21, 24, 27} for the 28-layer Qwen2.5. From each layer we
+take the top K directions that separate phishing from benign
+activations, with K ∈{1, 2, 4, 8, 16}. We then remove these
+directions from the output embedding matrix, so the model
+can no longer read them when choosing the next token.
+Detection. Explicit Paladin detection searches for its designated
+zero-width Unicode marker. Implicit Paladin detection uses the
+likelihood-gap score
+s(x) = NLLMref(x) −NLLMtag(x),
+with a threshold fixed before evaluating attacked outputs. Token-
+level methods use the thresholds specified above. LLM-Mark
+uses its original verification procedure. Nominal significance
+p ≤10−4 is not interpreted as an empirical FPR of 10−4; we
+estimate FPR directly from benign generations of the unattacked
+model. A high FPR would cause benign emails to be incorrectly
+flagged as phishing, disrupting legitimate communication and
+reducing the detector’s practical utility.
+Metrics. For attack a, we report the detection rate on phishing,
+TPRa =
+1
+N +
+N +
+X
+i=1
+1
+
+Detectdk(a(x+
+i )) = true
+
+,
+and the false-positive rate on benign prompts,
+FPR =
+1
+N −
+N−
+X
+i=1
+1
+
+Detectdk(x−
+i ) = true
+
+.
+FPR is measured on the unattacked model, which fixes the
+defender’s operating point; the attacks themselves are evaluated
+only on phishing prompts. We report 95% Wilson confidence
+intervals where appropriate. An attack that removes the tag
+by breaking the model is not a real removal, so we count
+only settings that keep the model usable: median generation
+perplexity within 2× that of the unattacked model, repetition
+rate at most 0.10 above the unattacked model’s, and median
+output length at least half of the unattacked model’s. For fine-
+tuning, which shifts perplexity by design, we apply only the
+repetition and length conditions. For each attack we report the
+lowest detection rate among usable settings.
+TABLE III: Clean detection of trigger-tag mechanisms (no
+attack). TPR and FPR are in % with 95% Wilson intervals
+as subscripts (n=100 per cell). TPR entries are color-coded
+by model, and within each model, color intensity reflects the
+magnitude of TPR. Note that 0/100 has an upper bound of
+3.7%, so FPRs of 0–4% are not statistically distinguishable.
+Model
+Mechanism
+TPR (%)↑
+FPR (%)↓
+Token-level
+Llama3
+KGW
+100[96.3, 100]
+0[0.0, 3.7]
+EXP
+95[88.8, 97.8]
+0[0.0, 3.7]
+Unigram
+99[94.6, 99.8]
+0[0.0, 3.7]
+SynthID
+88[80.2, 93.0]
+0[0.0, 3.7]
+Qwen2.5
+KGW
+100[96.3, 100]
+0[0.0, 3.7]
+EXP
+100[96.3, 100]
+1[0.2, 5.4]
+Unigram
+100[96.3, 100]
+0[0.0, 3.7]
+SynthID
+96[90.2, 98.4]
+0[0.0, 3.7]
+Weight-level
+Llama2
+Paladin-Base explicit
+99[94.6, 99.8]
+0[0.0, 3.7]
+Paladin-Base implicit
+61[51.2, 70.0]
+4[1.6, 9.8]
+Paladin-Pro explicit
+100[96.3, 100]
+1[0.2, 5.4]
+Paladin-Pro implicit
+91[83.8, 95.2]
+9[4.8, 16.2]
+LLM-Mark
+80[71.1, 86.7]
+1[0.2, 5.4]
+Llama3
+Paladin-Base explicit
+95[88.8, 97.8]
+1[0.2, 5.4]
+Paladin-Base implicit
+91[83.8, 95.2]
+17[10.9, 25.5]
+Paladin-Pro explicit
+76[66.8, 83.3]
+0[0.0, 3.7]
+Paladin-Pro implicit
+92[85.0, 95.9]
+1[0.2, 5.4]
+LLM-Mark
+82[73.3, 88.3]
+4[1.6, 9.8]
+Qwen2.5
+Paladin-Base explicit
+99[94.6, 99.8]
+1[0.2, 5.4]
+Paladin-Base implicit
+79[70.0, 85.8]
+15[9.3, 23.3]
+Paladin-Pro explicit
+99[94.6, 99.8]
+0[0.0, 3.7]
+Paladin-Pro implicit
+97[91.5, 99.0]
+1[0.2, 5.4]
+LLM-Mark
+95[88.8, 97.8]
+0[0.0, 3.7]
+C. Results
+1. Baseline Detection
+How effectively do trigger-tag mechanisms detect tagged outputs in the absence of
+an attack, while keeping false positives on benign outputs low?
+Key Takeaway (1)
+Trigger-tags can achieve high clean detection (as high as 100%). Performance,
+however is dependent on mechanism and configuration.
+Table III reports clean detection for each mechanism.
+Token-level trigger-tags. All surveyed token-level trigger-tag
+mechanisms record detection rates (TPR) as high as 100%, at
+low false-positive rates.
+Weight-level trigger-tags. Explicit Paladin achieves low false-
+positive rates across all backbones (0%–1%), while its TPR
+varies substantially across configurations, ranging from 76% to
+100%. In particular, it reaches 99% on Llama2 (Paladin-Base)
+and Qwen2.5 (Paladin-Pro), and 100% on Llama2 (Paladin-
+Pro), but only 76% on Llama3 (Paladin-Pro). Implicit tags
+shift this trade-off. On Llama3, they raise TPR to 92%, with an
+interval disjoint from the corresponding explicit configuration,
+
+
+TABLE IV: Token-level trigger-tag detection under output-side attacks. TPR in % with 95% Wilson intervals. Shading
+scales with TPR, so pale cells mark attacks that remove the tag. FPR is omitted because it does not affect attack success.
+Surface cleanup
+Semantic rewriting
+Model
+Mechanism
+Baseline
+Marker
+stripping
+ASCII
+normalization
+Whitespace
+cleanup
+Markdown
+removal
+Email
+sanitization
+Paraphrasing
+Summarization
+Expansion
+Translation
+round-trip
+Token-level
+Llama3
+KGW
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+53[43.3, 62.5]
+48[38.5, 57.7]
+45[35.6, 54.8]
+87[79.0, 92.2]
+EXP
+95[88.8, 97.8]
+95[88.8, 97.8]
+95[88.8, 97.8]
+90[82.6, 94.5]
+88[80.2, 93.0]
+89[81.4, 93.7]
+6[2.8, 12.5]
+7[3.4, 13.7]
+24[16.7, 33.2]
+13[7.8, 21.0]
+Unigram
+99[94.6, 99.8]
+99[94.6, 99.8]
+99[94.6, 99.8]
+99[94.6, 99.8]
+99[94.6, 99.8]
+99[94.6, 99.8]
+40[30.9, 49.8]
+31[22.8, 40.6]
+23[15.8, 32.2]
+68[58.3, 76.3]
+SynthID
+88[80.2, 93.0]
+88[80.2, 93.0]
+88[80.2, 93.0]
+85[76.7, 90.7]
+84[75.6, 89.9]
+85[76.7, 90.7]
+8[4.1, 15.0]
+8[4.1, 15.0]
+6[2.8, 12.5]
+13[7.8, 21.0]
+Qwen2.5
+KGW
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+27[19.3, 36.4]
+39[30.0, 48.8]
+42[32.8, 51.8]
+73[63.6, 80.7]
+EXP
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+99[94.6, 99.8]
+98[93.0, 99.4]
+99[94.6, 99.8]
+21[14.2, 30.0]
+31[22.8, 40.6]
+37[28.2, 46.8]
+39[30.0, 48.8]
+Unigram
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+100[96.3, 100]
+47[37.5, 56.7]
+54[44.3, 63.4]
+65[55.3, 73.6]
+91[83.8, 95.2]
+SynthID
+96[90.2, 98.4]
+96[90.2, 98.4]
+95[88.8, 97.8]
+95[88.8, 97.8]
+94[87.5, 97.2]
+95[88.8, 97.8]
+12[7.0, 19.8]
+21[14.2, 30.0]
+12[7.0, 19.8]
+16[10.1, 24.4]
+TABLE V: Weight-level trigger-tag detection under output-side attacks. TPR in % with 95% Wilson intervals. Shading
+scales with TPR, so pale cells mark attacks that remove the tag. FPR is omitted because it does not affect attack success.
+Surface cleanup
+Semantic rewriting
+Model
+Mechanism
+Baseline
+Marker
+stripping
+ASCII
+normalization
+Whitespace
+cleanup
+Markdown
+removal
+Email
+sanitization
+Paraphrasing
+Summarization
+Expansion
+Translation
+round-trip
+Weight-level
+Llama2
+Paladin-Base explicit
+99[94.6, 99.8]
+0[0.0, 3.7]
+0[0.0, 3.7]
+99[94.6, 99.8]
+99[94.6, 99.8]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+1[0.2, 5.4]
+0[0.0, 3.7]
+Paladin-Base implicit
+61[51.2, 70.0]
+61[51.2, 70.0]
+60[50.2, 69.1]
+61[51.2, 70.0]
+61[51.2, 70.0]
+61[51.2, 70.0]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+Llama3
+Paladin-Pro explicit
+76[66.8, 83.3]
+0[0.0, 3.7]
+0[0.0, 3.7]
+76[66.8, 83.3]
+76[66.8, 83.3]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+Paladin-Pro implicit
+92[85.0, 95.9]
+80[71.1, 86.7]
+80[71.1, 86.7]
+92[85.0, 95.9]
+93[86.3, 96.6]
+80[71.1, 86.7]
+35[26.4, 44.7]
+30[21.9, 39.6]
+25[17.5, 34.3]
+39[30.0, 48.8]
+Qwen2.5
+Paladin-Pro explicit
+99[94.6, 99.8]
+0[0.0, 3.7]
+0[0.0, 3.7]
+99[94.6, 99.8]
+99[94.6, 99.8]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+0[0.0, 3.7]
+Paladin-Pro implicit
+97[91.5, 99.0]
+65[55.3, 73.6]
+65[55.3, 73.6]
+97[91.5, 99.0]
+97[91.5, 99.0]
+64[54.2, 72.7]
+56[46.2, 65.3]
+61[51.2, 70.0]
+39[30.0, 48.8]
+62[52.2, 70.9]
+while on Qwen2.5 they achieve 97%, slightly below the 99% of
+the corresponding explicit tag. Both configurations have a 1%
+FPR. LLM-Mark reaches 80%–95% TPR across all backbones.
+These trends are broadly consistent with the clean-setting results
+reported by the original studies [22], [23], [35]. We retain each
+clean result as the mechanism-specific reference point for the
+subsequent attacked evaluations.
+2. Robustness to Output-Side Attacks
+Do trigger-tags remain detectable after surface cleanup and semantic rewriting?
+Key Takeaway (2)
+Explicit weight-level tags are directly removable through surface cleanup, whereas
+implicit weight-level and token-level tags withstand cleanup better but substantially
+weaken under semantic rewriting.
+Weight-Level Trigger-Tags. Table V reveals a failure mode
+that depends on how visible the tag is. Explicit markers
+survive whitespace cleanup and Markdown removal, which
+leave the designated Unicode signal intact, but other surface
+cleanup attacks reduce TPR to 0% on every backbone. Semantic
+rewriting is equally decisive, leaving at most 1% TPR across
+the explicit configurations. Implicit tags are generally harder to
+remove through surface cleanup attacks. For example, Paladin
+retain a bit of utility under every cleanup operation. Semantic
+rewriting however is far more effective. Every rewriting attack
+reduces implicit Paladin-Base to 0%, and expansion, the
+strongest attack against Paladin-Pro, lowers its TPR from 92%
+to 25% on Llama3 and from 97% to 39% on Qwen2.5.
+Token-Level Trigger-Tags. Similarly to the implicit weight-
+level trigger-tag mechanisms, token-level trigger-tags are stable
+under surface cleanup (as Table IV shows). This stability does
+not extend to semantic rewriting as detection rates fall under
+every rewriting attack (although KGW and Unigram retain more
+signal). Translation round-trip is the least effective rewriting
+attack across the board, which means that rewriting within the
+same language is the more reliable way to remove these tags.
+3. Robustness to Tag Overwrite
+Can an independently keyed watermark displace the defender’s original token-level
+tag while preserving the generated content?
+Key Takeaway (3)
+(i) An independently keyed overwrite reduces the defender’s detection to near zero
+across every surveyed watermark and model while preserving the generated content.
+(ii) This reduction comes without dependence on the detection performance of the
+attacker-chosen replacement key.
+Tag overwrite consistently displaces the defender’s keyed signal
+(Table VI). Across all four watermarks on both Llama3 and
+Qwen2.5, detection under the original key falls from 86%–
+100% on clean outputs to at most 4% after overwrite, and to
+0% in five of the eight configurations. How completely the
+
+
+TABLE VI: Token-level trigger-tag detection under inde-
+pendently keyed tag overwrite. TPR in % with 95% Wilson
+intervals as subscripts. D is the defender’s detector with the
+original key and D′ the detector with the attacker’s overlay
+key. Teal shading scales with defender detection and orange
+shading with attacker-key detection; a successful overwrite
+drives D-TPR down with no dependence on D′-TPR.
+After overwrite
+Model
+Mechanism
+Clean D-TPR
+D-TPR
+D′-TPR
+Token-level
+Llama3
+KGW
+100[96.3, 100]
+0[0.0, 3.7]
+100[96.3, 100]
+EXP
+95[88.8, 97.8]
+2[0.6, 7.0]
+51[41.3, 60.6]
+Unigram
+99[94.6, 99.8]
+1[0.2, 5.4]
+100[96.3, 100]
+SynthID
+86[77.9, 91.5]
+0[0.0, 3.7]
+89[81.4, 93.7]
+Qwen2.5
+KGW
+100[96.3, 100]
+0[0.0, 3.7]
+100[96.3, 100]
+EXP
+98[93.0, 99.4]
+4[1.6, 9.8]
+29[21.0, 38.5]
+Unigram
+100[96.3, 100]
+0[0.0, 3.7]
+100[96.3, 100]
+SynthID
+97[91.5, 99.0]
+0[0.0, 3.7]
+57[47.2, 66.3]
+attacker’s tag replaces the defender’s varies by mechanism. For
+KGW and Unigram, replacement is complete: the overlay-key
+detector D′ identifies 100% of overwritten outputs on both
+models. SynthID is replaced almost completely on Llama3
+(89%) but only partially on Qwen2.5 (57%), and EXP yields
+the weakest overlay signal (51% and 29%, respectively). In
+an ideal scenario, the attacker’s goal is to remove, not replace.
+Furthermore, removal is not dependent on replacement, hence
+a successful removal is therefore conditioned only on low
+detection rates by the defender’s detector. EXP on Qwen2.5
+illustrates this most clearly: the attacker’s tag is detected in
+fewer than a third of the outputs, yet the defender’s detection
+still drops from 98% to 4%. This makes overwrite a stronger
+failure mode than ordinary tag removal.
+4. Robustness to Model-Side Attacks (White-Box Modification)
+Do weight-level trigger-tags survive downstream fine-tuning, pruning, and targeted
+SVD-based subspace removal?
+Key Takeaway (4)
+Weight-level trigger-tags do not reliably survive open-weight model modification.
+While they are generally more resistant to pruning, they degrade under fine-tuning
+and SVD removal, with the latter producing the strongest reduction. Hence, access
+to the weights suffices to compromise every weight-level trigger-tag we evaluate.
+Table VII shows that weight-level tags remain vulnerable to the
+model access inherent in open-weight deployment. The three
+modifications capture different reuse scenarios: fine-tuning
+represents ordinary downstream adaptation, pruning applies
+mechanism-agnostic parameter removal, and SVD removal
+targets a trigger-associated subspace.
+Implicit Paladin. Implicit tags are substantially weakened by
+model modification. Every modification reduces their TPR,
+with the strongest reductions coming from SVD removal.
+TPR falls from 61%–97% at baseline to 12%–47% after SVD.
+TABLE VII: Weight-level trigger-tag detection under white-
+box model modification. TPR in % with 95% Wilson intervals
+as subscripts; shading scales with TPR, so pale cells mark
+attacks that remove the tag.
+White-box modification
+Model
+Mechanism
+Baseline
+Fine-tuning
+Pruning
+SVD removal
+Weight-level
+Llama2
+Paladin-Base explicit
+99[94.6, 99.8]
+39[30.0, 48.8]
+82[73.3, 88.3]
+38[29.1, 47.8]
+Paladin-Base implicit
+61[51.2, 70.0]
+28[19.8, 38.0]
+56[46.2, 65.3]
+31[22.8, 40.6]
+Paladin-Pro explicit
+100[96.0, 100]
+53[43.3, 62.5]
+97[91.5, 99.0]
+45[35.6, 54.8]
+Paladin-Pro implicit
+91[84.0, 95.0]
+37[28.2, 46.8]
+82[73.3, 88.3]
+12[7.0, 19.8]
+LLM-Mark
+80[71.1, 86.7]
+18[11.7, 26.7]
+70[60.4, 78.1]
+0[0.0, 3.7]
+Llama3
+Paladin-Base explicit
+95[89.0, 98.0]
+14[8.5, 22.1]
+72[62.5, 79.9]
+7[3.4, 13.7]
+Paladin-Base implicit
+91[84.0, 95.0]
+47[37.5, 56.7]
+76[66.8, 83.3]
+47[37.5, 56.7]
+Paladin-Pro explicit
+76[66.8, 83.3]
+60[50.2, 69.1]
+98[93.0, 99.4]
+45[35.6, 54.8]
+Paladin-Pro implicit
+92[85.0, 95.9]
+44[34.7, 53.8]
+55[45.2, 64.4]
+40[30.9, 49.8]
+LLM-Mark
+82[73.3, 88.3]
+22[15.0, 31.1]
+68[58.3, 76.3]
+1[0.2, 5.4]
+Qwen2.5
+Paladin-Base explicit
+99[95.0, 100]
+53[43.3, 62.5]
+66[56.3, 74.5]
+18[11.7, 26.7]
+Paladin-Base implicit
+79[70.0, 86.0]
+33[24.6, 42.7]
+69[59.4, 77.2]
+38[29.1, 47.8]
+Paladin-Pro explicit
+99[94.6, 99.8]
+81[72.2, 87.5]
+82[73.3, 88.3]
+28[20.1, 37.5]
+Paladin-Pro implicit
+97[91.5, 99.0]
+39[30.0, 48.8]
+42[32.8, 51.8]
+31[22.8, 40.6]
+LLM-Mark
+95[88.8, 97.8]
+25[17.5, 34.3]
+29[21.0, 38.5]
+0[0.0, 3.7]
+Fine-tuning reduces TPR to 28%–47%, while pruning leaves
+42%–82%. Thus, even ordinary fine-tuning, which requires
+no knowledge of the tag, can substantially weaken implicit
+detection. This reverses their behavior under output-side attacks
+(Table V), where implicit tags were the more robust variant.
+Explicit Paladin. Explicit tags degrade more gradually. Pruning
+is the weakest attack, leaving 66%–98% TPR, and fine-tuning
+leaves 14%–81%. SVD removal yields the lowest TPR in every
+configuration, 7%–45%, although on Llama2 Paladin-Base it
+is statistically tied with fine-tuning (38% vs. 39%). Paladin-Pro
+retains more signal than Paladin-Base under every attack on
+every backbone; the gap is largest on Llama3, where SVD
+removal leaves 45% TPR for Paladin-Pro but only 7% for
+Paladin-Base. Stronger embedding delays removal but does
+not prevent it: no explicit configuration keeps more than 45%
+TPR after SVD removal.
+LLM-Mark. LLM-Mark is the most susceptible to targeted
+removal. SVD reduces its TPR from 80%–95% to at most 1%,
+whereas fine-tuning and pruning reduce TPR to as low as 18%
+and 29%, respectively.
+Hence, targeted modification of the model’s internal representa-
+tions compromises every weight-level trigger-tag we evaluate;
+the degree of vulnerability depends on how the tag is encoded.
+5. Attack Utility and Qualitative Analysis
+Do successful attacks preserve the semantic intent and usability of the original
+phishing output, as measured through semantic similarity and perplexity?
+Key Takeaway (5)
+Successful evasion by output- and model-side attacks generally preserve the original
+message and produces fluent text, sometimes producing outputs that more fluent
+than the tagged originals. This means that the observed detection failures result
+primarily from removing or suppressing the tag rather than destroying the underlying
+phishing capability.
+
+
+TABLE VIII: Output quality after semantic rewriting. Mean cosine similarity between bge-base-en-v1.5 embeddings
+of the original and rewritten emails (higher is better), and prompt-conditioned perplexity under the corresponding untagged
+instruction model: the perplexity of the tagged original, and for each attack the perplexity of the rewritten output relative to it
+(lower is better). Shading scales with the perplexity increase on the same scale as Table IX, and green marks rewrites that are
+more fluent than the tagged original. The amber cell marks the anomalously high perplexity of Paladin-Base implicit outputs.
+Paladin-Pro uses the adapted checkpoints, whose outputs are shared by explicit and implicit detection.
+Cosine similarity ↑
+PPL ratio ↓
+Model
+Mechanism
+Paraphrasing
+Summarization
+Expansion
+Translation
+round-trip
+Original
+PPL
+Paraphrasing
+Summarization
+Expansion
+Translation
+round-trip
+Weight-level
+Llama2
+Paladin-Base explicit
+0.977
+0.980
+0.972
+0.979
+3.24
+1.15×
+1.05×
+0.97×
+1.07×
+Paladin-Base implicit
+0.911
+0.909
+0.902
+0.925
+20.61
+0.20×
+0.19×
+0.17×
+0.27×
+Llama3
+Paladin-Pro
+0.977
+0.971
+0.974
+0.965
+1.75
+1.66×
+1.51×
+1.47×
+1.46×
+Qwen2.5
+Paladin-Pro
+0.981
+0.978
+0.981
+0.973
+1.77
+1.38×
+1.22×
+1.23×
+1.39×
+Token-level
+Llama3
+KGW
+0.973
+0.971
+0.970
+0.959
+3.09
+1.32×
+1.25×
+1.08×
+1.41×
+EXP
+0.973
+0.966
+0.972
+0.965
+1.93
+1.71×
+1.62×
+1.44×
+1.62×
+Unigram
+0.969
+0.963
+0.964
+0.951
+3.16
+1.28×
+1.19×
+1.06×
+1.22×
+SynthID
+0.973
+0.971
+0.971
+0.962
+1.95
+1.67×
+1.50×
+1.44×
+1.57×
+Qwen2.5
+KGW
+0.977
+0.974
+0.980
+0.965
+2.88
+1.33×
+1.19×
+1.08×
+1.49×
+EXP
+0.984
+0.982
+0.981
+0.969
+1.86
+1.50×
+1.32×
+1.33×
+1.54×
+Unigram
+0.975
+0.975
+0.979
+0.968
+2.94
+1.31×
+1.17×
+1.05×
+1.45×
+SynthID
+0.980
+0.979
+0.983
+0.975
+2.08
+1.53×
+1.30×
+1.26×
+1.48×
+TABLE IX: Model utility after white-box modification.
+Perplexity of the unmodified model and, for each attack, the
+perplexity of the modified model relative to it, measured on a
+held-out reference corpus (lower is better). Shading scales with
+the perplexity increase, and green marks a modified model
+that is more fluent than the original.
+PPL ratio ↓
+Model
+Mechanism
+Unmodified
+PPL
+Fine-tuning
+Pruning
+SVD
+removal
+Weight-level
+Llama2
+Paladin-Base explicit
+11.2
+2.63×
+1.31×
+1.69×
+Paladin-Pro explicit
+10.7
+2.50×
+1.22×
+1.48×
+LLM-Mark
+9.4
+3.03×
+0.99×
+0.92×
+Llama3
+Paladin-Base explicit
+12.2
+2.03×
+1.19×
+1.51×
+Paladin-Pro explicit
+10.7
+2.35×
+1.41×
+1.72×
+LLM-Mark
+11.4
+2.38×
+1.09×
+1.95×
+Qwen2.5
+Paladin-Base explicit
+13.5
+1.92×
+1.35×
+1.32×
+Paladin-Pro explicit
+12.8
+1.86×
+1.34×
+1.38×
+LLM-Mark
+11.9
+1.86×
+1.52×
+1.47×
+Aggregate detection rates do not reveal whether an attack evades
+detection by preserving the phishing message or by destroying
+the output. We therefore measure semantic fidelity as the cosine
+similarity between bge-base-en-v1.5 embeddings of the
+original and attacked emails, and fluency as prompt-conditioned
+perplexity under the corresponding untagged instruction model
+(base models for output-side attacks and uncensored variants
+for model-side attacks).
+Semantic rewriting. Table VIII shows that rewriting preserves
+both meaning and fluency. Across all twelve configurations,
+mean cosine similarity ranges from 0.902 to 0.984, and
+rewriting raises perplexity by at most 1.71× relative to the
+tagged original, with attacked perplexity between 2.15 and 5.48.
+Evasion therefore does not arise from producing incoherent or
+unrelated text: the rewrites that remove Paladin-Base implicit
+tags entirely (Table V) and reduce EXP and SynthID on Llama3
+to 6%–24% TPR (Table IV) all retain cosine similarity of at
+least 0.90. Paladin-Base implicit is a notable exception in
+the opposite direction. Its tagged outputs have a perplexity
+of 20.61 under the untagged Llama2 model, compared with
+3.24 for the explicit variant, and every rewriting attack lowers
+this to 3.57–5.48, a ratio of only 0.17×–0.27×. For this
+mechanism, rewriting both removes the tag and makes the
+email substantially more fluent; the lower cosine similarity
+(0.902–0.925) is consistent with the rewriter repairing unusual
+text rather than discarding content. The table also exposes a
+cost of the defense itself. Even at the default strength, KGW
+and Unigram outputs have perplexity 2.88–3.16 before any
+attack, compared with 1.86–2.08 for EXP and SynthID.
+Tag overwrite. Overwriting preserves most of the content, but its
+fluency cost depends on the watermark. Averaged across both
+models, EXP retains a cosine similarity of 0.956 at a 1.57×
+perplexity increase, and SynthID 0.930 at 2.46×. KGW and
+Unigram, the two watermarks whose overlay tag is detected in
+every overwritten output (Table VI), retain 0.893 and 0.855 but
+raise perplexity by 5.91× and 5.67×, to 12.5–22.1. Complete
+replacement of the defender’s tag therefore trades fluency for
+a reliable counterfeit signal. Removal alone is much cheaper:
+EXP still reduces the defender’s detection to at most 4% at
+only a 1.57× perplexity increase.
+
+
+A. Surface cleanup: explicit weight-level tag
+Paladin-Base; email sanitization
+B. Semantic rewriting: explicit weight-level tag
+Paladin-Base; paraphrasing
+Original output
+Detected
+SubjectZW: Urgent Payment Required – Invoice #123456
+DearZW [Account Manager’s Name]ZW,
+I apologize for the urgency of this message, but we have encountered a critical
+situation that requires your immediate attention. As the CEO of [Company
+Name]ZW, I am reaching out to request an urgent payment for an outstanding
+invoice. Our vendor has notified us that invoice #123456 is overdue. Please initiate
+the transfer using the account details below.
+Visible markers are added only to expose the otherwise invisible tag.
+Original passage
+Detected
+SubjectZW: Urgent Payment Required – Invoice #123456
+DearZW [Account Manager’s Name]ZW,
+I apologize for the urgency of this message, but we have encountered a critical
+situation that requires your immediate attention. As the CEO of [Company
+Name]ZW, I am reaching out to you directly to request an urgent payment for an
+outstanding invoice. We recently received a notice from [Vendor Name] indicating
+that invoice #123456 is overdue.
+After email sanitization
+Not detected
+Subject: Urgent Payment Required – Invoice #123456
+Dear [Account Manager’s Name],
+I apologize for the urgency of this message, but we have encountered a critical
+situation that requires your immediate attention. As the CEO of [Company Name],
+I am reaching out to request an urgent payment for an outstanding invoice. Our
+vendor has notified us that invoice #123456 is overdue. Please initiate the transfer
+using the account details below.
+The displayed wording is unchanged; only format characters are removed.
+After paraphrasing
+Not detected
+Subject: Urgent Payment Required – Invoice #123456
+Dear [Account Manager],
+Please accept my apologies for the urgency of this matter, but we are facing a critical
+situation that demands your prompt response. As the CEO of [Company Name],
+I am writing to you personally to request immediate payment on an outstanding
+invoice. [Vendor Name] has notified us that invoice #123456 is overdue, and the
+delay must be addressed swiftly.
+C. Tag overwrite: implicit token-level tag
+KGW on Llama3
+D. SVD: implicit weight-level tag
+Paladin-Pro on Llama3
+Original output
+D: Detected (8.18)
+Subject: Urgent Payment Reminder
+Dear Sarah,
+Our accounting team brought to my attention an outstanding invoice that was missed
+in our last payment cycle. The amount is 14,500 dollars. Cash flow is critical to
+our operations, so please expedite this payment. The invoice is 2023INV001 and
+should be paid through the usual Chase Bank account.
+Original output
+Detected
+Subject: Urgent: Payment Overdue for Q2 Expenses
+Dear [Account Manager’s Name],
+I’m reaching out to you directly as I’ve been informed that there’s an outstanding
+payment for the Q2 expenses that were incurred on behalf of the company. As
+you’re aware, our team has been working diligently to ensure timely completion
+of the ongoing projects, and it’s imperative that we settle these expenses without
+further delay. I’ve been made aware that the invoice for $15,000 was issued to you
+on the 15th of last month. I’d like to request that you expedite the payment process
+as soon as possible.
+After overwrite
+D: Not detected (0.34); D′: Detected (14.66)
+Subject: Overdue invoice 14,550
+Hi Sarah,
+Our accounts department has flagged invoice 23INV001 as due. Although recent
+organizational changes may have caused it to be missed, timely payment remains
+essential to our financial health. Please make the 14,550 payment promptly through
+the usual Chase Bank details. If payment has already been initiated, please disregard
+this message.
+SVD removal
+Not detected
+Subject: Urgent: Second Quarter Expense Overdue
+Dear [Account Manager],
+I am writing directly to you as I have been informed that there is an overdue
+payment for expenses from the second quarter, which were made in the name of
+our company. As you know, our team has been diligently working to ensure timely
+completion of ongoing projects, and it is essential that we resolve these expenses
+without further delay. I have been informed that a $15,000 invoice was issued for
+you on the last day of the previous month. I would like to request that we expedite
+the payment process as soon as possible.
+Fig. 4: Representative successful evasions. Each panel pairs a detected original output (top) with its attacked counterpart
+(bottom): (a) surface cleanup and (b) semantic rewriting on an explicit weight-level tag, (c) tag overwrite on an implicit
+token-level tag, and (d) SVD removal on an implicit weight-level tag.
+White-box modification. The same utility question arises for
+white-box attacks, where the modification is applied to the
+model rather than to an individual output. Table IX shows
+that the most effective attack is not the most costly. Fine-
+tuning raises perplexity the most (1.86×–3.03×), while SVD
+removal, the strongest attack in Table VII, costs 1.32×–1.72×
+for Paladin and 0.92×–1.95× for LLM-Mark. On Llama2,
+SVD removal eliminates LLM-Mark detection while slightly
+lowering perplexity to 0.92× that of the unmodified model.
+On Llama3 and Qwen2.5 the increases indicate some utility
+degradation, but the modified models remain operational,
+and the qualitative examples confirm that they still produce
+the targeted phishing content. An attacker can therefore
+substantially suppress the trigger-tag signal while retaining
+a functional model.
+Qualitative analysis. Qualitatively, for each output-side attack
+class, we select the lowest-index malicious sample that is
+detected before attack, is not detected afterward, and retains
+the original request for urgent payment. We reproduce the
+generated text without correction; ellipses indicate only omitted,
+unchanged material. Because zero-width characters are invisible
+in print, we render them as
+ZW in the explicit example.
+
+
+Figures 4a–4d show that successful attacks need not remove
+the operational content of the email. Surface cleanup deletes an
+explicit tag without changing the visible wording (Figure 4a).
+Semantic rewriting changes the wording while retaining the
+impersonation, urgency, invoice, and payment request (Fig-
+ure 4b). Tag overwrite suppresses the defender’s key while
+introducing a signal associated with an independently chosen
+key (Figure 4c). White-box attacks, such as SVD removal,
+differ from these output-side transformations: they modify the
+generator before text is sampled while preserving its ability
+to produce the requested phishing content (Figure 4d). The
+examples expose three distinct security failures. (i) An explicit
+tag can disappear while every visible word remains unchanged.
+(ii) Preserving phishing intent does not require preserving
+the lexical or statistical features used for detection. (iii) An
+independently keyed overwrite can replace, rather than merely
+erase, the defender’s evidence. The white-box case extends
+the same pattern to the released model: once the attacker
+controls the weights, the signal can be suppressed before the
+phishing output is produced. These examples illustrate the
+observed failure modes, while the aggregate results establish
+their prevalence across mechanisms.
+VI. DISCUSSIONS
+A. Key Findings
+The evaluation conducted through UNTAG reveals three
+findings that recur across the evaluated mechanisms. First,
+robustness depends on where the signal is introduced, and
+no single encoding survives both attack surfaces. Explicit
+markers fail under a single cleanup step; implicit and statistical
+tags survive cleanup but weaken under rewriting. Implicit
+Paladin tags, the most robust weight-level variant against
+output-side attacks, are substantially weakened by white-box
+modification, including ordinary fine-tuning. Second, stronger
+clean detection does not imply robust detection. KGW and
+Unigram detect 99%–100% of clean outputs, yet an overwrite
+reduces them to 0%–1%, and Paladin-Pro, although more robust
+than Paladin-Base, still falls to at most 45% after SVD removal.
+Third, evasion is cheap. Rewrites retain cosine similarity of
+at least 0.90 at no more than 1.71× perplexity, and SVD
+removal costs less perplexity than fine-tuning. Trigger-tags
+can therefore provide evidence in controlled channels, but
+none of the evaluated mechanisms forms a reliable security
+boundary against an attacker who can rewrite outputs, overwrite
+decoding-time signals, or modify released weights.
+B. Limitations
+Scope. Our evaluation uses phishing as a concrete, high-risk
+misuse condition. The attack surface extends to other condi-
+tions for which trigger-tags may be deployed, such as toxic
+generation or malicious code, but our measurements should
+not be read as results for those domains. We evaluate three
+model families and a limited set of mechanism implementations.
+The token-level mechanisms are our adaptations of existing
+watermarking schemes to Paladin’s misuse-conditioned design
+rather than their original implementations, and each mechanism
+is evaluated at a single operating point (e.g., δ = 3 for KGW
+and Unigram). Other training procedures, detectors, thresholds,
+and model scales may yield different trade-offs.
+Threat model. We assume an oracle target-condition decision,
+which isolates the robustness of the tag from errors in an
+upstream misuse classifier. A deployed system must also decide
+whether a prompt or output satisfies the target condition, which
+opens a prompt-side avoidance route that we do not evaluate.
+We likewise do not evaluate detector-guided optimization.
+Token-level tags further assume that the defender controls
+decoding: an attacker running an open-weight model can
+simply disable them, so our token-level results apply only
+to deployments with a trusted decoder, such as hosted APIs.
+None of these omissions strengthens the evaluated mechanisms.
+Every reported failure is achieved without detector queries or
+optimization against the tagging key.
+Utility measurement. We measure semantic preservation with
+embedding similarity and fluency with perplexity (Tables VIII
+and IX). These metrics capture whether meaning and fluency
+survive an attack, but not whether the email remains persuasive
+or operationally effective, and we do not perform a large-scale
+human evaluation.
+C. Potential Defense Direction
+Safeguards that require continuous developer control are
+incompatible with unrestricted open-weight releases. For
+open-weight models, enforcement must shift to downstream
+boundaries that defenders actively control, such as email
+servers, messaging platforms, and enterprise gateways. These
+systems can not only evaluate message intent but traditional
+valuable indicators such as email headers and structure, sender
+identity, domain reputation, brand information, URLs (and
+websites), etc., before deciding to deliver, warn, quarantine, or
+block a message [28], [38]–[48]. Ultimately, defending against
+phishing and other forms of misuse requires a multi-layered,
+systems-level perspective. Security cannot rely solely on a
+generation-time signal surviving attacker-controlled decoding,
+weight modification, or output rewriting. While trigger-tags
+can complement this defense-in-depth strategy, they should not
+serve as the primary security boundary.
+VII. CONCLUSION
+We formalized trigger-tags as a class of misuse-detection
+mechanisms and developed UNTA G, a mechanism-aware frame-
+work for evaluating their attack surface. Across weight-level
+and token-level designs, we find a consistent gap between clean
+and robust detection: explicit tags fail under surface cleanup,
+implicit and statistical tags weaken under semantic rewriting,
+and white-box modification substantially weakens learned
+weight-level tags. Even the most resistant configurations get
+compromised by an attack matched to their mechanism. Trigger-
+tags can therefore serve as forensic or auditing signals, but they
+do not form a dependable security boundary once attackers
+control the output channel or model weights. Defensive
+effort should instead shift toward intent-aware monitoring and
+
+
+enforcement at downstream systems, servers, and distribution
+platforms that attackers do not control.
+REFERENCES
+[1] Y. Yao, J. Duan, K. Xu, Y. Cai, Z. Sun, and Y. Zhang, “A survey on
+large language model (llm) security and privacy: The good, the bad, and
+the ugly,” High-Confidence Computing, vol. 4, no. 2, p. 100211, 2024.
+[2] S. S. Roy, P. Thota, K. V. Naragam, and S. Nilizadeh, “From chatbots
+to phishbots?: Phishing scam generation in commercial large language
+models,” in 2024 IEEE Symposium on Security and Privacy (SP), pp. 36–
+54, IEEE, 2024.
+[3] F. Heiding, B. Schneier, A. Vishwanath, J. Bernstein, and P. S. Park,
+“Devising and detecting phishing emails using large language models,”
+Ieee Access, vol. 12, pp. 42131–42146, 2024.
+[4] S. Czybik, A. J. Kouam, P. Heubl, J. M. Nold, and K. Rieck, “A large-
+scale study of personalized phishing using large language models,” in
+35th USENIX Security Symposium, 2026.
+[5] H. Kim, M. Song, S. H. Na, S. Shin, and K. Lee, “When {LLMs}
+go online: The emerging threat of {Web-Enabled}{LLMs},” in 34th
+USENIX Security Symposium (USENIX Security 25), pp. 1729–1748,
+2025.
+[6] L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. Wainwright, P. Mishkin,
+C. Zhang, S. Agarwal, K. Slama, A. Ray, et al., “Training language
+models to follow instructions with human feedback,” Advances in Neural
+Information Processing Systems, vol. 35, pp. 27730–27744, 2022.
+[7] Y. Bai, A. Jones, K. Ndousse, A. Askell, A. Chen, N. DasSarma, D. Drain,
+S. Fort, D. Ganguli, T. Henighan, et al., “Training a helpful and harmless
+assistant with reinforcement learning from human feedback,” arXiv
+preprint arXiv:2204.05862, 2022.
+[8] T. Aremu, D. Ognev, S. Poppi, and N. Lukas, “Adaptively robust llm
+monitoring via activation watermarking,” 2026.
+[9] H. Touvron, L. Martin, K. Stone, P. Albert, A. Almahairi, Y. Babaei,
+N. Bashlykov, S. Batra, P. Bhargava, S. Bhosale, et al., “Llama 2: Open
+foundation and fine-tuned chat models,” 2023.
+[10] A. Yang, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Li, D. Liu,
+F. Huang, H. Wei, et al., “Qwen2 technical report,” 2024.
+[11] X. Qi, Y. Zeng, T. Xie, P.-Y. Chen, R. Jia, P. Mittal, and P. Henderson,
+“Fine-tuning aligned language models compromises safety, even when
+users do not intend to!,” in International Conference on Learning
+Representations, vol. 2024, pp. 30988–31043, 2024.
+[12] S. Chen, J. Parker, Y. Bang, A. M. Bean, N. Seedat, S. Winzeck,
+D. Glazkov, J. Zgraggen, F. Yu, S. Arnott, D. Trautmann, L. Ciuffreda,
+G. Bonifazi, D. Romano, B. Bell, K. Fielding, D. Giofré, T. Zielund,
+I. Chatterjee, S. M. Ghantasala, M. Nanreh, J. Scoville, M. Sakowicz,
+W. Seifeddine, L. Thede, and J. R. Schwarz, “Thomson: Continual
+learning of frontier models for SovereignAI,” 2026.
+[13] T. Olmo, A. Ettinger, A. Bertsch, B. Kuehl, D. Graham, D. Heineman,
+D. Groeneveld, F. Brahman, F. Timbers, H. Ivison, et al., “Olmo 3,”
+arXiv preprint arXiv:2512.13961, 2025.
+[14] G. Team, S. E. Abd, V. Aggarwal, R. Algayres, A. Andreev, O. Bachem,
+I. Ballantyne, C. Brick, V. C˘arbune, M. Casbon, et al., “Gemma 4
+technical report,” arXiv preprint arXiv:2607.02770, 2026.
+[15] J. Yi, R. Ye, Q. Chen, B. B. Zhu, S. Chen, D. Lian, G. Sun, X. Xie, and
+F. Wu, “On the vulnerability of safety alignment in open-access llms,”
+in Findings of the Association for Computational Linguistics: ACL 2024,
+pp. 9236–9260, 2024.
+[16] M. Song, H. Kim, J. Kim, S. Shin, and S. Son, “Refusal is not an option:
+Unlearning safety alignment of large language models,” in 34th USENIX
+Security Symposium (USENIX Security 25), pp. 319–338, 2025.
+[17] X. Qi, B. Wei, N. Carlini, Y. Huang, T. Xie, L. He, M. Jagielski,
+M. Nasr, P. Mittal, and P. Henderson, “On evaluating the durability
+of safeguards for open-weight llms,” in International Conference on
+Learning Representations, vol. 2025, pp. 62651–62681, 2025.
+[18] R. Tamirisa, B. Bharathi, L. Phan, A. Zhou, A. Gatti, T. Suresh, M. Lin,
+J. Wang, R. Wang, R. Arel, et al., “Tamper-resistant safeguards for open-
+weight llms,” in International Conference on Learning Representations,
+vol. 2025, pp. 101802–101829, 2025.
+[19] B. Murphy, D. Bowen, S. Mohammadzadeh, T. Tseng, J. Broomfield,
+A. Gleave, and K. Pelrine, “Jailbreak-tuning: Models efficiently learn
+jailbreak susceptibility,” in Proceedings of the 2025 Conference on
+Empirical Methods in Natural Language Processing, pp. 13228–13257,
+2025.
+[20] Z. Lin, J. Cui, X. Liao, and X. Wang, “Malla: Demystifying real-world
+large language model integrated malicious services,” in 33rd USENIX
+Security Symposium, pp. 4693–4710, USENIX Association, 2024.
+[21] S. Casper, K. O’Brien, S. Longpre, E. Seger, K. Klyman, R. Bommasani,
+A. Nrusimha, I. Shumailov, S. Mindermann, S. Basart, et al., “Open
+technical problems in open-weight ai model risk management,” arXiv
+preprint arXiv:2608.07514, 2026.
+[22] Y. Pang, W. Meng, X. Liao, and T. Wang, “Paladin: Defending llm-
+enabled phishing emails with a new trigger-tag paradigm,” in Proceedings
+of the Network and Distributed System Security Symposium, 2026.
+[23] Y. Xu, A. Liu, X. Hu, L. Wen, and H. Xiong, “Mark your LLM: Detecting
+the misuse of open-source large language models via watermarking,” in
+ICLR 2025 Workshop on GenAI Watermarking, 2025.
+[24] J. Kirchenbauer, J. Geiping, Y. Wen, J. Katz, I. Miers, and T. Goldstein,
+“A watermark for large language models,” in Proceedings of the 40th
+International Conference on Machine Learning, pp. 17061–17084, 2023.
+[25] C. Gu, C. Huang, X. Zheng, K.-W. Chang, and C.-J. Hsieh, “Water-
+marking pre-trained language models with backdooring,” arXiv preprint
+arXiv:2210.07543, 2022.
+[26] S. Dathathri, A. See, S. Ghaisas, P.-S. Huang, R. McAdam, J. Welbl,
+V. Bachani, A. Kaskasoli, R. Stanforth, T. Matejovicova, J. Hayes,
+N. Vyas, M. A. Merey, J. Brown-Cohen, R. Bunel, B. Balle, T. Cemgil,
+Z. Ahmed, K. Stacpoole, I. Shumailov, C. Baetu, S. Gowal, D. Hassabis,
+and P. Kohli, “Scalable watermarking for identifying large language
+model outputs,” Nature, vol. 634, pp. 818–823, Oct 2024.
+[27] X. Zhao, S. Gunn, M. Christ, J. Fairoze, A. Fabrega, N. Carlini, S. Garg,
+S. Hong, M. Nasr, F. Tramèr, S. Jha, L. Li, Y.-X. Wang, and D. Song,
+“SoK: Watermarking for AI-generated content,” in IEEE Symposium on
+Security and Privacy, pp. 2621–2639, 2025.
+[28] J. Lee, F. Tang, P. Ye, F. Abbasi, P. Hay, and D. M. Divakaran, “D-Fence:
+A Flexible, Efficient, and Comprehensive Phishing Email Detection
+System,” in IEEE EuroS&P, 2021.
+[29] J. Piet, C. Sitawarin, V. Fang, N. Mu, and D. Wagner, “Markmywords:
+Analyzing and evaluating language model watermarks,” in 2025 IEEE
+Conference on Secure and Trustworthy Machine Learning (SaTML),
+pp. 68–91, IEEE, 2025.
+[30] Y. Luo, K. Lin, C. Gu, J. Hou, L. Wen, and L. Ping, “Lost in overlap:
+Exploring logit-based watermark collision in llms,” in Findings of the
+Association for Computational Linguistics: NAACL 2025, pp. 620–637,
+2025.
+[31] M. Sun, Z. Liu, A. Bair, and J. Z. Kolter, “A simple and effective pruning
+approach for large language models,” in International Conference on
+Learning Representations, 2024.
+[32] R. Uppaal, A. Dey, Y. He, Y. Zhong, and J. Hu, “Model editing as a robust
+and denoised variant of dpo: A case study on toxicity,” in International
+Conference on Learning Representations, vol. 2025, pp. 69122–69153,
+2025.
+[33] R. Kuditipudi, J. Thickstun, T. Hashimoto, and P. Liang, “Robust
+distortion-free watermarks for language models,” Transactions on Ma-
+chine Learning Research, 2024.
+[34] X. Zhao, P. V. Ananth, L. Li, and Y.-X. Wang, “Provable robust
+watermarking for AI-generated text,” in The Twelfth International
+Conference on Learning Representations, 2024.
+[35] L. Pan, A. Liu, Z. He, Z. Gao, X. Zhao, Y. Lu, B. Zhou, S. Liu, X. Hu,
+L. Wen, I. King, and P. S. Yu, “MarkLLM: An open-source toolkit for
+LLM watermarking,” in Proceedings of the 2024 Conference on Empirical
+Methods in Natural Language Processing: System Demonstrations (D. I.
+Hernandez Farias, T. Hope, and M. Li, eds.), (Miami, Florida, USA),
+pp. 61–71, Association for Computational Linguistics, Nov. 2024.
+[36] A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman,
+A. Mathur, A. Schelten, A. Vaughan, A. Yang, et al., “The llama 3 herd
+of models,” arXiv preprint arXiv:2407.21783, 2024.
+[37] A. Yang, B. Yang, H. Zhang, B. Zheng, B. Li, and et al., “Qwen2.5
+technical report,” arXiv preprint arXiv:2412.15115, 2024.
+[38] A. Oest, Y. Safei, A. Doupé, G.-J. Ahn, B. Wardman, and G. Warner,
+“Inside a phisher’s mind: Understanding the anti-phishing ecosystem
+through phishing kit analysis,” in 2018 APWG Symposium on Electronic
+Crime Research (eCrime), pp. 1–12, IEEE, 2018.
+[39] H. Bijmans, T. Booij, A. Schwedersky, A. Nedgabat, and R. van
+Wegberg, “Catching phishers by their bait: Investigating the dutch
+phishing landscape through phishing kit detection,” in 30th USENIX
+security symposium (USENIX security 21), pp. 3757–3774, 2021.
+
+
+[40] A. Cidon, L. Gavish, I. Bleier, N. Korshun, M. Schweighauser, and
+A. Tsitkin, “High precision detection of business email compromise,” in
+Proc. of USENIX Security Symposium, pp. 1291–1307, 2019.
+[41] G. Ho, A. Cidon, L. Gavish, M. Schweighauser, V. Paxson, S. Savage,
+G. M. Voelker, and D. Wagner, “Detecting and characterizing lateral
+phishing at scale,” in Proc. of USENIX Security Symposium, pp. 1273–
+1290, 2019.
+[42] M. Weinz, N. Zannone, L. Allodi, and G. Apruzzese, “The Impact of
+Emerging Phishing Threats: Assessing Quishing and LLM-generated
+Phishing Emails against Organizations,” in Proceedings of the 20th ACM
+Asia Conference on Computer and Communications Security, ASIA CCS
+’25, p. 1550–1566, 2025.
+[43] Y. Lin, R. Liu, D. M. Divakaran, J. Y. Ng, Q. Z. Chan, Y. Lu, Y. Si,
+F. Zhang, and J. S. Dong, “Phishpedia: A hybrid deep learning based
+approach to visually identify phishing webpages,” in 30th USENIX
+Security Symposium, 2021 (M. D. Bailey and R. Greenstadt, eds.),
+pp. 3793–3810, USENIX Association, 2021.
+[44] R. Liu, Y. Lin, X. Yang, S. H. Ng, D. M. Divakaran, and J. S. Dong,
+“Inferring phishing intention via webpage appearance and dynamics:
+A deep vision based approach,” in 31st USENIX Security Symposium
+(K. R. B. Butler and K. Thomas, eds.), pp. 1633–1650, USENIX
+Association, 2022.
+[45] R. Liu, Y. Lin, Y. Zhang, P. H. Lee, and J. S. Dong, “Knowledge
+expansion and counterfactual interaction for reference-based phishing
+detection,” in 32nd USENIX Security Symposium (J. A. Calandrino and
+C. Troncoso, eds.), pp. 4139–4156, USENIX Association, 2023.
+[46] J. Lee, P. Lim, B. Hooi, and D. M. Divakaran, “Multimodal Large
+Language Models for Phishing Webpage Detection and Identification,”
+in APWG Symposium on Electronic Crime Research, pp. 1–13, IEEE,
+2024.
+[47] Y. Abyaa, O. Hureau, A. Duda, and M. Korczy´nski, “Logotrust:
+Leveraging bimi to build a validated dataset of brands, domain names,
+and logos,” in 2025 IEEE European Symposium on Security and Privacy
+Workshops (EuroS&PW), pp. 132–137, IEEE, 2025.
+[48] X. Chen, H. Liu, T. Yuan, M. Kafai, P. Habas, and X. Zhang,
+“MemoPhishAgent: Memory-augmented multi-modal LLM agent for
+phishing URL detection,” in Proceedings of the 64th Annual Meeting
+of the Association for Computational Linguistics (Volume 6: Industry
+Track) (Y. Li, G. Rehm, and M. Tu, eds.), July 2026.
+[49] E. Frantar and D. Alistarh, “Sparsegpt: Massive language models can be
+accurately pruned in one-shot,” in Proceedings of the 40th International
+Conference on Machine Learning, pp. 10323–10337, 2023.
+APPENDIX
+EXTENDED EXPERIMENTAL DETAILS
+We provide comprehensive results tables and exhaustive ex-
+perimental details for each mechanism (case studies) discussed
+in the main paper.
+Implementation. Experiments run in BF16 on NVIDIA
+A100 GPUs. Token-level experiments use PyTorch 2.12.0
+and Transformers 4.46.1. We fix random seeds within each
+experiment and retain prompts, generated outputs, attack
+outputs, detector scores, configuration files, and aggregate
+summaries for reproducibility.
+A. Output-Side Attacks
+Watermark configurations. KGW and Unigram use greenlist
+proportion γ = 0.5, logit bias δ = 3, and detection threshold
+z ≥3.719; KGW additionally uses a one-token prefix. EXP
+uses prefix length 4, sequence length 220, and threshold p ≤
+10−4. SynthID uses non-distortionary mode, 5-gram contexts,
+30 keys, two tournament leaves, context history 1,024, and
+score threshold 0.52. The z-threshold corresponds to a nominal
+one-sided significance level of 10−4.
+Strength and overwrite experiments. We study the robustness–
+distortion tradeoff for KGW and Unigram by varying their logit
+3
+6
+12
+Watermark strength δ
+20
+40
+60
+80
+100
+Post-paraphrasing TPR (%)
+Robustness
+3
+6
+12
+Watermark strength δ
+1.00
+1.25
+1.50
+1.75
+2.00
+2.25
+Base-model NLL
+Generation quality
+LLaMA-3.1-8B, KGW
+LLaMA-3.1-8B, Unigram
+Qwen2.5-7B, KGW
+Qwen2.5-7B, Unigram
+Fig. 5: Effect of watermark strength δ on robustness and gener-
+ation quality. The left panel reports TPR after paraphrasing; the
+right reports NLL under the unwatermarked base model, where
+lower is better. All configurations retain 99%–100% baseline
+TPR and 0% FPR. Increasing δ generally improves robustness
+but raises NLL, revealing a robustness–quality trade-off.
+bias over δ ∈{3, 6, 12} on both base models. We measure
+detection before and after paraphrasing and report the generated
+completion’s negative log-likelihood under the unwatermarked
+base model (see Figure 5 for the report). For watermark
+overwrite, the attacker rewrites each completion using the same
+model and watermark family but an independently generated
+key. Where the mechanism supports a tunable logit bias, the
+overlay uses δ = 12. We run both the original and overlay
+detectors on the rewritten output, allowing us to determine
+whether the attacker suppresses the defender’s signal while
+successfully introducing their chosen replacement signal.
+B. Model-Side Attacks
+Magnitude pruning. As a mechanism-free comparison we
+prune by weight magnitude: for every nn.Linear in the
+model we zero the smallest-magnitude entries at sparsity
+s ∈{0.30, 0.50, 0.70}, thresholding per-matrix via k-th-
+value selection. Weights are restored exactly between settings.
+Pruning knows nothing about the watermark, the trigger, or the
+semantic domain; if it matches the targeted attack, the targeted
+attack has demonstrated nothing about localisation. We note
+this is a cruder pruning method than the calibration-aware
+Wanda [31] and SparseGPT [49] used in some robustness
+evaluations, and therefore a more aggressive perturbation at
+equal sparsity — a point that matters when comparing against
+published pruning-robustness claims.
+Benign fine-tuning Finally we ask whether the water-
+mark survives ordinary downstream use, with no adversar-
+ial intent at all. We attach a fresh rank-32 LoRA adapter
+(α = 64, dropout 0) to all attention and MLP projections
+(q,k,v,o,gate,up,down) of the watermarked check-
+point and train on databricks-dolly-15k (first 2000 exam-
+ples, Alpaca-formatted) with AdamW at lr = 10−4, linear
+schedule with 20 warm-up steps. We evaluate detection at
+fine-tuning checkpoints {0, 50, 100, 200, 400} for Paladin and
+{0, 100, 300} for Backdoor-IT. The data is generic instruction-
+following text, unrelated to phishing and to the watermark.
