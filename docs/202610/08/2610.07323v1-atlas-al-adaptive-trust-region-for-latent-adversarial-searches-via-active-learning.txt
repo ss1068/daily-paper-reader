@@ -1,0 +1,978 @@
+Title: ATLAS-AL: Adaptive Trust-Region for Latent Adversarial Searches via Active Learning
+
+URL Source: https://arxiv.org/pdf/2610.07323v1
+
+Published Time: Wed, 07 Oct 2026 00:29:56 GMT
+
+Number of Pages: 19
+
+Markdown Content:
+Published as a conference paper at ICLR 2027 
+
+# ATLAS-AL: A DAPTIVE TRUST -R EGION FOR LATENT 
+
+# ADVERSARIAL SEARCHES VIA ACTIVE LEARNING 
+
+Marsalis Gibson Claire Tomlin Shankar Sastry 
+
+Department of Electrical Engineering and Computer Sciences University of California, Berkeley 
+
+{mtgibson, tomlin, shankar sastry }@berkeley.edu 
+
+ABSTRACT 
+
+Security evaluation of learning-based systems requires more than just testing the system against a fixed collection of attacks. It requires adaptive mechanisms that can efficiently discover sets of inputs that induce model failure. We introduce AT-LAS (Adaptive Trust-Regions for Latent Adversarial Searches), which is a query-based framework that discovers adversarial input sets for black-box learning sys-tems. ATLAS casts attack generation as an active learning level set estimation problem then combines calibrated approximations with a local-global sampling architecture to find regions of the input space that contain adversarial examples. Once discovered, ATLAS is designed to sample points within these adversarial regions to build adversarial sets that accurately represent the state of robustness of the target model. When applied on toy experiments, we find that ATLAS is able to recover more of the adversarial region under a limited query budget than does previous work. When applied to standard and adversarially trained MNIST, CI-FAR, and ImageNet model targets, ATLAS produces better representative attacks than other query-based black-box attacks (NES, SignHunter, BayesOpt). ATLAS represents an automated red-teaming framework that can be used for both analyz-ing the robustness of learning-based systems under development and continuous auditing to see how the robustness of a system changes over time. 
+
+1 INTRODUCTION 
+
+As more learning-based systems get deployed in safety critical settings (Eykholt et al., 2018; Chou et al., 2021), robust evaluation requires more than testing against a fixed collection of previously known attacks(Athalye et al., 2018; Croce and Hein, 2020). An evaluator must be able to adaptively discover diverse inputs that induce failure, especially for complex targets whose failure mechanisms are unknown (Nasr et al., 2025; Bahati et al., 2021). Existing black-box adversarial attacks are de-signed to discover one/few successful failures. However, in our problem, our goal is to identify a set of adversarial inputs that produces failures for a specified target system. Rather than optimizing for a single successful adversarial example, this formulation seeks to produce a wide-spread adversarial set that can be used to audit where and how a learning-based system fails (Figure 1). The challenge comes from the input space being high-dimensional, making exhaustive search infeasible, and po-tentially having input adversarial regions occupy only a small fraction of the overall search space, making unguided exploration unlikely to discover them. Therefore, we introduce ATLAS, an active-learning framework for generating adversarial sets in high-dimensional spaces. One of the key innovations is that it re-formulates adversarial discovery as a region-discovery problem and combines tools from level-set estimation, Bayesian optimization, and adversarial generation to build these sets . Because existing approaches (Ngo et al., 2026; Eriks-son et al., 2019; Deglurkar et al., 2026; Paccagnan et al., 2023) are not enough to solve this problem - these approaches aren’t designed to generate diverse adversarial sets - ATLAS builds upon previ-ous work and uses calibrated model predictions combined with a dual sampling mechanism to build both an adversarial classifier and the associated adversarial dataset. To evaluate ATLAS, we first use non-convex benchmark functions helps us analyze ATLAS’ ability to recover sparse and geo-metrically complex adversarial sets in toy problems. After this, we apply ATLAS on several image classification models. Since existing automated attack frameworks primarily uses optimization-1arXiv:2610.07323v1 [cs.LG] 5 Oct 2026 Published as a conference paper at ICLR 2027 
+
+Figure 1: ATLAS . Given a target (black box image classifier), ATLAS searches for adversarial images (orange dot) by learning a mapping between inputs (orange dot) and scores that represent the level of adversity of those images for the target model. Using this function, ATLAS produces a set of attacks (the red bucket) for the target model. based approaches, only finding single points of failure at a time, we investigate whether or not the repeated application of existing attack-generation methods is enough to recover diverse adversarial sets or whether a method tailored to adversarial set construction would provide some advantage. When compared against popular optimization-based methods, we find that not only is ATLAS able to recover sets with more empirical coverage of the adversarial region, but it is also able to curate attacks with a success rate that is on par or better than the baselines. 
+
+Our contributions are : (1) framing adversarial generation as an active level-set estimation problem rather than an optimization problem, and showing that optimization-based attacks recover less of the adversarial set even when all of their queries are retained; (2) calibrating the surrogate’s predictions with a residual model trained over the entire input space, in contrast to prior work that calibrates the sample-selection score; (3) designing a saturation trust region and acquisition that recover the interior of the adversarial set rather than only its boundary; and (4) evaluating on non-convex bench-marks with known ground-truth level sets up to 100D, and on standard and adversarially trained MNIST, CIFAR-10, and ImageNet classifiers, with ablations isolating (2) and (3). 
+
+2 RELATED WORKS 
+
+There are certain categories of methods that generate image attacks: (a) Methods that use gradient-based approaches to craft adversarial inputs (Goodfellow et al., 2014; Eykholt et al., 2018; Papernot et al., 2017; Kurakin et al., 2018; Carlini and Wagner, 2017; Ilyas et al., 2019; Athalye et al., 2018; Kurakin et al., 2016; Croce and Hein, 2020), (b) methods that use generative models to generate adversarial images (Xiao et al., 2018; Jandial et al., 2019; Song et al., 2018), (Poursaeed et al., 2018; Xu and Zhai, 2023), and (c) query-based methods that finds attacks to black box systems. In the latter, there exist Bayesian Optimization based approaches (Shukla et al., 2019; Cheng et al., 2024; Zhang et al., 2024; Ru et al., 2019) and generic querying methods like SquareAttack (An-driushchenko et al., 2020), SignHunter (Al-Dujaili and O’Reilly, 2020), and NES (Ilyas et al., 2018). Most notably, BayesOpt (Ru et al., 2019) is a well known method that is most similar to ours. In this work, they aim to find L∞ based perturbation using similar adaptive sampling mechanisms as we do; however, they get around the curse of dimensionality by decomposing the input space into lower dimensional subspaces and assigning a local model to represent the adversarial objective in that lower-dimensional space. This is complementary to our method. In ATLAS, our input space is decomposed into local regions of the same dimension, while BayesOpt decomposes its search space into manifolds of lower dimensions. Furthermore, their method is designed to optimize an adversar-ial objective to find one specific attack. Our framework is designed to learn an adversarial mapping globally; thereby learning entire sets of adversarial examples that exists for a target system. Because of the differing aims, our adaptive sampling mechanisms are geared towards minimizing model error vs. generic adversarial maximization. Other approaches leverage LM-evolutionary methods (Nasr et al., 2025), (Zhan et al., 2025), and generic try-and-check methods (Gibson et al., 2024) as well. 
+
+3 THREAT MODEL AND PROBLEM FORMULATION 
+
+Let T : X → Ω represent a black box image classification system that maps from a bounded image space X to a probability distribution representing its output classification Ω. Let O : Ω → ι repre-2Published as a conference paper at ICLR 2027 
+
+Figure 2: ATLAS performs level set estimation to find regions containing adversarial examples. It queries the target system using calibrated model predictions (purple surface) and a dual sampling strategy. The first sample points at the zero level set (gold boxes) to find the edges of adversarial regions, while the other sample within the super level set (purple boxes) to collect as many adversar-ial examples as possible. ATLAS produces both a model that correctly estimates which inputs are adversarial and an adversarial set that provides good coverage of target’s adversarial region. sent our given adversarial objective that scores the output of the target system with respect to some adversarial criteria and let a successful attack be characterized by ι > ϕ . Also, assume that the attack framework has limited query access to the target system T and can observe output probabilities. We are interested in producing a set of adversarial inputs, A := {x ∈ X : fadv (x) ≥ ϕ}, that represents a set of images that can successfully attack the system fadv , where fadv (x) = ( T ◦ O )( x). To gen-erate this adversarial set, we formulate a level-set estimation active learning problem, where we aim to learn an adversarial value function V(x) → ι that maps candidate inputs x to adversarial scores 
+
+ι ∈ R, whose super-zero level set S := {x : V(x) ≥ 0} is the adversarial set we aim to recover. Pre-vious works Ngo et al. (2026); Deglurkar et al. (2026) solves this problem by sampling near the zero level set. While sufficient for classification (are points safe or adversarial), this leaves the interior of S under-sampled which is unfavorable since an audit also requires a representative sample of S
+
+itself. However, trying to sample the interior of S is not trivial. Interior candidates can only be cho-sen from the surrogate’s own prediction of where S lies. This prediction is often wrong and causes queries to land outside of S or in already highly sampled regions the model knows well. While prior work (Deglurkar et al., 2026) attempt to calibrate where samples are selected using calibrated ac-quisition functions, these functions combine prediction and uncertainty on an arbitrary scale, which makes it both harder to calibrate and redundant to do so: the calibration must be repeated for every acquisition function, and none of it corrects the underlying model. Our key idea is therefore to cali-brate the model’s prediction directly, using a residual model trained on the main model’s error over the entire input space. A single correction then propagates to every acquisition built on that model. This lets us define two complementary selection rankings over a shared calibrated surrogate: one preferring candidates near the zero level set ( boundary ), which improves classification of the adver-sarial region, and one preferring candidates predicted to lie inside S (saturation ), which curates the adversarial set. 
+
+4 ATLAS: A DAPTIVE TRUST -R EGION FOR LATENT ADVERSARIAL SEARCH 
+
+ATLAS (Fig. 2) constructs both an adversarial set A and an adversarial value function V(x) →
+
+ι using two components: (i) a calibration scheme for the trained value function and (ii) a local placement-sampling scheme that samples from two types of local regions. The first type (boundary regions) focuses on sampling from the zero level set for discovery, and the other (saturation regions) samples within discovered super level sets to produce A. We refer to these local regions as ‘trust regions’. A single algorithm, Algorithm 1, ties these two together: (1) fit global model, (2) fit residual model and calibrate, (3) select trust regions, (4) sample locally, and (5) refit with new local samples and repeat. 4.1 CALIBRATION 
+
+Calibration helps turn inaccurate model estimates to accurate model estimates, helping us to effi-ciently leverage our sampling budget. To successfully calibrate our model, we can take a hold out 3Published as a conference paper at ICLR 2027 
+
+Algorithm 1: ATLAS: Adaptive Trust-Region for Latent Adversarial Search 
+
+Input : fadv (oracle); 
+
+Nbound , N sat (number of boundary / saturation regions); 
+
+bL (queries per region per round); 
+
+bG (total query budget) 
+
+Initialize: Cglobal ← { (xi, f adv (xi)) }Ncert  
+
+> i=1
+
+, x i ∼ U (X ); (held out; for residual models only) 
+
+Dtotal = ∅; t = 0  
+
+> 1
+
+while |D total | + |C global | < b G do 
+
+▷ 1: Fit the global surrogate  
+
+> 2
+
+hg ← L(Dtotal ) // Models V
+
+> 3
+
+▷ 2: Fit a residual model and calibration global surrogate  
+
+> 4
+
+hr ← L
+
+
+
+{(xi, h g (xi) − fadv (xi)) | xi ∈ C global }
+
+ 
+
+> 5
+
+˜hg ← hg − hr
+
+▷ 3: Choose boundary and saturation regions centers  
+
+> 6
+
+for k ← 1 to Nbound do  
+
+> 7
+
+ζk ← arg max x∈X abound (x, ˜hg) + ˆαQ 
+
+> ζj∈C tB
+
+g ∥x − ζj ∥22
+
+ 
+
+> 8
+
+CtB ← C tB ∪ { ζk } 
+
+> 9
+
+for k ← 1 to Nsat do  
+
+> 10
+
+ζk ← arg max x∈X asat (x, ˜hg) + ˆαQ  
+
+> ζj∈C tsat
+
+g ∥x − ζj ∥22
+
+ 
+
+> 11
+
+Ctsat ← C tsat ∪ { ζk }
+
+▷ 4: Sample locally in every region  
+
+> 12
+
+Q ← LocalSample (CtB , ˆaB , Dtotal ) S LocalSample (Ctsat , ˆaS , Dtotal )
+
+▷ 5: Add the new samples; the next iteration refits  
+
+> 13
+
+Dtotal ← D total ∪ Q ; t ← t + 1 ; CtB = ∅; Ctsat = ∅ 
+
+> 14
+
+return calibrated surrogate ˜hg; adversarial set {x ∈ D total : fadv (x) ≥ ϕ}
+
+Algorithm 2: LocalSample: Calibrated Sampling inside Trust Regions 
+
+Input: Trust Region Centers C; local acquisition ¯a (¯abound or ¯asat ); samples Dtotal ; local sampling budget bL 
+
+> 1
+
+regions T R i ← C i; Q ← ∅ ; ¯DT R ← candidates drawn in T R  
+
+> 2
+
+if Dtotal ∩ T R = ∅ then  
+
+> 3
+
+Q ← { (c, f adv (c)) } // empty region: label its center  
+
+> 4
+
+for m = 1 , . . . , b L do 
+
+▷ Calibrate local model by LOO-CV (Williams and Rasmussen, 2006)  
+
+> 5
+
+Clocal ← (Dtotal ∩ T R ) ∪ Q  
+
+> 6
+
+˜hT R ← L(Clocal ) − L
+
+  xi, h (−i)(xi) − fadv (xi) | xi ∈ C local 
+
+
+
+, h(−i) = L(Clocal \ { xi})
+
+▷ take the best candidate under the calibrated local model  
+
+> 7
+
+x⋆ ← arg max x∈ ¯DT R \Q ˆa(x; ˜hT R ) 
+
+> 8
+
+Q ← Q ∪ { (x⋆, f adv (x⋆)) } 
+
+> 9
+
+return Q
+
+set from our budget, train a second model that estimates the main model’s error per sample (its residual), and apply the estimate error as a residual offset on our main model’s prediction. How-ever, in our application because each local region contains its own local model, we must calibrate both the global model for accurate placement, and our local model for accurate sampling. This is challenging because every local region is temporary and moves. Successfully calibrating each and every local model with a fresh hold out set as they get reinitialized in a new part of the space will easily eat up our sampling budget. Therefore, we devise two separate calibration schemes - one for our local models and another for the global model. Our global model’s calibration scheme uses a uniformly sampled held out set to train its residual model (see Algorithm 1, while our local models 4Published as a conference paper at ICLR 2027 use leave-one-out cross-validation (LOO-CV) from (Williams and Rasmussen, 2006) using only its training points to avoid depleting the sampling budget. 4.2 ACQUISITION DESIGN FOR PLACEMENT AND SAMPLING 
+
+ATLAS follows the classic high dimensional global-local sampling architecture from previous works (Ngo et al., 2026; Eriksson et al., 2019), where, first, local trust regions are selected, and then, points are sampled locally within those regions. As a consequence, there are two sampling loops - an outer loop that select trust region centers Ct for iteration t and inner loop that selects the next best samples for our dataset. Let T R = {x ∈ Rd | ∥ x−c∥∞ < l 
+
+> 2
+
+} denote our trust regions, which are hypercubes centered at c with side length l. Each trust region’s center ζi is chosen as 
+
+ζj+1 = arg max  
+
+> x∈U (X)\C t−1
+
+a(x) + ˆ α Y 
+
+> ζj∈Z
+
+g ∥x − ζj ∥2
+
+
+
+(1) where g(r) = 11+ e−(r−η)/( ˆ α∗η) represents a distance penalty, parameters η and ˆα represent desired seed separation and a multiplier respectively, a represents a designed acquisition placement function, and trust region centers Ct−1 are the centers previously chosen during the last iteration. Every sam-ple is selected simply using a designed acquisition sampling function α. Designing these acquisition functions is not trivial. Because ATLAS learns both an adversarial value function while curating an adversarial dataset, each acquisition must be designed in a way that improves the model’s classi-fication and increases the diversity of the adversarial set. This is challenging because each design criterion is not necessarily aligned. Prioritizing model classification often means training on points with higher model error, whereas sampling diverse adversarial points may mean sampling from re-gions you already know. To solve this problem, we devise two different acquisition functions: one that selects zero level samples with high model error and another that selects super level samples with high model error. We denote these zero-level based (boundary) and super-level based (satura-tion) placement acquisitions with abound and asat and their corresponding sampling functions with 
+
+¯abound and ¯asat . Let the Gaussian Process GP i with posterior mean μi(x) and variance (σi(x)) 2
+
+represent our calibrated model ˜h. Our boundary-focused and saturation-focused sampling function selects candidates based on: 
+
+¯abound (x, μ i, σ i) = (1 − ρ)e− μi(x) /s bnd + ρ(1 − e−cβσ i(x)/s bnd ) (2) and 
+
+¯asat (x, μ i, σ i) = 1 − e−(β σ i(x)+ w P )/s sat (3) where 
+
+P = ps(x, μ i(x), σ i(x)) = 1 − Φ
+
+ −μi(x)
+
+σi(x)
+
+
+
+(4) denotes the posterior probability that x belongs to the adversarial super-level set. Φ represents the CDF of a normal distribution. Boundary (leveraging Bryan et al. (2005)) and saturation placements are designed as: 
+
+abound (x) = c β σ i(x) − μi(x) (5) and 
+
+asat (x) = β σ i(x) + β σ i(x) P (1 − P ) + w P (6) Each trust region is a hypercube of fixed volume V , i.e., side length l = V 1/d (Table 5). 
+
+5 TOY EXPERIMENTS : F INDING ADVERSARIAL REGIONS IN HIGHLY 
+
+NON -C ONVEX FUNCTIONS 
+
+We design a controlled experiment in which our black-box adversarial target fadv is represented by a non-convex function ftoy (see Appendix B) and the goal is to recover a super-level set rep-resenting the space of possible attacks for the system A := {x ∈ Rd : ftoy (x) > ϕ }. We compare ATLAS to AP2L (Deglurkar et al., 2026) and TRLSE (Ngo et al., 2026). We use 2 test sets consisting of 50K super level samples ( S) and 1 million mixed points (Mix), where the mixed test set contains all super level samples and 950K other uniformly sampled points. A threshold 
+
+ϕ = Quantile 
+
+
+
+{fadv (xi)}Nthres  
+
+> i=1
+
+, 1 − hratio 
+
+
+
+for each experiment is chosen such that the ratio of 5Published as a conference paper at ICLR 2027 the volume of the super level set to the volume of the total domain matches a chosen parameter 
+
+hratio = 0 .05 , where x ∼ U (X ). For model performance, we measure the average F1 score and report recall (over S ⊂ Mix) and precision. For each adversarial set, we measure the spread of adversarial samples using the mean distance between each pair of samples in the set: 
+
+Spread U (A) = 
+
+M
+
+2
+
+−1 X
+
+> i̸=j
+
+∥A i − A j ∥2 (7) where M = |A| . This metric is normalized by the spread of the test set for each experiment 
+
+Spread( A) = Spread U (A)Spread U (S) . Because this metric biases towards sets containing boundary samples (samples at the edge of the super level set will by definition have higher average pairwise distance than samples spread within the interior), we include 2 extra metrics that measures how spread the samples’ adversarial scores are within the set and how deep inside the interior each method is able to go. The spread of adversarial scores (Margin J) is measured across K = 20 discretized bins bk
+
+over the interval [0 , f (x∗) − ϕ]:
+
+J(A) = − 1ln K
+
+> K
+
+X
+
+> k=1
+
+pk ln pk, pk = |{ x ∈ A : f (x) − ϕ ∈ bk}| |A| (8) where J(A) ∈ [0 , 1] measures the normalized Shannon entropy ( 1 = uniform coverage, 0 = 
+
+single bin concentration). Super level penetration is measured using the maximum adversarial score contained in each adversarial set divided by the largest possible adversarial score: mV (A) = max 
+
+> x∈A
+
+f (x) − ϕf (x∗) − ϕ (9) This metric is reported alongside with the % of samples inside the adversarial set that exceeds the test set’s ( S) largest adversarial score. The following tables report two ablation experiments and our main benchmark experiment. Table 1 and Table 2 report representative ablation results across all toy functions in 100 D, while Table 3 contains the full results of our benchmark experiment; all extended analysis is in Appendix A. All experiments use 30 seeds and a budget of 650 , with the best-performing calibration budget from our sweep ( 17% , Table 6). Calibration queries count against ATLAS’s budget; AP2L receives its calibration set outside its budget. Full settings for ATLAS and the baselines are in Table 5, and Table 8 reports ATLAS with a single default weight setting shared across all benchmarks. Table 1: Calibration is what makes ATLAS work in high dimensions. We vary the number of calibration samples NC drawn from the fixed total budget B = 650 , leaving B − NC for sampling. We use 30 seeds. At 100D, adding just 50 calibration samples restores classification performance (from .163, .003, and .100 to .322, .288 and .457 for Ack, Rast, Rosen). The benefit grows with dimension (See table 6 for full analysis).                                                                             
+
+> Func Dim Calib. NC(% of B) F1 (Mix) ↑Rec S%↑Prec (Mix) % ↑1
+> Ackley 100D
+> 0(0%) 0.163 .020 9.21.377 .12.7
+> 50 (8%) 0.322 .069 22 .86.260 .36.3
+> 100 (15%) 0.305 .056 21 .05.760 .65.1
+> 250 (38%) 0.199 .050 12 .13.763 .45.4
+> 375 (58%) 0.029 .028 1.51.572 .910 .6
+> Rast. 100D
+> 0(0%) 0.003 .002 0.20.194 .63.2
+> 50 (8%) 0.288 .051 20 .35.254 .06.1
+> 100 (15%) 0.278 .035 19 .13.553 .74.3
+> 250 (38%) 0.251 .030 16 .82.751 .03.3
+> 375 (58%) 0.214 .046 13 .73.851 .64.1
+> Rosen. 100D
+> 0(0%) 0.100 .035 5.32.090 .21.6
+> 50 (8%) 0.457 .037 43 .69.652 .29.9
+> 100 (15%) 0.455 .041 41 .98.052 .88.9
+> 250 (38%) 0.447 .026 39 .04.653 .97.1
+> 375 (58%) 0.423 .025 36 .14.152 .77.5
+> 1No calibration attains high precision by predicting few super-level points, at the cost of recall. This is undesirable for a security analysis tool, whose purpose is to catch as many adversarial inputs as possible.
+
+6Published as a conference paper at ICLR 2027 Table 2: In 100D, saturation and boundary sampling allow ATLAS to produce a more diverse adversarial set while having robust model estimation. All variants share the same sampling budget (B = 538) and number of trust regions; ATLAS-b uses only boundary regions, ATLAS-s only satura-tion, and ATLAS a 1:1 split. Subscripts are standard deviations. Each single-mode variant performs as designed. Saturation sampling harvests adversarial points (nSuper/B ≈ 90%), while boundary sam-pling gives the widest spatial spread. Each fails somewhere: ATLAS-s collapses in F1 on Rastrigin and Rosenbrock ( ≈ 0.01 ), and ATLAS-b finds almost no adversarial points on Rastrigin. Only AT-LAS is robust across all landscapes. See Table 7 in the Appendix for full analysis.                                                                                                         
+
+> Learned Model Metrics Sampling Set Metrics Func Dim Arm F1 (Mix) ↑Rec S%↑Prec (Mix) % ↑mV ( %)↑Margin J ↑Spread ↑nSuper/B (%) ↑BAckley 100D
+> ATLAS-b 0.223 .082 14 .06.068 .99.10.039 .022 (1 .9) 0.001 .004 0.913 .026 48 .36.5538
+> ATLAS-s 0.311 .067 21 .66.460 .44.80.053 .005 (21 .9) 0.006 .005 0.825 .010 85 .72.8538
+> ATLAS 0.307 .038 20 .83.660 .63.70.051 .006 (20 .3) 0.006 .007 0.837 .007 52 .02.2538
+> Rast. 100D
+> ATLAS-b 0.255 .059 16 .25.167 .15.70.119 .063 (0 .0) 0.249 .128 0.816 .143 1.51.1538
+> ATLAS-s 0.011 .010 0.60.583 .28.10.317 .017 (4 .2) 0.532 .013 1.080 .021 90 .92.0538
+> ATLAS 0.273 .036 18 .73.852 .93.80.304 .023 (3 .6) 0.515 .017 1.032 .018 50 .01.7538
+> Rosen. 100D
+> ATLAS-b 0.503 .052 62 .511 .345 .210 .90.586 .150 (3 .8) 0.649 .080 0.959 .027 22 .38.6538
+> ATLAS-s 0.015 .011 0.80.694 .93.00.657 .030 (21 .2) 0.786 .011 0.799 .007 90 .91.7538
+> ATLAS 0.461 .028 41 .05.755 .08.40.844 .028 (32 .8) 0.914 .011 0.839 .007 47 .62.8538
+
+6 IMAGE EXPERIMENTS : M APPING ADVERSARIAL REGIONS THROUGH 
+
+LATENT -S PACE SEARCH 
+
+We evaluate whether ATLAS can recover adversarial sets for image-classification models. Follow-ing the generator-constrained attack setting of (Song et al., 2018), we search the latent space of a fixed class-conditional generator. We consider only the space of natural images for candidate ad-versaries and learn a value function, V(x) whose super level set represents latent samples z ∈ Z 
+
+of a fixed generator, G(z, s ) → I in which the decoded image represents a chosen source class 
+
+s ∈ Rnc that gets classified by the target as a chosen target class. For each dataset–model set-ting, we evaluate 20 source–target class pairs. We restrict the latent domain to a bounded region around the generator prior mean, Z = z ∈ Rd : ∥z − μlatent ∥∞ ≤ zscore σlatent , where zscore 
+
+indicated zscore -deviations away from the latent prior’s mean μlatent . To align successful targeted attacks with a super-zero level set, we define the negated objective function which takes from Car-lini&Wagner (Carlini and Wagner, 2017): 
+
+O(x′; t) = bZt(x′) − max 
+
+> i̸=t
+
+bZi(x′) (10) where bZ(x) = z be the output of all neural layers of the target system (the logits before softmax is applied) so T (x) = softmax ( bZ(x)) . Under this formulation, the successful targeted attack region 
+
+A := {x ∈ X : fadv (x) ≥ ϕ} corresponds directly to the non-negative super-level set of Eq. 10. We further use a nearest neighbor metric (Clark and Evans, 1954) to measure the ratio of mean nearest-neighbour distance to mean pairwise distance within the set: 
+
+Spacing( A) = 
+
+> 1
+> M
+
+P 
+
+> i
+
+min j̸ =i ∥A i − A j ∥2
+
+Spread U (A) (11) Values near 1 indicate points spread evenly through the region they occupy; values near 0 indicate the set collapses into a few tight clusters. We compare ATLAS to NES, SignHunter, BayesOpt, and uniform random sampling (see Appendix D for details) and report the results in Table 4. At 650-budget, the results show that ATLAS recovers the most representative adversarial set. Al-though ATLAS recovers fewer raw points than a couple of the baselines, it distributes its points far better than any of the other baselines. On the one hand, uniform random sampling clusters the least (by construction) with Spacing = 0.88-0.93 but finds the fewest adversarial points (1-19). On the other, NES and SignHunter finds the most adversarial points, but with either less spread 
+
+Spread = 1.14-2.43 (v. 1.51-3.82) or more clustering Spacing = 0.24-0.31 (v. 0.55–0.65) respec-tively, implying that their points collapse into smaller, tighter neighborhoods. ATLAS is the only method that achieves best on Margin J in 4 of 5 targets with good size, ASR, spatial spread and spacing. Although, it may be slightly slower to the first success than BayesOpt ( Qf irst = 83–229 vs. 36–102 for BayesOpt), it spends its budget effectively finding more adversarial regions to find 7Published as a conference paper at ICLR 2027 Table 3: ATLAS produces better recall and F1 while recovering more adversarial points per query, using a smaller sampling budget (B). We compare ATLAS’s calibration (112 samples) and 1:1 boundary-to-saturation sampling against our baselines at B = 538 vs. 650. Subscripts are standard deviations. ATLAS trades precision for recall (recall best in 9 of 9 and F1 (Mix) best in 8 of 9), yielding a model that misses fewer adversarial inputs. It also finds the most super-level points per unit budget (8 of 9) and recovers a better-distributed set — the highest margin spread and depth in every experiment, with dispersion within 30% of the best. 
+
+Learned Model Metrics Sampling Set Metrics Func Dim Method F1 (Mix) ↑ Rec S % ↑ Prec% ↑ mV ( %) ↑ Margin J ↑ Spread ↑ nSuper/B (%) ↑ BAckley 
+
+10D AP2L 0.088 .203 14 .029 .9 49 .337 .9 0.096 .033 (0 .0) 0.128 .072 0.957 .102 5.59.1 650 TRLSE 0.681 .005 59 .21.5 80 .21.5 0.113 .044 (0 .0) 0.042 .011 1.019 .005 26 .02.0 650 ATLAS 0.664 .020 63 .64.9 69 .84.1 0.304 .048 (0 .0) 0.368 .016 0.735 .033 53 .73.3 538 50D AP2L 0.010 .024 0.51.3 81 .64.5 0.021 .009 (0 .0) 0.000 .000 0.991 .009 2.93.5 650 TRLSE 0.391 .022 27 .42.4 68 .62.1 0.035 .008 (0 .1) 0.001 .003 0.943 .003 26 .81.2 650 ATLAS 0.454 .016 61 .94.4 36 .23.2 0.077 .009 (18 .0) 0.093 .018 0.784 .007 52 .01.1 538 100D AP2L 0.002 .002 0.10.1 7.01.6 0.010 .003 (0 .0) 0.000 .000 1.001 .004 3.52.6 650 TRLSE 0.182 .031 10 .32.0 79 .02.4 0.021 .003 (0 .1) 0.000 .000 0.928 .002 39 .21.2 650 ATLAS 0.307 .038 20 .83.6 60 .63.7 0.051 .006 (20 .3) 0.006 .007 0.837 .007 52 .02.2 538 
+
+Rast. 
+
+10D AP2L 0.259 .192 31 .530 .5 53 .323 .7 0.474 .110 (0 .1) 0.643 .061 0.900 .081 12 .911 .4 650 TRLSE 0.366 .034 26 .03.5 62 .91.5 0.489 .051 (0 .0) 0.608 .020 0.989 .012 30 .02.0 650 ATLAS 0.432 .025 51 .110 .0 39 .35.7 0.644 .061 (0 .2) 0.729 .014 0.802 .031 48 .73.0 538 50D AP2L 0.245 .201 21 .121 .1 61 .414 .0 0.221 .049 (0 .0) 0.388 .067 0.991 .015 12 .811 .7 650 TRLSE 0.396 .019 27 .11.8 73 .71.3 0.257 .032 (0 .0) 0.443 .015 0.952 .004 35 .21.5 650 ATLAS 0.471 .024 38 .84.6 60 .93.3 0.339 .029 (0 .9) 0.541 .021 0.989 .021 42 .42.6 538 100D AP2L 0.227 .144 14 .99.6 67 .12.7 0.150 .029 (0 .0) 0.276 .054 0.995 .005 15 .510 .2 650 TRLSE 0.000 .000 0.00.0 – 0.183 .021 (0 .0) 0.327 .015 0.922 .002 47 .13.1 650 ATLAS 0.273 .036 18 .73.8 52 .93.8 0.304 .023 (3 .6) 0.515 .017 1.032 .018 50 .01.7 538 
+
+Rosen. 
+
+10D AP2L 0.019 .044 10 .530 .4 50 .349 .7 0.676 .127 (0 .0) 0.742 .168 0.993 .030 4.03.1 650 TRLSE 0.682 .016 57 .62.3 83 .82.0 0.812 .059 (0 .0) 0.811 .015 1.086 .015 32 .85.8 650 ATLAS 0.700 .015 79 .44.1 63 .14.7 0.879 .045 (0 .0) 0.913 .014 0.959 .020 33 .15.9 538 50D AP2L 0.006 .024 3.618 .3 60 .745 .8 0.326 .058 (0 .0) 0.528 .039 0.997 .007 3.82.8 650 TRLSE 0.185 .024 10 .61.5 75 .22.2 0.536 .053 (0 .0) 0.712 .015 0.921 .004 37 .22.2 650 ATLAS 0.300 .055 18 .84.6 78 .44.7 0.730 .027 (3 .0) 0.852 .008 0.846 .006 59 .51.1 538 100D AP2L 0.006 .022 3.618 .3 4.13.8 0.250 .055 (0 .0) 0.417 .065 0.998 .008 3.52.6 650 TRLSE 0.000 .000 0.00.0 – 0.397 .025 (0 .0) 0.603 .011 0.937 .001 66 .31.7 650 ATLAS 0.461 .028 41 .05.7 55 .08.4 0.844 .028 (32 .8) 0.914 .011 0.839 .007 47 .62.8 538  
+
+> 1
+
+Sampling deep inside the super level set sacrifices average dispersion, since samples there are closer together than samples along the boundary. As ATLAS goes deep into the super level set to produce a set with more representative margin spread, its set’s coverage decreases on average, which is why our dispersion spread is somewhat lower than our baselines. Although it loses coverage, it gains coverage of adversarial scores that would not otherwise be recoverable with the other baselines or uniform sampling. At 50D and 100D, ATLAS recovers adversarial scores that are higher than every sample in the super level test set. 
+
+as many diverse model failures as possible as opposed to cheaply sampling the same attacks near already known regions. The former is much better for a robust security evaluation. Figure 3 shows ATLAS’s representative sets for each target and Appendix F reports an example security audit. 
+
+7 CONCLUSION 
+
+In conclusion, this paper presents ATLAS, a framework that reformulates adversarial discovery as a region-recovery problem, leverages active learning and level-set estimation for this problem, and introduces new mechanisms that are specifically required for adversarial-set and adversarial classification construction. In this work, we find that ATLAS can construct more diverse adversarial sets, which provides a useful foundation for building automated red-teaming tools. There is still some variance in performance between function landscapes. Future work involves investigating on more targets and training target models on ATLAS’s generated adversarial sets. 8Published as a conference paper at ICLR 2027 Table 4: ATLAS matches the best attack success rate while returning the most representative adversarial set. Each method is given B = 650 oracle queries per experiment, averaged over 20 source–target class pairs per target model; subscripts are standard deviations across pairs and the best value per metric and target is in bold. ASR is the fraction of pairs with at least one success; Qf irst 
+
+is queries to first success, computed over succeeding pairs only. Margin J, Spread and Spacing 
+
+describe how the recovered points are distributed (higher = more of the region covered, covered more evenly). ATLAS is the only method achieving the best distribution of adversarial scores (Margin J) with good spatial spread and competitive set size. Standard CIFAR-10 and ImageNet targets are in Table 9. 
+
+Attack Adversarial Set Data Target Method ASR% ↑ Qf irst ↓ Margin J ↑ Spread ↑ Adv. Count ↑ Spacing ↑
+
+MNIST Standard 
+
+ATLAS 95 164 85 0.859 0.091 1.94 0.15 174 .4109 .1 0.63 0.04 
+
+NES 75 181 162 0.745 0.238 1.14 0.12 225 .9199 .2 0.58 0.13 
+
+SignHunter 100 60 48 0.816 0.075 2.99 0.31 255 .499 .4 0.27 0.03 
+
+Uniform 26 408 211 0.136 0.207 2.25 0.03 1.23.5 0.92 0.10 
+
+BayesOpt a 100 36 90 – – – –
+
+CIFAR-10 Adv. 
+
+ATLAS 100 83 81 0.823 0.114 1.88 0.18 203 .496 .9 0.57 0.03 
+
+NES 95 121 95 0.803 0.162 1.24 0.13 282 .6172 .2 0.52 0.08 
+
+SignHunter 100 47 67 0.770 0.109 3.00 0.31 306 .6142 .4 0.24 0.05 
+
+Uniform 85 96 163 0.356 0.204 2.24 0.09 10 .915 .8 0.87 0.07 
+
+BayesOpt a 100 44 45 – – – –
+
+ImageNet Adv. 
+
+ATLAS 100 162 158 0.745 0.206 3.82 0.75 115 .1104 .4 0.55 0.14 
+
+NES 85 98 133 0.703 0.194 2.43 0.23 144 .6180 .2 0.61 0.09 
+
+SignHunter 85 147 150 0.583 0.189 3.37 0.97 195 .4112 .1 0.26 0.08 
+
+Uniform 55 25 118 0.391 0.264 4.48 0.12 15 .339 .9 0.93 0.05 
+
+BayesOpt a 100 102 121 – – – – 
+
+> a
+
+BayesOpt is run in its published configuration, which stops at its first adversarial point, so it is read for ASR and Qf irst only: its Count is 1 by construction. source 
+
+↓
+
+target clean successful targeted attacks found by ATLAS 
+
+> MNIST
+
+6
+
+↓
+
+2
+
+> CIFAR-10
+
+truck 
+
+↓
+
+automobile 
+
+> ImageNet
+
+stingray 
+
+↓
+
+g.w. shark 
+
+> (adv.)
+> CIFAR-10
+
+ship 
+
+↓
+
+automobile 
+
+> (adv.)
+> ImageNet
+
+hen 
+
+↓
+
+goldfish 
+
+Figure 3: Adversarial sets expose shared failure modes that single attacks cannot. Represen-tative examples discovered by ATLAS under a 650-query budget; rows below the double rule are adversarially trained targets. Each row is one source →target pair: the leftmost image is a clean source-class sample, the remainder are members of the recovered adversarial set. Read jointly, each set reveals what the target model keys on. For stingray →great white (g.w.) shark, every recovered image contains an open ocean rather than a shark’s physical features; for goldfish targets, the re-covered images contain flower petals and feathers perhaps standing in for fin-like features. These patterns point to areas for more needed study and analysis for the target model. Appendix E gives the full grid and analysis. 9Published as a conference paper at ICLR 2027 
+
+REFERENCES 
+
+NIST AI. Artificial intelligence risk management framework (ai rmf 1.0). URL: https://nvlpubs. nist. gov/nistpubs/ai/nist. ai , 1(0):0–1, 2023. Abdullah Al-Dujaili and Una-May O’Reilly. Sign bits are all you need for black-box attacks. In International conference on learning representations , 2020. Maksym Andriushchenko, Francesco Croce, Nicolas Flammarion, and Matthias Hein. Square attack: a query-efficient black-box adversarial attack via random search. In European conference on computer vision , pages 484–501. Springer, 2020. Anish Athalye, Nicholas Carlini, and David Wagner. Obfuscated gradients give a false sense of security: Circumventing defenses to adversarial examples. In International conference on machine learning , pages 274–283. PMLR, 2018. Gilbert Bahati, Marsalis Gibson, and Alexandre Bayen. Multi-adversarial safety analysis for autonomous vehicles. arXiv preprint arXiv:2112.14344 , 2021. Andrew Brock, Jeff Donahue, and Karen Simonyan. Large scale gan training for high fidelity natural image synthesis. arXiv preprint arXiv:1809.11096 , 2018. Brent Bryan, Robert C Nichol, Christopher R Genovese, Jeff Schneider, Christopher J Miller, and Larry Wasser-man. Active learning for identifying function threshold boundaries. Advances in neural information pro-cessing systems , 18, 2005. Nicholas Carlini and David Wagner. Towards evaluating the robustness of neural networks. In 2017 ieee symposium on security and privacy (sp) , pages 39–57. Ieee, 2017. Shuyu Cheng, Yibo Miao, Yinpeng Dong, Xiao Yang, Xiao-Shan Gao, and Jun Zhu. Efficient black-box adversarial attacks via bayesian optimization guided by a function prior. arXiv preprint arXiv:2405.19098 ,2024. Fang-Chieh Chou, Marsalis Gibson, Rahul Bhadani, Alexandre M Bayen, and Jonathan Sprinkle. Reacha-bility analysis for followerstopper: Safety analysis and experimental results. In 2021 IEEE International Conference on Robotics and Automation (ICRA) , pages 8607–8613. IEEE, 2021. Philip J Clark and Francis C Evans. Distance to nearest neighbor as a measure of spatial relationships in populations. Ecology , 35(4):445–453, 1954. Francesco Croce and Matthias Hein. Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacks. In International conference on machine learning , pages 2206–2216. PMLR, 2020. Sampada Deglurkar, Ebonye Smith, Jingqi Li, and Claire J Tomlin. Active calibration of reachable sets using approximate pick-to-learn. IEEE Control Systems Letters , 2026. David Eriksson, Michael Pearce, Jacob Gardner, Ryan D Turner, and Matthias Poloczek. Scalable global optimization via local bayesian optimization. Advances in neural information processing systems , 32, 2019. Kevin Eykholt, Ivan Evtimov, Earlence Fernandes, Bo Li, Amir Rahmati, Chaowei Xiao, Atul Prakash, Ta-dayoshi Kohno, and Dawn Song. Robust physical-world attacks on deep learning visual classification. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , pages 1625–1634, 2018. Marsalis Gibson, David Babazadeh, Claire Tomlin, and Shankar Sastry. Hacking predictors means hacking cars: Using sensitivity analysis to identify trajectory prediction vulnerabilities for autonomous driving security. In 
+
+6th Annual Learning for Dynamics & Control Conference , pages 745–757. PMLR, 2024. Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy. Explaining and harnessing adversarial examples. 
+
+arXiv preprint arXiv:1412.6572 , 2014. Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun. Deep residual learning for image recognition. In 
+
+Proceedings of the IEEE conference on computer vision and pattern recognition , pages 770–778, 2016. Andrew Ilyas, Logan Engstrom, Anish Athalye, and Jessy Lin. Black-box adversarial attacks with limited queries and information. In International conference on machine learning , pages 2137–2146. PMLR, 2018. Andrew Ilyas, Shibani Santurkar, Dimitris Tsipras, Logan Engstrom, Brandon Tran, and Aleksander Madry. Adversarial examples are not bugs, they are features. Advances in neural information processing systems ,32, 2019. 
+
+10 Published as a conference paper at ICLR 2027 
+
+Surgan Jandial, Puneet Mangla, Sakshi Varshney, and Vineeth Balasubramanian. Advgan++: Harnessing latent layers for adversary generation. In 2019 IEEE/CVF International Conference on Computer Vision Workshop (ICCVW) , pages 2045–2048. IEEE, 2019. Minguk Kang, Joonghyuk Shin, and Jaesik Park. Studiogan: a taxonomy and benchmark of gans for image synthesis. IEEE Transactions on Pattern Analysis and Machine Intelligence , 45(12):15725–15742, 2023. Alexey Kurakin, Ian Goodfellow, and Samy Bengio. Adversarial machine learning at scale. arXiv preprint arXiv:1611.01236 , 2016. Alexey Kurakin, Ian J Goodfellow, Samy Bengio, et al. Adversarial examples in the physical world. Artificial intelligence safety and security , 2, 2018. MITRE Corporation. Atlas: Adversarial threat landscape for artificial-intelligence systems. https: //atlas.mitre.org/ , 2021. Accessed: 2026-09-04. Milad Nasr, Nicholas Carlini, Chawin Sitawarin, Sander V Schulhoff, Jamie Hayes, Michael Ilie, Juliette Pluto, Shuang Song, Harsh Chaudhari, Ilia Shumailov, et al. The attacker moves second: Stronger adaptive attacks bypass defenses against llm jailbreaks and prompt injections. arXiv preprint arXiv:2510.09023 , 2025. Giang Ngo, Dat Phan Trong, Dang Nguyen, and Sunil Gupta. High-dimensional level set estimation with trust regions and double acquisition functions. arXiv preprint arXiv:2602.12391 , 2026. Dario Paccagnan, Marco Campi, and Simone Garatti. The pick-to-learn algorithm: Empowering compression for tight generalization bounds and improved post-training performance. Advances in Neural Information Processing Systems , 36:18165–18185, 2023. Nicolas Papernot, Patrick McDaniel, Ian Goodfellow, Somesh Jha, Z Berkay Celik, and Ananthram Swami. Practical black-box attacks against machine learning. In Proceedings of the 2017 ACM on Asia conference on computer and communications security , pages 506–519, 2017. Omid Poursaeed, Isay Katsman, Bicheng Gao, and Serge Belongie. Generative adversarial perturbations. In 
+
+2018 IEEE/CVF conference on computer vision and pattern recognition , pages 4422–4431. IEEE, 2018. Alec Radford, Luke Metz, and Soumith Chintala. Unsupervised representation learning with deep convolutional generative adversarial networks. arXiv preprint arXiv:1511.06434 , 2015. Sylvestre-Alvise Rebuffi, Sven Gowal, Dan A Calian, Florian Stimberg, Olivia Wiles, and Timothy Mann. Fixing data augmentation to improve adversarial robustness. arXiv preprint arXiv:2103.01946 , 2021. Binxin Ru, Adam Cobb, Arno Blaas, and Yarin Gal. Bayesopt adversarial attack. In International conference on learning representations , 2019. Hadi Salman, Andrew Ilyas, Logan Engstrom, Ashish Kapoor, and Aleksander Madry. Do adversarially robust imagenet models transfer better? Advances in neural information processing systems , 33:3533–3545, 2020. Satya Narayan Shukla, Anit Kumar Sahu, Devin Willmott, and J Zico Kolter. Black-box adversarial attacks with bayesian optimization. arXiv preprint arXiv:1909.13857 , 2019. Chandan Singh. Pretrained GANs in PyTorch for MNIST/CIFAR, May 2019a. URL https://doi.org/ 10.5281/zenodo.2778737 .Chandan Singh. gan-vae-pretrained-pytorch: Pretrained GANs + VAEs + classifiers for MNIST/CIFAR in PyTorch. https://github.com/csinva/gan-vae-pretrained-pytorch , 2019b. Accessed: 2026-09-25. Yang Song, Rui Shu, Nate Kushman, and Stefano Ermon. Constructing unrestricted adversarial examples with generative models. Advances in neural information processing systems , 31, 2018. Christopher KI Williams and Carl Edward Rasmussen. Gaussian processes for machine learning , volume 2. MIT press Cambridge, MA, 2006. Chaowei Xiao, Bo Li, Jun-Yan Zhu, Warren He, Mingyan Liu, and Dawn Song. Generating adversarial exam-ples with adversarial networks. arXiv preprint arXiv:1801.02610 , 2018. Lei Xu and Junhai Zhai. Dcvae-adv: A universal adversarial example generation method for white and black box attacks. Tsinghua Science and Technology , 29(2):430–446, 2023. 
+
+11 Published as a conference paper at ICLR 2027 
+
+Qiusi Zhan, Richard Fang, Henil Shalin Panchal, and Daniel Kang. Adaptive attacks break defenses against indirect prompt injection attacks on llm agents. In Findings of the Association for Computational Linguistics: NAACL 2025 , pages 7116–7132, 2025. Shudong Zhang, Haichang Gao, Chao Shu, Xiwen Cao, Yunyi Zhou, and Jianping He. Black-box bayesian adversarial attack with transferable priors. Machine Learning , 113(4):1511–1528, 2024. 
+
+A FULL TOY EXPERIMENT EVALUATION 
+
+This supplementary appendix contains the comprehensive, fully expanded empirical tables across all benchmark geometry configurations: Ackley, Rastrigin, and Rosenbrock across 10 D, 50 D, and 
+
+100 D settings. Our adversarial objective function for this experiment is: O(x) = −ftoy (x − p),where ftoy is the function being minimized and p is a design parameter used to offset the minimizer. Each method is run with 650 queries. Dataset sizes, calibration set sizes, and the number of trust regions are kept the same across methods. We use a 1:1 ratio of saturation to boundary regions and maintain 4 trust regions in all experiments. Full settings, including footnotes on how weights were chosen and where they deviate, are in Table 5. We do not alter the baseline implementations, since doing so would require re-tuning them. ATLAS includes several speed-ups to its optimization (Appendix C). Table 6 reports the full calibration sweep and Table 7 the full boundary/saturation ablation. Table 8 repeats the main benchmark using a single default weight setting ( c=2 , w=40 )shared across all benchmarks in place of per-benchmark weights. ATLAS retains the best recall in 8 of 9 settings under these defaults. Table 5: Experiment settings for ATLAS and baselines. Shared settings are identical across methods; matched settings are set equal between ATLAS and the baseline that has the counterpart. Baseline-specific values follow each method’s reference implementation. d-dependent values are listed as 10D / 50D / 100D. Baseline-specific values follow each method’s reference implementation. Weights c and w are set per benchmark to match the scale of βσ (footnote 2). With a single default setting ( c=2 , w=40 ) across all benchmarks, ATLAS still achieves the best recall in 8 of 9 and the best F1 in 7 of 9 (Table 8), so the reported comparison does not rest on this choice. d-dependent values are listed as 10D / 50D / 100D.                                                                                  
+
+> Parameter ATLAS TRLSE AP2L
+> Experimental Params
+> query budget bG650 (112 calib. + 538) 650 650 (+112 calib.) 1
+> seeds; test sets 30; 50K ( S), 1M (Mix) super-level fraction; functions 0.05; same domain and minimizer offset points per acquisition 111surrogate GP, Mat´ ern-5/2 GP, Mat´ ern-5/2 (ARD) GP, Mat´ ern-5/2
+> Common Params
+> trust regions 2 bound. + 2 sat. 4–uncertainty weight β1.96 41.96 31.28 3
+> calibration samples 112 –112 region volume V0.1 / 0.1 / 0.5100 (fixed) init 0.033/0.033/ 0.5100 ; max 0.1/0.1/0.01 –candidate pool 520K 100K (Sobol) 100K
+> Method-specific
+> ATLAS c=2 (Rast. 100D: 16); wper setting 2
+> ;ρ=0 .5;ˆα=10 ,wg=0 .05 ,η=2 l; GP refit every 4 rounds TRLSE Vmin =Vinit /2; regions persist and resize; classify at threshold 0 AP2L ˆethreshold 0.3; decay 0.95; conformal α=0 .05
+> 1AP2L’s calibration set is drawn outside its query budget; ATLAS’s is counted against it.
+> 2For Rosenbrock and Rastrigin, wscales with dimension. Ack. 40; Rosen. 10 3/10 5/5×10 6; Rast. 100 / (40) / 10 4.The saturation acquisition (Eq. 6) adds wP to βσ i(x), where σiis expressed in the target function’s output units. These units differ by roughly five orders of magnitude across our benchmarks and grow with dimension, so no single wbalances the two terms across settings. Therefore, to avoid a saturation acquisition dominated by the exploration term βσ i(x), we set wper benchmark to be at least the observed magnitude of βσ i
+> (w/βσ i∈[1 ,140] ), yielding the values above. Rastrigin 50D departs from this ( w= 40 ) because raising wto that scale shifted budget from boundary sampling and reduced F1 (0.54 to 0.20). With a single default setting ( c=2 ,w=40 ) for all benchmarks (Table 8), ATLAS still leads recall in 8 of 9 settings and F1 in 7 of 9, so the reported comparison does not rest on this choice.
+> 3Method’s original setting.
+> 4Matched to TRLSE’s setting.
+> 5ATLAS draws from a smaller candidate pool (20K vs. 100K), which if anything disadvantages it
+
+12 Published as a conference paper at ICLR 2027 Table 6: In general, calibration lets ATLAS learn a better model with fewer samples. We vary the number of calibration samples NC drawn from the fixed total budget B = 650 , leaving B − NC
+
+for sampling. We evaluate over 30 seeds. A small calibration set ( NC = 50–100, 8–15% of B) gives the best or near-best F1 in every experiment and higher recall than no calibration in all nine. Thus, for our main experiment, we use NC = 112(17%) , inside of this range. The benefit grows with dimension. At 10D, the GP may learn well without calibration (Rosenbrock 10D), while at 100D, removing calibration may collapse performance (F1 for Rastrigin 0.003, Rosenbrock 0.100). While calibration is helpful, over-allocating the budget to calibration (58%) degrades performance. 
+
+Func Dim Calib. NC (% of B) F1 (Mix) ↑ Rec S % ↑ Prec (Mix) % ↑1
+
+Ackley 
+
+10D 
+
+0 (0%) 0.678 .012 60 .32.1 77 .51.9
+
+50 (8%) 0.663 .022 62 .75.4 71 .04.1
+
+100 (15%) 0.687 .025 66 .65.0 71 .43.8
+
+250 (38%) 0.664 .016 62 .25.6 72 .15.8
+
+375 (58%) 0.662 .020 63 .35.3 70 .35.4
+
+50D 
+
+0 (0%) 0.226 .075 14 .16.4 72 .09.1
+
+50 (8%) 0.448 .019 63 .54.6 34 .93.3
+
+100 (15%) 0.450 .018 63 .14.4 35 .23.3
+
+250 (38%) 0.460 .012 59 .85.2 37 .83.4
+
+375 (58%) 0.367 .075 32 .210 .8 47 .25.0
+
+100D 
+
+0 (0%) 0.163 .020 9.21.3 77 .12.7
+
+50 (8%) 0.322 .069 22 .86.2 60 .36.3
+
+100 (15%) 0.305 .056 21 .05.7 60 .65.1
+
+250 (38%) 0.199 .050 12 .13.7 63 .45.4
+
+375 (58%) 0.029 .028 1.51.5 72 .910 .6
+
+Rast. 
+
+10D 
+
+0 (0%) 0.390 .020 30 .02.5 56 .23.4
+
+50 (8%) 0.430 .023 50 .612 .4 41 .210 .3
+
+100 (15%) 0.421 .050 35 .111 .1 61 .010 .9
+
+250 (38%) 0.428 .018 49 .89.4 40 .19.1
+
+375 (58%) 0.422 .021 48 .66.0 37 .93.6
+
+50D 
+
+0 (0%) 0.304 .022 19 .21.8 73 .81.9
+
+50 (8%) 0.471 .039 39 .87.7 60 .45.6
+
+100 (15%) 0.473 .018 39 .03.2 60 .82.5
+
+250 (38%) 0.420 .078 32 .18.6 65 .96.4
+
+375 (58%) 0.191 .140 12 .19.8 82 .810 .1
+
+100D 
+
+0 (0%) 0.003 .002 0.20.1 94 .63.2
+
+50 (8%) 0.288 .051 20 .35.2 54 .06.1
+
+100 (15%) 0.278 .035 19 .13.5 53 .74.3
+
+250 (38%) 0.251 .030 16 .82.7 51 .03.3
+
+375 (58%) 0.214 .046 13 .73.8 51 .64.1
+
+Rosen. 
+
+10D 
+
+0 (0%) 0.732 .006 73 .12.5 73 .42.1
+
+50 (8%) 0.701 .020 80 .94.7 62 .35.6
+
+100 (15%) 0.698 .015 79 .33.9 62 .64.2
+
+250 (38%) 0.691 .013 68 .55.4 70 .34.9
+
+375 (58%) 0.643 .033 56 .78.1 76 .56.3
+
+50D 
+
+0 (0%) 0.333 .038 21 .63.7 75 .43.3
+
+50 (8%) 0.342 .065 23 .17.1 73 .77.2
+
+100 (15%) 0.312 .057 20 .05.2 76 .85.6
+
+250 (38%) 0.268 .042 16 .23.1 82 .63.5
+
+375 (58%) 0.209 .046 12 .03.2 87 .04.0
+
+100D 
+
+0 (0%) 0.100 .035 5.32.0 90 .21.6
+
+50 (8%) 0.457 .037 43 .69.6 52 .29.9
+
+100 (15%) 0.455 .041 41 .98.0 52 .88.9
+
+250 (38%) 0.447 .026 39 .04.6 53 .97.1
+
+375 (58%) 0.423 .025 36 .14.1 52 .77.5 
+
+> 1
+
+No calibration attains high precision by predicting few super-level points, at the cost of recall. This is undesirable for a security analysis tool, whose purpose is to catch as many adversarial inputs as possible. 
+
+13 Published as a conference paper at ICLR 2027 Table 7: Saturation and boundary sampling allow ATLAS to produce a more diverse adversarial set while having robust model estimation across functions and dimensions. All variants use same sampling budget (B=538) and 4 trust regions. ATLAS-b uses only boundary regions, ATLAS-s only saturation, and ATLAS a 1:1 split. ATLAS-s and ATLAS have the best margin spread and depth. Saturation, as designed, helps harvest adversarial examples, winning nSuper/B in 7 of 9 cells, often at about 90%. ATLAS-b has the best or near best spatial spread and precision 1 in most experiments, helping us explore widely and find boundary points, but loses at margin spread and depth. ATLAS is the only variant that is robust across all landscapes with model estimation and adversarial set quality. This highlights the need to balance both sampling designs. 
+
+Learned Model Metrics Sampling Set Metrics Func Dim Arm F1 (Mix) ↑ Rec S % ↑ Prec (Mix) % ↑ mV ( %) ↑ Margin J ↑ Spread ↑ nSuper/B (%) ↑ BAckley 
+
+10D 
+
+ATLAS-b 0.613 .060 79 .64.6 51 .110 .3 0.126 .043 (0 .0) 0.074 .016 0.973 .008 38 .82.0 538 
+
+ATLAS-s 0.466 .047 71 .38.8 35 .46.7 0.315 .045 (0 .0) 0.358 .011 0.734 .018 97 .60.4 538 
+
+ATLAS 0.664 .020 63 .64.9 69 .84.1 0.304 .048 (0 .0) 0.368 .016 0.735 .033 53 .73.3 538 50D 
+
+ATLAS-b 0.010 .054 0.63.4 – 0.038 .009 (0 .1) 0.001 .003 0.929 .006 50 .92.4 538 
+
+ATLAS-s 0.466 .012 65 .03.7 36 .52.5 0.080 .010 (19 .1) 0.097 .019 0.793 .010 90 .72.8 538 
+
+ATLAS 0.454 .016 61 .94.4 36 .23.2 0.077 .009 (18 .0) 0.093 .018 0.784 .007 52 .01.1 538 100D 
+
+ATLAS-b 0.223 .082 14 .06.0 68 .99.1 0.039 .022 (1 .9) 0.001 .004 0.913 .026 48 .36.5 538 
+
+ATLAS-s 0.311 .067 21 .66.4 60 .44.8 0.053 .005 (21 .9) 0.006 .005 0.825 .010 85 .72.8 538 
+
+ATLAS 0.307 .038 20 .83.6 60 .63.7 0.051 .006 (20 .3) 0.006 .007 0.837 .007 52 .02.2 538 
+
+Rast. 
+
+10D 
+
+ATLAS-b 0.409 .096 46 .816 .6 43 .913 .1 0.456 .053 (0 .0) 0.630 .016 0.976 .026 37 .25.4 538 
+
+ATLAS-s 0.414 .027 41 .77.8 43 .58.3 0.655 .047 (0 .1) 0.765 .012 0.669 .032 63 .94.5 538 
+
+ATLAS 0.432 .025 51 .110 .0 39 .35.7 0.644 .061 (0 .2) 0.729 .014 0.802 .031 48 .73.0 538 50D 
+
+ATLAS-b 0.298 .087 19 .07.1 79 .86.2 0.308 .024 (0 .3) 0.512 .030 0.977 .029 51 .54.6 538 
+
+ATLAS-s 0.414 .046 29 .74.8 71 .04.1 0.312 .048 (0 .6) 0.515 .021 1.019 .015 33 .13.0 538 
+
+ATLAS 0.471 .024 38 .84.6 60 .93.3 0.339 .029 (0 .9) 0.541 .021 0.989 .021 42 .42.6 538 100D 
+
+ATLAS-b 0.255 .059 16 .25.1 67 .15.7 0.119 .063 (0 .0) 0.249 .128 0.816 .143 1.51.1 538 
+
+ATLAS-s 0.011 .010 0.60.5 83 .28.1 0.317 .017 (4 .2) 0.532 .013 1.080 .021 90 .92.0 538 
+
+ATLAS 0.273 .036 18 .73.8 52 .93.8 0.304 .023 (3 .6) 0.515 .017 1.032 .018 50 .01.7 538 
+
+Rosen. 
+
+10D 
+
+ATLAS-b 0.650 .057 53 .710 .4 85 .76.5 0.817 .050 (0 .0) 0.858 .015 1.041 .014 49 .42.8 538 
+
+ATLAS-s 0.691 .011 76 .04.7 63 .84.0 0.871 .050 (0 .1) 0.885 .026 0.852 .034 25 .79.3 538 
+
+ATLAS 0.700 .015 79 .44.1 63 .14.7 0.879 .045 (0 .0) 0.913 .014 0.959 .020 33 .15.9 538 50D 
+
+ATLAS-b 0.165 .108 9.76.7 84 .46.3 0.529 .080 (0 .0) 0.650 .019 0.958 .009 38 .83.5 538 
+
+ATLAS-s 0.096 .055 5.23.2 90 .24.6 0.716 .031 (1 .1) 0.794 .015 0.822 .007 91 .33.2 538 
+
+ATLAS 0.300 .055 18 .84.6 78 .44.7 0.730 .027 (3 .0) 0.852 .008 0.846 .006 59 .51.1 538 100D 
+
+ATLAS-b 0.503 .052 62 .511 .3 45 .210 .9 0.586 .150 (3 .8) 0.649 .080 0.959 .027 22 .38.6 538 
+
+ATLAS-s 0.015 .011 0.80.6 94 .93.0 0.657 .030 (21 .2) 0.786 .011 0.799 .007 90 .91.7 538 
+
+ATLAS 0.461 .028 41 .05.7 55 .08.4 0.844 .028 (32 .8) 0.914 .011 0.839 .007 47 .62.8 538  
+
+> 1
+
+– denotes precision undefined (no super-level predictions). 
+
+(a) Ackley Function (b) Rastrigin Function (c) Rosenbrock Function 
+
+Figure 4: Non-convex toy functions used in our toy experiments described in Section 5. 14 Published as a conference paper at ICLR 2027 Table 8: ATLAS with default weights. Same setup as Table 3, but with a single setting ( c=2 ,
+
+w=40 ) for every benchmark. Subscripts are standard deviations. ATLAS still achieves the best recall in 8 of 9 experiments, the best F1 (Mix) in 7 of 9, and the highest depth (mV) in all 9, with dispersion within 30% of the best. Per-benchmark weights (Table 3) mainly improve Rastrigin 100D and the adversarial-set metrics. 
+
+Learned Model Metrics Sampling Set Metrics Func Dim Method F1 ↑ Rec S % ↑ Prec% ↑ mV ( %) ↑ Margin J ↑ Spread ↑ nSuper/B (%) ↑ BAckley 
+
+10D AP2L 0.088 .203 14 .029 .9 49 .337 .9 0.096 .033 (0 .0) 0.128 .072 0.957 .102 5.59.1 650 TRLSE 0.681 .005 59 .21.5 80 .21.5 0.113 .044 (0 .0) 0.042 .011 1.019 .005 26 .02.0 650 ATLAS 0.664 .020 63 .64.9 69 .84.1 0.304 .048 (0 .0) 0.368 .016 0.735 .033 53 .73.3 538 50D AP2L 0.010 .024 0.51.3 81 .64.5 0.021 .009 (0 .0) 0.000 .000 0.991 .009 2.93.5 650 TRLSE 0.391 .022 27 .42.4 68 .62.1 0.035 .008 (0 .1) 0.001 .003 0.943 .003 26 .81.2 650 ATLAS 0.454 .016 61 .94.4 36 .23.2 0.077 .009 (18 .0) 0.093 .018 0.784 .007 52 .01.1 538 100D AP2L 0.002 .002 0.10.1 7.01.6 0.010 .003 (0 .0) 0.000 .000 1.001 .004 3.52.6 650 TRLSE 0.182 .031 10 .32.0 79 .02.4 0.021 .003 (0 .1) 0.000 .000 0.928 .002 39 .21.2 650 ATLAS 0.307 .038 20 .83.6 60 .63.7 0.051 .006 (20 .3) 0.006 .007 0.837 .007 52 .02.2 538 
+
+Rast. 
+
+10D AP2L 0.259 .192 31 .530 .5 53 .323 .7 0.474 .110 (0 .1) 0.643 .061 0.900 .081 12 .911 .4 650 TRLSE 0.366 .034 26 .03.5 62 .91.5 0.489 .051 (0 .0) 0.608 .020 0.989 .012 30 .02.0 650 ATLAS 0.413 .043 34 .57.2 54 .25.8 0.600 .053 (0 .0) 0.720 .021 0.798 .040 45 .92.6 538 50D AP2L 0.245 .201 21 .121 .1 61 .414 .0 0.221 .049 (0 .0) 0.388 .067 0.991 .015 12 .811 .7 650 TRLSE 0.396 .019 27 .11.8 73 .71.3 0.257 .032 (0 .0) 0.443 .015 0.952 .004 35 .21.5 650 ATLAS 0.470 .024 38 .84.6 60 .93.3 0.339 .029 (0 .9) 0.541 .021 0.989 .021 42 .22.6 538 100D AP2L 0.227 .144 14 .99.6 67 .12.7 0.150 .029 (0 .0) 0.276 .054 0.995 .005 15 .510 .2 650 TRLSE 0.000 .000 0.00.0 – 0.183 .021 (0 .0) 0.327 .015 0.922 .002 47 .13.1 650 ATLAS 0.066 .030 3.51.7 78 .66.5 0.203 .037 (0 .1) 0.367 .046 1.089 .037 29 .08.7 538 
+
+Rosen. 
+
+10D AP2L 0.019 .044 10 .530 .4 50 .349 .7 0.676 .127 (0 .0) 0.742 .168 0.993 .030 4.03.1 650 TRLSE 0.682 .016 57 .62.3 83 .82.0 0.812 .059 (0 .0) 0.811 .015 1.086 .015 32 .85.8 650 ATLAS 0.693 .013 79 .33.9 61 .94.0 0.877 .051 (0 .0) 0.910 .020 0.952 .028 28 .82.8 538 50D AP2L 0.006 .024 3.618 .3 60 .745 .8 0.326 .058 (0 .0) 0.528 .039 0.997 .007 3.82.8 650 TRLSE 0.185 .024 10 .61.5 75 .22.2 0.536 .053 (0 .0) 0.712 .015 0.921 .004 37 .22.2 650 ATLAS 0.498 .024 43 .84.7 58 .53.5 0.567 .071 (0 .1) 0.680 .026 0.955 .008 17 .31.3 538 100D AP2L 0.006 .022 3.618 .3 4.13.8 0.250 .055 (0 .0) 0.417 .065 0.998 .008 3.52.6 650 TRLSE 0.000 .000 0.00.0 – 0.397 .025 (0 .0) 0.603 .011 0.937 .001 66 .31.7 650 ATLAS 0.371 .020 67 .44.8 25 .72.1 0.672 .153 (21 .0) 0.797 .122 0.834 .057 13 .45.0 538  
+
+> 1
+
+Sampling deep inside the super level set sacrifices average dispersion, since samples there are closer together than samples along the boundary. As ATLAS goes deep into the super level set to produce a set with more representative margin spread, its set’s coverage decreases on average, which is why our dispersion spread is somewhat lower than our baselines. Although it loses coverage, it gains coverage of adversarial scores that would not otherwise be recoverable with the other baselines or uniform sampling. At 50D and 100D, ATLAS recovers adversarial scores that are higher than every sample in the super level test set. 
+
+B FUNCTIONS USED IN TOY EXPERIMENTS 
+
+B.1 ACKLEY FUNCTION 
+
+This function is described by the following: 
+
+ftoy (x) = − a exp 
+
+−b
+
+vuut 1
+
+d
+
+dX
+
+i=1 
+
+x2
+
+i
+
+ (12) 
+
+− exp 1
+
+d
+
+dX
+
+i=1 
+
+cos( cx i)
+
+!
+
++ a + exp(1) 
+
+where x ∈ Rd, and a = 20 , b = 0 .2, and c = 2 π. The global minimum has value 0 at x = 0.B.2 RASTRIGIN FUNCTION 
+
+This function is described by the following: 
+
+ftoy (x) = Ad +
+
+dX
+
+i=1 
+
+x2
+
+i − A cos(2 πx i) (13) where x ∈ Rd, and A = 10 . The global minimum has value 0 at x = 0.15 Published as a conference paper at ICLR 2027 B.3 ROSENBROCK FUNCTION 
+
+This function is described by the following: 
+
+ftoy (x) = 
+
+> d−1
+
+X
+
+> i=1
+
+b(xi+1 − x2 
+
+> i
+
+)2 + ( a − xi)2 (14) where x ∈ Rd, and a = 1 , b = 100 . The global minimum has value 0 at x = 1 = (1 , . . . , 1) .
+
+C IMPLEMENTATION SPEED UP 
+
+In large dimensions, most of ATLAS’s runtime comes from training a new global model on samples and choosing the new TR centers using limited memory BFGS with bound constraints (L-BFGS-B) and warm starts. To address the latter, we ultimately use analytic gradients during optimization 1
+
+and parallelize specific calculations. Both mechanisms give us tremendous speed ups, which are most beneficial after the model starts acquiring a large amount of samples during its run. The timing metrics shown are runtimes when using CPU. Depending on the choice of model and learning algorithm, further speeds up can be realized by using GPU resources. 
+
+D IMAGE EXPERIMENT DETAILS 
+
+The models chosen are ResNet50 (He et al., 2016) for CIFAR’s and ImageNet’s standard target with 93.65% and 76.13% accuracy respectively, WRN-28-10 adversarially trained ( AT ) with DDPM (Re-buffi et al., 2021) with 60.75% accuracy for CIFAR’s AT target, ResNet50 AT on Linf perturbations (Salman et al., 2020) with 54.53% accuracy for ImageNet’s AT target, and a pre-trained LeNet5 from (Singh, 2019a) with 99% accuracy. We use a conditional DCGAN (Radford et al., 2015) and BIGGAN and BIGGAN-256 (Brock et al., 2018) for our image generators for MNIST, CIFAR, and ImageNet respectively. BIGGAN and the conditional DCGAN was retrained from scratch using (Singh, 2019b) implementation to take in 32 dimensions and a source class, while the implementa-tion and trained weights for BIGGAN-256 comes from StudioGAN(Kang et al., 2023). BayesOpt is run in its native early-stopping configuration, while NES and SignHunter is ran until the full budget generating its version of an adversarial set. We tried to run BayesOpt similarly; however, we found it to be more computationally infeasible to do. We therefore report ASR and query-to-success for BayesOpt, and omit the dispersion statistics, which require the run-to-budget super-level sets. Full analysis of ATLAS, NES, SignHunter, BayesOpt, and uniform sampling is in Table 9. 
+
+E INTERPRETING ATLAS I MAGE RESULTS 
+
+For each experiment, we ask: (1) whether the generated adversarial sets contain images with visual semantics that are common under the source class with little to no features of the target class or (2) whether there are any particular characteristics or patterns that emerge from all images (realistic or not) that could indicate which features the model’s boundary region for the target class is built on. The generated adversarial sets for both MNIST and CIFAR represent the former. These are interest-ing failure cases because it represents manifold-constrained adversarial images which could present as benign or containing imperceptible perturbations but that gets misclassified by the model (most similar to L∞ attacks). On the other hand, the generated adversarial sets for ImageNet represent more of the latter. The latter is important analysis because it tells us what features the models may hone in on for a particular classification and tells us what features push the model’s decision bound-ary from one class to another. Take as example the “stingray → great white shark (g.w. shark)” row in the “Imagenet” section in Figure 5. All images contain a birds-eye view of the ocean with sightings of a stingray in the water which are all reasonable images for the stingray class. Because these images are being classified as a great white shark, this tells us that the model is most likely to key in on the ocean (a shark’s environment) rather than a shark’s features for its classification. 
+
+> 1We experiment between using analytic gradient of our placement acquisition functions and using batched finite difference as gradients. While each have their specific speed up benefits, the former displayed higher speeds for larger dimensions during longer runs.
+
+16 Published as a conference paper at ICLR 2027 Table 9: At a matched query budget, ATLAS returns better distributed adversarial sets than the query-based attacks, at comparable attack success. We compare ATLAS to NES, Sign-Hunter, BayesOpt, and uniform random sampling at finding generated images under a source class that gets misclassified into a target class by the target model. We average each metric over 20 differ-ent source-target pairs per target model, and give each method a budget of B = 650 oracle queries per experiment. Subscripts are standard deviations across pairs. Best per metric and target in bold. ASR is the fraction of pairs for which the method finds at least one adversarial example. Qf irst 
+
+is the median queries to the first adversarial example and is computed over the pairs on which the method succeeded. Thus, it is not comparable across methods with different ASR. ‘Adv. Count’ is the number of adversarial examples found. Margin J, Spread and Spacing describe how those points are distributed (higher = more of the region covered, and covered more evenly). At 650-budget, AT-LAS recovers the most representative adversarial set. It is best on Margin J in 4 of 5 targets with good spatial spread and spacing. ATLAS recovers fewer raw points than the query-based attacks but distributes them far better. The other query baselines are good at finding adversarial examples but poor at characterizing the adversarial region. SignHunter finds the most points, yet its Spacing of 0.24–0.31 versus ATLAS’s 0.55–0.65 shows they are in tight clusters; NES’s Spread of 1.14–2.43 versus ATLAS’s 1.51–3.82 shows its points are in smaller neighbourhoods than ATLAS. Uniform random sampling has more spread by construction, but finds only 1–19 points on average. 
+
+Attack Adversarial Set Data Target Method ASR% ↑ Qf irst ↓ Margin J ↑ Spread ↑ Adv. Count ↑ Spacing ↑
+
+MNIST Standard 
+
+ATLAS 95 164 85 0.859 0.091 1.94 0.15 174 .4109 .1 0.63 0.04 
+
+NES 75 181 162 0.745 0.238 1.14 0.12 225 .9199 .2 0.58 0.13 
+
+SignHunter 100 60 48 0.816 0.075 2.99 0.31 255 .499 .4 0.27 0.03 
+
+Uniform 26 408 211 0.136 0.207 2.25 0.03 1.23.5 0.92 0.10 
+
+BayesOpt a 100 36 90 – – – –
+
+CIFAR-10 Standard 
+
+ATLAS 95 203 139 0.818 0.200 1.51 0.30 71 .864 .7 0.63 0.13 
+
+NES 65 143 214 0.804 0.267 1.18 0.15 94 .2119 .4 0.57 0.10 
+
+SignHunter 100 72 104 0.762 0.078 2.92 0.41 256 .6122 .8 0.27 0.09 
+
+Uniform 60 106 103 0.492 0.259 2.23 0.15 5.29.0 0.88 0.07 
+
+BayesOpt a 95 57 54 – – – –
+
+CIFAR-10 Adv. 
+
+ATLAS 100 83 81 0.823 0.114 1.88 0.18 203 .496 .9 0.57 0.03 
+
+NES 95 121 95 0.803 0.162 1.24 0.13 282 .6172 .2 0.52 0.08 
+
+SignHunter 100 47 67 0.770 0.109 3.00 0.31 306 .6142 .4 0.24 0.05 
+
+Uniform 85 96 163 0.356 0.204 2.24 0.09 10 .915 .8 0.87 0.07 
+
+BayesOpt a 100 44 45 – – – –
+
+ImageNet Standard 
+
+ATLAS 85 229 168 0.609 0.272 3.33 0.93 86 .4112 .8 0.65 0.16 
+
+NES 90 97 200 0.720 0.250 2.41 0.34 175 .6207 .4 0.63 0.13 
+
+SignHunter 95 151 176 0.538 0.242 2.47 1.16 184 .194 .8 0.31 0.17 
+
+Uniform 60 107 185 0.342 0.262 4.49 0.13 18 .940 .7 0.93 0.06 
+
+BayesOpt a 90 b 130 121 – – – –
+
+ImageNet Adv. 
+
+ATLAS 100 162 158 0.745 0.206 3.82 0.75 115 .1104 .4 0.55 0.14 
+
+NES 85 98 133 0.703 0.194 2.43 0.23 144 .6180 .2 0.61 0.09 
+
+SignHunter 85 147 150 0.583 0.189 3.37 0.97 195 .4112 .1 0.26 0.08 
+
+Uniform 55 25 118 0.391 0.264 4.48 0.12 15 .339 .9 0.93 0.05 
+
+BayesOpt a 100 102 121 – – – – 
+
+> a
+
+BayesOpt is run in its published configuration, which stops at its first adversarial point, so it is read for ASR and Qf irst only: its Count is 1 by construction.  
+
+> b
+
+2 of the 20 batches for BayesOpt targeting the standard ImageNet were terminated. We cap a single batch at ∼12 h of wall-clock time, which they exceeded having completed only ∼490 and ∼585 of 650 queries. Neither had found an adversarial point, and both are counted as failures. No other batch of any arm reached this cap. The slowest ATLAS batch took 37 min, and no NES or SignHunter batch exceeded 2 min. This illustrates the computational inefficiency of BayesOpt in this setting. 
+
+As another example, take every row in the “(Adv.) ImageNet” section displaying adversarial sets for a targeted goldfish classification. The images that ATLAS recovers contains both visual features that you’d expect to see in a goldfish image - orange/gold coloration, strong high-contrast colors, curved/elongated flowing structures, structures that vaguely resemble fins - and visual features that you would not expect in a typical goldfish image - structures that resembles flowers or petals, feath-ers, bird parts, etc. This suggests that the model may accept non-goldfish structures as reasonable substitutes when enough lower-level or mid-level goldfish visual cues are present. For example, an image with a flower petal or feather may be accepted as an image substitute because it provides a structure that is visually similar to a fin without actually being a fin . This sort of observation can be used as a guideline for producing more sets of adversarial image failures for this particular model. 17 Published as a conference paper at ICLR 2027   
+
+> source
+> ↓
+> target clean successful targeted attacks found by ATLAS
+> MNIST  6
+> ↓
+> 2
+> 0
+> ↓
+> 1
+> CIFAR-10  truck
+> ↓
+> automobile
+> ship
+> ↓
+> automobile
+> IMAGE NET  stingray
+> ↓
+> g.w. shark
+> tiger shark
+> ↓
+> electric ray
+> (ADV .) CIFAR-10  airplane
+> ↓
+> automobile
+> cat
+> ↓
+> dog
+> ship
+> ↓
+> automobile
+> (ADV .) I MAGE NET  hen
+> ↓
+> goldfish
+> ostrich
+> ↓
+> goldfish
+> tench
+> ↓
+> goldfish
+
+Figure 5: Representative adversarial examples discovered by ATLAS under a 650-query budget. Each row specifies a source and target class. The leftmost image is a clean source-class sample, followed by representative samples from the generated adversarial set. The examples for MNIST, CIFAR, and (adv.) CIFAR contains adversarial images which could present as benign but that gets misclassified by the model. The examples for ImageNet and (adv.) ImageNet ALL contain distinct visual cues which pushes that model’s decision boundary towards that specific class. For the great white (g.w.) shark, the model is most likely to key in on the ocean (a shark’s environment) rather than a shark’s features for its classification. For goldfish, this model accepts non-goldfish structures as reasonable substitutes (a flower petal) when enough lower-level or mid-level goldfish visual cues are present. See Section E for details. 
+
+F SECURITY AUDIT SUMMARY 
+
+We interpret ATLAS as a model-level security auditing tool and summarize our audit findings using the NIST AI Risk Management Framework (AI RMF) (AI, 2023) and the MITRE ATLAS threat framework (MITRE Corporation, 2021). The evaluation models an attacker who can query a classi-18 Published as a conference paper at ICLR 2027 fier but does not require access to its weights or training infrastructure. In MITRE ATLAS terminol-ogy, the procedure generates adversarial data (AML.T0043) to evade an AI model (AML.T0015). The potential consequences of successful misclassification are context dependent and should be as-sessed separately. 
+
+MAP. We identify targeted adversarial attacks that represent security risks using a chosen image generator. We characterize “failure regions” within this generator’s input latent space that contain latents that map to images containing the visual features of a specified source class but for which gets misclassified by the target model. 
+
+MEASURE. ATLAS measures the accessibility and size of each discovered failure region under a fixed query budget (see Table 4). Across all reported settings, ATLAS recovered nonempty sets, including against adversarially trained CIFAR-10 and ImageNet models, indicating that the adver-sarial training process for each adversarially trained model did not eliminate the existence of targeted failure regions. 
+
+MANAGE. The resulting adversarial sets point to model vulnerabilities that are fairly accessible for outside users. The examples within these sets should be used to guide additional robustness evalua-tion, adversarial training, or the creation of monitoring and security filters as potential defenses. 
+
+GOVERN. Finally, the recovered adversarial sets, ATLAS’s trained surrogate model, and quantita-tive measurements, all encodes the state of security for each subject target, while the threat model, query budget, source-target pairs, and experimental settings provide documentation for how to re-peat this security analysis after the model has been robustified with better security defenses. Each of these resulting audit artifacts should be used to inform deployment decisions. 
+
+ETHICAL CONSIDERATIONS 
+
+This system, while designed for developers to robustify their own systems, may be leveraged by outside actors to attack other systems they do not own. While this may be the case, to mitigate the potential damage of such cases, future work includes analyzing the limitations of this system, which includes finding the functional characteristics (defenses) for which similar algorithms are unable to efficiently map inputs their associated adversarial scores. Other possible mitigations include limiting query access to outside systems. 
+
+AI S TATEMENT 
+
+AI was used to help run smaller debugging experiments, analysis, and sweeps for parameter set-tings; help set up experimental scripts; help create figures and assist with writing revising; and give feedback on the authors methodological ideas and data interpretations. All core experimental, methodological, and analytical designs were done by the authors, along with their scripts; however, bug editing and enhancements for parallelization was assisted with AI. Core analysis was done by the authors from logs and data generated by the authors with assistance from AI. All code and any artifacts generated by AI were looked over and edited by the authors. 
+
+OPEN SCIENCE 
+
+Complete hyperparameters for ATLAS and all baselines, including shared, matched, and method-specific settings, are given in Table 5; experimental protocols are in Appendices A and D. All source code, configurations, and scripts to reproduce every reported result will be released publicly upon publication. 19
