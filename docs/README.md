@@ -6,49 +6,43 @@
 </div>
 
 ## 每次日报
-- 最新运行日期：2026-10-08
-- 运行时间：2026-10-08 00:15:39 UTC
+- 最新运行日期：2026-10-09
+- 运行时间：2026-10-09 00:26:03 UTC
 - 运行状态：成功
-- 本次总论文数：9
-- 精读区：5
-- 速读区：4
+- 本次总论文数：7
+- 精读区：6
+- 速读区：1
 
 ### 今日简报（AI）
-今日聚焦大模型安全对齐前沿，深度解析 9 篇前沿论文。
-重点推荐“安全角色内化”与“暗知识安全信号”两项研究，为提升 LLM 鲁棒性提供了满分方案。
-建议关注 AI 安全防御机制的演进，以应对智能体系统在复杂环境下的潜在漏洞风险。
-- 详情：[/202610/08/README](/202610/08/README)
+今日精选 7 篇大模型安全前沿研究，重点聚焦越狱检测与模型补丁机制。
+推荐关注多源一致性越狱检测及激活补丁的副作用评估，这两项研究为提升模型鲁棒性提供了新视角。
+建议关注大模型安全防御的动态演进，了解当前主流防御手段在面对黑盒攻击时的真实效能。
+- 详情：[/202610/09/README](/202610/09/README)
 
 ### 精读区论文标签
-1. [Beyond Refusal Patterns: Safe-Role Internalization for Robust and Generalizable LLM Safety Alignment](/202610/08/2610.07023v1-beyond-refusal-patterns-safe-role-internalization-for-robust-and-generalizable-llm-safety-alignment)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：防御越狱攻击的安全对齐框架
-2. [Safeguarding LLMs via Model-Agnostic Latent Safety Signals from Dark Knowledge](/202610/08/2610.07532v1-safeguarding-llms-via-model-agnostic-latent-safety-signals-from-dark-knowledge)  
-   标签：评分：10.0/10、query:jb-def
-   evidence：用于防御的模型无关潜在安全信号
-3. [Jailbreaking Open-Weight LLMs via Random Embedding Perturbations](/202610/08/2610.07125v1-jailbreaking-open-weight-llms-via-random-embedding-perturbations)  
-   标签：评分：9.0/10、query:llm
-   evidence：通过嵌入扰动对开源大模型进行越狱攻击
-4. [Which Image Property Carries the Jailbreak? A Controlled Dissection of Image-to-Text Jailbreaks](/202610/08/2610.07009v1-which-image-property-carries-the-jailbreak-a-controlled-dissection-of-image-to-text-jailbreaks)  
+1. [Detecting Unseen Jailbreak Sources: A Multi-Source Conformal Detection Perspective](/202610/09/2610.09167v1-detecting-unseen-jailbreak-sources-a-multi-source-conformal-detection-perspective)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：针对越狱攻击的防御机制
+2. [PatchBench: Measuring Collateral Damage in Activation Patching](/202610/09/2610.10276v1-patchbench-measuring-collateral-damage-in-activation-patching)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：评估越狱修复和安全补丁
+3. [SLDR: Defending Against Malicious Fine-tuning via Selective Layers Recovery and Dynamic Routing](/202610/09/2610.10345v1-sldr-defending-against-malicious-fine-tuning-via-selective-layers-recovery-and-dynamic-routing)  
+   标签：评分：9.0/10、query:jb-def
+   evidence：越狱漏洞的安全对齐与缓解技术
+4. [Probabilistic Adversarial Training](/202610/09/2609.39798v1-probabilistic-adversarial-training)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：防御大语言模型的对抗训练技术
+5. [Understanding and Mitigating Token-Pruning-Induced Vulnerabilities in VLMs](/202610/09/2610.09703v1-understanding-and-mitigating-token-pruning-induced-vulnerabilities-in-vlms)  
+   标签：评分：8.0/10、query:jb-def
+   evidence：缓解令牌剪枝引起的安全漏洞
+6. [From Expected Harmfulness to Likelihood: A Probabilistic Reformulation of Jailbreaking LLM Agents](/202610/09/2610.09973v1-from-expected-harmfulness-to-likelihood-a-probabilistic-reformulation-of-jailbreaking-llm-agents)  
    标签：评分：8.0/10、query:llm
-   evidence：剖析图像到文本的越狱攻击
-5. [The Model Plants the Trigger: Answer-Side Backdoor Attacks in Multi-Turn Large Language Models](/202610/08/2610.07723v1-the-model-plants-the-trigger-answer-side-backdoor-attacks-in-multi-turn-large-language-models)  
-   标签：评分：8.0/10、query:llm
-   evidence：安全对齐漏洞与后门攻击
+   evidence：LLM智能体越狱的概率重构
 
 ### 速读区论文标签
-1. [Characterizing Security Effects of OSS Vulnerabilities in Agent Systems](/202610/08/2610.05036v1-characterizing-security-effects-of-oss-vulnerabilities-in-agent-systems)  
-   标签：评分：7.0/10、query:llm
-   evidence：智能体系统中漏洞的安全影响
-2. [DIBench: Benchmarking Decision Integrity of GUI-based Mobile Agents Under Deceptive Injections](/202610/08/2610.06898v1-dibench-benchmarking-decision-integrity-of-gui-based-mobile-agents-under-deceptive-injections)  
-   标签：评分：7.0/10、query:llm
-   evidence：欺骗性注入下的决策完整性基准测试
-3. [ATLAS-AL: Adaptive Trust-Region for Latent Adversarial Searches via Active Learning](/202610/08/2610.07323v1-atlas-al-adaptive-trust-region-for-latent-adversarial-searches-via-active-learning)  
-   标签：评分：7.0/10、query:llm
-   evidence：发现黑盒系统的对抗性输入集
-4. [Controllable Multi-label Video Safety Detection via Adaptive Tversky Policy Optimization](/202610/08/2610.02019v1-controllable-multi-label-video-safety-detection-via-adaptive-tversky-policy-optimization)  
-   标签：评分：6.0/10、query:jb-def
-   evidence：自动化视频安全检测与审核
+1. [Do Defenses Against LLM Extraction Work Across Attacks? A Lifecycle Benchmark of Black-Box Model Extraction](/202610/09/2610.00839v2-do-defenses-against-llm-extraction-work-across-attacks-a-lifecycle-benchmark-of-black-box-model-extraction)  
+   标签：评分：6.0/10、query:llm
+   evidence：基准测试针对LLM模型提取攻击的防御措施
 
 
 <div class="dpr-home-promo-card">
